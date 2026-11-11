@@ -32,6 +32,14 @@
       player.autoLow = d.auto_low
     }).catch(() => {})
   })
+  let saved = $state<{ count: number; bytes: number } | null>(null)
+  $effect(() => {
+    api.savedSongs().then((s) => (saved = s)).catch(() => {})
+  })
+  async function clearSaved() {
+    await api.clearSavedSongs()
+    saved = await api.savedSongs()
+  }
   function size(bytes: number): string {
     if (bytes < 1e6) return `${Math.round(bytes / 1e3)} KB`
     if (bytes < 1e9) return `${Math.round(bytes / 1e6)} MB`
@@ -120,6 +128,12 @@
         <div><span class="num">{size(used.month)}</span><span class="od">in {month}</span></div>
         <div><span class="num">{size(used.total)}</span><span class="od">in all</span></div>
       </div>
+      {#if saved}
+        <div class="account lists">
+          <span class="who"><span class="ol">Saved songs: {saved.count} {saved.count === 1 ? 'song' : 'songs'}, {size(saved.bytes)}</span><span class="od">Songs you play to the end are kept on this device (up to 1 GB), so replays use no data</span></span>
+          {#if saved.count}<button class="quiet" onclick={clearSaved}>Clear</button>{/if}
+        </div>
+      {/if}
     </section>
   {/if}
 
