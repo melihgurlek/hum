@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { go, newPlaylistFromSidebar, openLiked, openPlaylist, ui, type View } from '../state.svelte'
+  import { go, newPlaylistFromSidebar, openHistory, openLiked, openPlaylist, ui, type View } from '../state.svelte'
   import Icon from './Icon.svelte'
   import Mosaic from './Mosaic.svelte'
 
@@ -31,6 +31,10 @@
     <button class="mini" class:active={ui.view === 'library' && ui.libraryTab === 'liked' && !ui.nowPlayingOpen} onclick={openLiked}>
       <span class="liked" aria-hidden="true"><Icon name="heart" size={16} /></span>
       <span class="text"><span class="ellipsis t">Liked songs</span></span>
+    </button>
+    <button class="mini" class:active={ui.view === 'library' && ui.libraryTab === 'history' && !ui.nowPlayingOpen} onclick={openHistory}>
+      <span class="liked hist" aria-hidden="true"><Icon name="clock" size={16} /></span>
+      <span class="text"><span class="ellipsis t">History</span></span>
     </button>
     {#each ui.playlists as p (p.id)}
       <button class="mini" class:active={ui.view === 'playlist' && ui.playlistId === p.id && !ui.nowPlayingOpen} onclick={() => openPlaylist(p.id)}>
@@ -130,6 +134,10 @@
     justify-content: center;
     background: var(--accent, var(--accent-default));
     color: var(--on-accent);
+  }
+  .liked.hist {
+    background: var(--raised-2);
+    color: var(--text);
   }
   .recent {
     display: flex;

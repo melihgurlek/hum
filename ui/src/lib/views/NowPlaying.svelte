@@ -228,6 +228,10 @@
     flex-direction: column;
     gap: 4px;
   }
+  /* The column's 20px gap is right around the cover, too loose between the titles and the bar. */
+  .meta + .progress {
+    margin-top: -8px;
+  }
   .times {
     display: flex;
     justify-content: space-between;

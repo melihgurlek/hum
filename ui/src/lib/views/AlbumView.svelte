@@ -29,7 +29,7 @@
 </script>
 
 <div class="page scroll">
-  <div class="top"><BackButton /></div>
+  <BackButton />
   {#if album}
     {@const a = album.card}
     <header>
@@ -63,7 +63,7 @@
       {/each}
     </div>
   {:else if failed}
-    <p class="muted">Couldn't load this album. Check your connection.</p>
+    <p class="muted retry">Couldn't load this album. Check your connection.</p>
     <button class="secondary fit" onclick={load}><span class="trim">Try again</span></button>
   {:else}
     <header aria-busy="true">
@@ -76,12 +76,13 @@
 <style>
   .page {
     height: 100%;
-    padding: 20px 32px 40px;
+    padding: 0 32px 40px;
     display: flex;
     flex-direction: column;
     gap: 20px;
   }
   header {
+    margin-top: 76px;
     display: flex;
     gap: 28px;
     align-items: flex-end;
@@ -147,6 +148,9 @@
   }
   .secondary {
     background: var(--raised);
+  }
+  .retry {
+    margin-top: 76px;
   }
   .fit {
     align-self: flex-start;

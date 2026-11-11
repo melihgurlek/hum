@@ -203,9 +203,41 @@ impl Engine {
             Quality::High => 2,
             Quality::Auto => 3,
         };
+        let before = self.effective_quality();
         self.0.quality.store(v, Ordering::Relaxed);
-        // Cached URLs were picked for the old quality.
+        if self.effective_quality() != before {
+            self.requality_current();
+        }
+    }
+
+    /// The stream size changed: drop cached URLs and switch the current song over at the same
+    /// spot, so a stuttering song gets better now rather than from the next one.
+    fn requality_current(&self) {
         self.0.streams.lock().unwrap().clear();
+        let (track, at) = {
+            let mut st = self.0.state.lock().unwrap();
+            if st.playing.is_none() {
+                return;
+            }
+            st.next_loaded = None;
+            (st.queue.get(st.index).cloned(), st.position)
+        };
+        let Some(track) = track else { return };
+        let e = self.clone();
+        self.0.rt.spawn(async move {
+            match e.stream(&track.id).await {
+                Ok((s, _)) => {
+                    // Only if the user hasn't moved on while this resolved.
+                    let still = e.current().is_some_and(|t| t.id == track.id);
+                    if still {
+                        let at = e.position().max(at);
+                        e.0.player.send(Command::Reload(s, at));
+                        e.prefetch_next().await;
+                    }
+                }
+                Err(err) => log::warn!("switching {} to the new quality: {err:#}", track.id),
+            }
+        });
     }
 
     pub fn set_autoplay(&self, on: bool) {
@@ -540,20 +572,8 @@ impl Engine {
             return;
         }
         log::info!("auto quality: stepping down to data saver");
-        self.0.streams.lock().unwrap().clear();
         self.emit(Update::AutoQuality { low: true });
-        let (track, at) = {
-            let mut st = self.0.state.lock().unwrap();
-            st.next_loaded = None;
-            (st.queue.get(st.index).cloned(), st.position)
-        };
-        if let Some(track) = track {
-            match self.stream(&track.id).await {
-                Ok((s, _)) => self.0.player.send(Command::Reload(s, at)),
-                Err(e) => log::warn!("reloading {} at lower quality: {e:#}", track.id),
-            }
-        }
-        self.after_track_change();
+        self.requality_current();
     }
 
     /// After a long enough calm on data-saver streams, Auto tries the best quality again.

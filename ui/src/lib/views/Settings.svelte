@@ -46,7 +46,7 @@
         </label>
       {/each}
     </div>
-    <p class="note">Takes effect from the next song.</p>
+    <p class="note">Switches right away, without restarting the song.</p>
   </section>
 
   {#if used}
