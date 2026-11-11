@@ -108,7 +108,7 @@
     align-items: center;
     gap: 12px;
     min-width: 0;
-    border-radius: 8px;
+    border-radius: var(--r-sm);
   }
   /* The title button covers the whole cover-and-text block; artist links sit above it. */
   .open {
@@ -123,7 +123,7 @@
     content: '';
     position: absolute;
     inset: 0;
-    border-radius: 8px;
+    border-radius: var(--r-sm);
   }
   .open:focus-visible {
     outline: none;
@@ -134,7 +134,7 @@
   .art {
     width: 56px;
     height: 56px;
-    border-radius: 8px;
+    border-radius: var(--r-sm);
     flex: none;
   }
   .text {

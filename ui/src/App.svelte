@@ -78,7 +78,7 @@
     background: var(--text);
     color: var(--bg);
     padding: 12px 18px;
-    border-radius: 12px;
+    border-radius: var(--r-md);
     font-weight: 600;
     max-width: 90vw;
     z-index: 20;

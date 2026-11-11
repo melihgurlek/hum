@@ -73,7 +73,7 @@
     flex-direction: column;
     gap: 8px;
     padding: 12px;
-    border-radius: 14px;
+    border-radius: var(--r-lg);
     background: var(--surface);
     border: 1px solid var(--line);
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
@@ -97,7 +97,7 @@
     min-width: 0;
     height: 40px;
     padding: 0 12px;
-    border-radius: 10px;
+    border-radius: var(--r-md);
     border: 1px solid var(--line);
     background: var(--bg);
     outline: none;
@@ -109,7 +109,7 @@
   .create {
     height: 40px;
     padding: 0 14px;
-    border-radius: 10px;
+    border-radius: var(--r-md);
     background: var(--accent, var(--accent-default));
     color: var(--on-accent);
     font-weight: 700;
@@ -124,7 +124,7 @@
     align-items: center;
     gap: 10px;
     padding: 6px;
-    border-radius: 10px;
+    border-radius: var(--r-md);
     text-align: left;
     min-height: 48px;
   }

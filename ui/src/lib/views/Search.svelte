@@ -88,7 +88,7 @@
       bind:value={ui.query}
       oninput={onInput}
       onkeydown={(e) => e.key === 'Enter' && (clearTimeout(timer), run(ui.query))}
-      placeholder="What do you want to hear?"
+      placeholder="Songs, artists, albums"
       autocomplete="off"
       spellcheck="false"
     />
@@ -126,8 +126,6 @@
           {/each}
         </div>
       </section>
-    {:else}
-      <p class="muted hint">Search for a song, an artist or an album. Every song can start an endless radio.</p>
     {/if}
   {:else if searching && !results.songs.length && !top}
     <p class="muted">Searching…</p>
@@ -210,12 +208,16 @@
     gap: 10px;
     height: 48px;
     padding: 0 18px;
-    border-radius: 14px;
+    border-radius: var(--r-lg);
     background: var(--surface);
-    border: 2px solid var(--accent, var(--accent-default));
+    /* Quiet until focused: a permanent accent border reads as a stuck focus ring. */
+    border: 2px solid var(--line);
     color: var(--muted);
     max-width: 720px;
     flex: none;
+  }
+  .field:focus-within {
+    border-color: var(--accent, var(--accent-default));
   }
   .field input {
     flex: 1;
@@ -238,9 +240,6 @@
     align-items: center;
     justify-content: center;
   }
-  .hint {
-    font-size: 15px;
-  }
   .grid {
     display: flex;
     flex-wrap: wrap;
@@ -260,13 +259,13 @@
     flex-direction: column;
     gap: 16px;
     padding: 24px;
-    border-radius: 20px;
+    border-radius: var(--r-lg);
     background: var(--surface);
   }
   .topart {
     width: 140px;
     height: 140px;
-    border-radius: 12px;
+    border-radius: var(--r-md);
   }
   .topart.round {
     border-radius: 50%;
@@ -277,10 +276,9 @@
     gap: 6px;
   }
   .toptitle {
-    font-size: 30px;
-    font-weight: 800;
-    letter-spacing: -0.03em;
-    line-height: 1.1;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.15;
   }
   .toptitle.open {
     padding: 0;
@@ -316,7 +314,14 @@
     background: var(--accent, var(--accent-default));
     color: var(--on-accent);
   }
+  /* One filled button per screen (Play); the rest stay quiet until hovered. */
   .secondary {
+    background: transparent;
+    color: var(--muted);
+    padding: 0 14px;
+  }
+  .secondary:hover:not(:disabled) {
+    color: var(--text);
     background: var(--raised);
   }
   .rhead {
@@ -344,7 +349,7 @@
   .rrow {
     display: flex;
     align-items: center;
-    border-radius: 10px;
+    border-radius: var(--r-md);
     padding-right: 8px;
   }
   .rrow:hover,
@@ -359,12 +364,12 @@
     gap: 12px;
     padding: 6px 8px;
     text-align: left;
-    border-radius: 10px;
+    border-radius: var(--r-md);
   }
   .rart {
     width: 48px;
     height: 48px;
-    border-radius: 6px;
+    border-radius: var(--r-sm);
     flex: none;
   }
   .rart.round {

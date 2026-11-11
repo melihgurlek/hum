@@ -36,19 +36,9 @@
   const monthYear = (ts: number) =>
     new Date(ts * 1000).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
 
-  const moods = ['Türkçe rock', 'Chill', 'Focus', 'Workout', 'Late night', '2000s alternative']
-  function mood(m: string) {
-    ui.query = m
-    go('search')
-  }
-
-  const hour = new Date().getHours()
-  const greeting = hour < 5 ? 'Up late' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
 </script>
 
 <div class="page scroll">
-  <h1>{greeting}</h1>
-
   {#if seed}
     <div class="cta-row">
       <button class="cta" onclick={() => playRadio(seed)}>
@@ -102,18 +92,11 @@
     </section>
   {:else}
     <section class="empty">
-      <h2>Start with a song you like</h2>
-      <p class="muted">Play anything and hum keeps going with songs like it. Your home fills up as you listen.</p>
+      <h1>Start with a song you like</h1>
+      <p class="muted">hum keeps going with songs like it.</p>
       <button class="cta" onclick={() => go('search')}><span class="play"><Icon name="search" size={16} /></span><span class="trim">Search for a song</span></button>
     </section>
   {/if}
-
-  <section>
-    <h2>Moods</h2>
-    <div class="chips">
-      {#each moods as m}<button class="chip" onclick={() => mood(m)}><span class="trim">{m}</span></button>{/each}
-    </div>
-  </section>
 </div>
 
 <style>
@@ -125,11 +108,11 @@
     gap: 28px;
   }
   h1 {
-    font-size: 30px;
-    font-weight: 800;
+    font-size: 24px;
+    font-weight: 700;
   }
   h2 {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 700;
   }
   .head {
@@ -160,7 +143,7 @@
     gap: 12px;
     height: 56px;
     padding: 0 22px 0 8px;
-    border-radius: 14px;
+    border-radius: var(--r-lg);
     background: var(--accent, var(--accent-default));
     color: var(--on-accent);
     font-weight: 700;
@@ -170,7 +153,7 @@
   .play {
     width: 40px;
     height: 40px;
-    border-radius: 10px;
+    border-radius: var(--r-md);
     background: color-mix(in srgb, var(--on-accent) 18%, transparent);
     display: flex;
     align-items: center;
@@ -196,7 +179,7 @@
   .art {
     width: 100%;
     aspect-ratio: 1;
-    border-radius: 10px;
+    border-radius: var(--r-md);
   }
   .tt {
     font-weight: 600;
@@ -216,21 +199,5 @@
     margin: 0;
     font-size: 15px;
     line-height: 1.5;
-  }
-  .chips {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-  .chip {
-    height: 36px;
-    padding: 0 16px;
-    border-radius: 999px;
-    background: var(--raised);
-    font-weight: 600;
-    font-size: 13px;
-  }
-  .chip:hover {
-    background: var(--raised-2);
   }
 </style>
