@@ -36,7 +36,15 @@ Updated in every PR. Newest done items at the top of each section.
 
 ## Next
 
-1. **Test sign-in on Windows** (WebView2).
+Status 2026-11-11 (Linux): sign-in and account sync work against a real account; #33 (song
+cache) is open.
+
+1. **Test on Windows** (WebView2): sign-in, account sync, the song cache, account radio.
+2. **Test the song cache by hand**: seeking or skipping mid-song must discard the recording; a
+   song played to the end shows up under Settings → Saved songs.
+3. **Phone as a remote** ([MOBILE.md](MOBILE.md)): a small page served on the home network,
+   opened from a QR code in Settings, to control playback, the queue and search.
+4. **Offline mode**: play saved songs with no connection.
 
 ## Later
 
@@ -49,9 +57,8 @@ Updated in every PR. Newest done items at the top of each section.
 - Discord status, Last.fm scrobbling.
 - Mini player, tray menu.
 - Code signing for the Windows installer (costs money; worth it once hum is public).
-- **Android port, on hold.** Same `ui/` and `crates/core`, but no mpv there: needs a Media3 player
-  plugin, phone layouts, background playback, lock-screen controls (weeks). Open question first:
-  what would hum on Android do better than MetroList, which already works well on the phone?
+- **Android port, undecided** ([MOBILE.md](MOBILE.md) has the research still to do). Same `ui/` and `crates/core`, but no mpv there: needs a Media3 player
+  plugin, phone layouts, background playback, lock-screen controls (weeks).
 
 ## Decided against (and why)
 
