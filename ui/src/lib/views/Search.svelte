@@ -1,11 +1,14 @@
 <script lang="ts">
-  import { api, artistLinks, type Track, img } from '../api'
-  import { forgetSearch, openAlbum, openArtist, playList, playRadio, rememberSearch, searches, ui, hoverPrefetch, hoverCancel } from '../state.svelte'
+  import { api, artistLinks, img, type SearchResults, type Track } from '../api'
+  import {
+    forgetPick, openAlbum, openArtist, playAlbum, playArtistRadio, playArtistTop, playList, playRadio,
+    recentKey, rememberPick, searches, ui, hoverPrefetch, hoverCancel, type Recent,
+  } from '../state.svelte'
   import ArtistLinks from '../components/ArtistLinks.svelte'
   import Icon from '../components/Icon.svelte'
   import TrackRow from '../components/TrackRow.svelte'
 
-  let results = $state<Track[]>([])
+  let results = $state<SearchResults>({ top: null, songs: [] })
   let searching = $state(false)
   let error = $state<string | null>(null)
   let lastQuery = ''
@@ -13,7 +16,7 @@
   let input: HTMLInputElement
 
   // Results stay cached per query for this session, so going back is instant.
-  const cache = new Map<string, Track[]>()
+  const cache = new Map<string, SearchResults>()
 
   async function run(q: string) {
     q = q.trim()
@@ -46,16 +49,33 @@
     if (ui.query) run(ui.query)
   })
 
-  // A search is remembered once you act on its results, so half-typed queries don't pile up.
-  const remember = () => rememberSearch(lastQuery)
-  function again(q: string) {
-    ui.query = q
-    clearTimeout(timer)
-    run(q)
+  function clear() {
+    ui.query = ''
+    results = { top: null, songs: [] }
+    lastQuery = ''
+    input.focus()
   }
 
-  const top = $derived(results[0])
-  const rest = $derived(results.slice(1))
+  // YouTube Music's top result when it's an artist or album; otherwise the first song.
+  const top = $derived(results.top)
+  const topSong = $derived(top ? null : (results.songs[0] ?? null))
+  const listed = $derived(top ? results.songs : results.songs.slice(1))
+
+  function playSong(list: Track[], i: number) {
+    rememberPick({ kind: 'song', track: list[i] })
+    playList(list, i)
+  }
+
+  function openRecent(r: Recent) {
+    rememberPick(r)
+    if (r.kind === 'song') playList([r.track], 0)
+    else if (r.kind === 'artist') openArtist(r.id)
+    else openAlbum(r.id)
+  }
+  const recentTitle = (r: Recent) => (r.kind === 'song' ? r.track.title : r.kind === 'artist' ? r.name : r.title)
+  const recentSub = (r: Recent) =>
+    r.kind === 'song' ? `Song · ${r.track.artists.join(', ')}` : r.kind === 'artist' ? 'Artist' : `Album${r.detail ? ' · ' + r.detail : ''}`
+  const recentThumb = (r: Recent) => (r.kind === 'song' ? r.track.thumb : r.thumb)
 </script>
 
 <div class="page scroll">
@@ -73,7 +93,7 @@
       spellcheck="false"
     />
     {#if ui.query}
-      <button class="clear" aria-label="Clear search" onclick={() => ((ui.query = ''), (results = []), (lastQuery = ''), input.focus())}>
+      <button class="clear" aria-label="Clear search" onclick={clear}>
         <Icon name="x" size={14} />
       </button>
     {/if}
@@ -86,45 +106,83 @@
       <section class="recents">
         <div class="rhead">
           <h2>Recent searches</h2>
-          <button class="link" onclick={() => forgetSearch(null)}>Clear</button>
+          <button class="link" onclick={() => forgetPick(null)}>Clear all</button>
         </div>
-        <div class="chips">
-          {#each searches.list as q (q)}
-            <span class="chip">
-              <button class="q" onclick={() => again(q)}><Icon name="clock" size={14} /><span class="trim">{q}</span></button>
-              <button class="x" aria-label={`Remove ${q} from recent searches`} onclick={() => forgetSearch(q)}><Icon name="x" size={12} /></button>
-            </span>
+        <div class="rlist">
+          {#each searches.list as r (recentKey(r))}
+            <div class="rrow">
+              <button class="ropen" onclick={() => openRecent(r)}>
+                {#if recentThumb(r)}
+                  <img class="cover rart" class:round={r.kind === 'artist'} src={img(recentThumb(r))} alt="" loading="lazy" width="48" height="48" />
+                {:else}
+                  <div class="cover rart" class:round={r.kind === 'artist'}></div>
+                {/if}
+                <span class="rtext"><span class="ellipsis rt">{recentTitle(r)}</span><span class="ellipsis rs">{recentSub(r)}</span></span>
+              </button>
+              <button class="x" aria-label={`Remove ${recentTitle(r)} from recent searches`} title="Remove" onclick={() => forgetPick(recentKey(r))}>
+                <Icon name="x" size={14} />
+              </button>
+            </div>
           {/each}
         </div>
       </section>
     {:else}
-      <p class="muted hint">Search for a song or an artist. Every song can start an endless radio.</p>
+      <p class="muted hint">Search for a song, an artist or an album. Every song can start an endless radio.</p>
     {/if}
-  {:else if searching && !results.length}
+  {:else if searching && !results.songs.length && !top}
     <p class="muted">Searching…</p>
-  {:else if top}
+  {:else if top || topSong}
     <div class="grid">
       <section class="topcol">
         <h2>Top result</h2>
-        <div class="top" role="group" aria-label={top.title}
-          onmouseenter={() => hoverPrefetch(top.id)} onmouseleave={hoverCancel}>
-          {#if top.cover}<img class="cover topart" src={img(top.cover)} alt="" />{:else}<div class="cover topart"></div>{/if}
-          <div>
-            <div class="toptitle">{top.title}</div>
-            <div class="muted"><ArtistLinks artists={artistLinks(top)} />{#if top.album} — {#if top.album_id}<button class="inline-link" onclick={() => (remember(), openAlbum(top.album_id))}>{top.album}</button>{:else}{top.album}{/if}{/if}</div>
+        {#if top?.kind === 'artist'}
+          {@const a = top}
+          <div class="top">
+            {#if a.thumb}<img class="cover topart round" src={img(a.thumb)} alt="" />{:else}<div class="cover topart round"></div>{/if}
+            <div class="titles">
+              <button class="toptitle open" onclick={() => (rememberPick({ kind: 'artist', id: a.id, name: a.name, thumb: a.thumb }), openArtist(a.id))}>{a.name}</button>
+              <div class="muted meta">Artist{#if a.detail}<span class="dot" aria-hidden="true">·</span>{a.detail}{/if}</div>
+            </div>
+            <div class="actions">
+              <button class="primary" onclick={() => (rememberPick({ kind: 'artist', id: a.id, name: a.name, thumb: a.thumb }), playArtistTop(a.id))}><Icon name="play" size={16} /><span class="trim">Play</span></button>
+              <button class="secondary" onclick={() => (rememberPick({ kind: 'artist', id: a.id, name: a.name, thumb: a.thumb }), playArtistRadio(a.id, a.name))}><Icon name="radio" size={16} /><span class="trim">Radio</span></button>
+            </div>
           </div>
-          <div class="actions">
-            <button class="primary" onclick={() => (remember(), playList(results, 0))}><Icon name="play" size={16} /><span class="trim">Play</span></button>
-            <button class="secondary" onclick={() => (remember(), playRadio(top))}><Icon name="radio" size={16} /><span class="trim">Radio</span></button>
-            {#if top.artist_id}<button class="secondary" onclick={() => (remember(), openArtist(top.artist_id))}><span class="trim">{top.artists[0]}</span></button>{/if}
+        {:else if top?.kind === 'album'}
+          {@const al = top}
+          <div class="top">
+            {#if al.thumb}<img class="cover topart" src={img(al.thumb)} alt="" />{:else}<div class="cover topart"></div>{/if}
+            <div class="titles">
+              <button class="toptitle open" onclick={() => (rememberPick(al), openAlbum(al.id))}>{al.title}</button>
+              <div class="muted meta">Album{#if al.detail}<span class="dot" aria-hidden="true">·</span>{al.detail}{/if}</div>
+            </div>
+            <div class="actions">
+              <button class="primary" onclick={() => (rememberPick(al), playAlbum(al.id))}><Icon name="play" size={16} /><span class="trim">Play</span></button>
+              <button class="secondary" onclick={() => (rememberPick(al), playAlbum(al.id, true))}><Icon name="shuffle" size={16} /><span class="trim">Shuffle</span></button>
+            </div>
           </div>
-        </div>
+        {:else if topSong}
+          {@const t = topSong}
+          <div class="top" role="group" aria-label={t.title} onmouseenter={() => hoverPrefetch(t.id)} onmouseleave={hoverCancel}>
+            {#if t.cover}<img class="cover topart" src={img(t.cover)} alt="" />{:else}<div class="cover topart"></div>{/if}
+            <div class="titles">
+              <div class="toptitle">{t.title}</div>
+              <div class="muted meta">
+                <ArtistLinks artists={artistLinks(t)} />{#if t.album}<span class="dot" aria-hidden="true">·</span>{#if t.album_id}<button class="inline-link" onclick={() => openAlbum(t.album_id)}>{t.album}</button>{:else}{t.album}{/if}{/if}
+              </div>
+            </div>
+            <div class="actions">
+              <button class="primary" onclick={() => playSong(results.songs, 0)}><Icon name="play" size={16} /><span class="trim">Play</span></button>
+              <button class="secondary" onclick={() => (rememberPick({ kind: 'song', track: t }), playRadio(t))}><Icon name="radio" size={16} /><span class="trim">Radio</span></button>
+            </div>
+          </div>
+        {/if}
       </section>
       <section class="songs">
         <h2>Songs</h2>
         <div class="list">
-          {#each rest as t, i (t.id)}
-            <TrackRow track={t} onplay={() => (remember(), playList(results, i + 1))} />
+          {#each listed as t (t.id)}
+            <TrackRow track={t} onplay={() => playSong(results.songs, results.songs.indexOf(t))} />
           {/each}
         </div>
       </section>
@@ -210,11 +268,34 @@
     height: 140px;
     border-radius: 12px;
   }
+  .topart.round {
+    border-radius: 50%;
+  }
+  .titles {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
   .toptitle {
     font-size: 30px;
     font-weight: 800;
     letter-spacing: -0.03em;
     line-height: 1.1;
+  }
+  .toptitle.open {
+    padding: 0;
+    text-align: left;
+    color: inherit;
+  }
+  .toptitle.open:hover,
+  .toptitle.open:focus-visible {
+    text-decoration: underline;
+  }
+  .meta {
+    font-size: 15px;
+  }
+  .dot {
+    margin: 0 6px;
   }
   .actions {
     display: flex;
@@ -255,47 +336,69 @@
   .link:hover {
     color: var(--text);
   }
-  .chips {
+  .rlist {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+    flex-direction: column;
     max-width: 720px;
   }
-  .chip {
-    display: inline-flex;
+  .rrow {
+    display: flex;
     align-items: center;
-    height: 40px;
-    border-radius: 999px;
+    border-radius: 10px;
+    padding-right: 8px;
+  }
+  .rrow:hover,
+  .rrow:focus-within {
     background: var(--raised);
   }
-  .chip:hover {
-    background: var(--raised-2);
-  }
-  .chip .q {
-    display: inline-flex;
+  .ropen {
+    flex: 1;
+    min-width: 0;
+    display: flex;
     align-items: center;
-    gap: 8px;
-    height: 100%;
-    padding: 0 6px 0 14px;
+    gap: 12px;
+    padding: 6px 8px;
+    text-align: left;
+    border-radius: 10px;
+  }
+  .rart {
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    flex: none;
+  }
+  .rart.round {
+    border-radius: 50%;
+  }
+  .rtext {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .rt {
     font-weight: 600;
-    color: var(--text);
   }
-  .chip .q :global(svg) {
+  .rs {
     color: var(--muted);
+    font-size: 13px;
   }
-  .chip .x {
-    width: 32px;
-    height: 32px;
-    margin-right: 4px;
+  .x {
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--muted);
+    opacity: 0;
   }
-  .chip .x:hover {
+  .rrow:hover .x,
+  .x:focus-visible {
+    opacity: 1;
+  }
+  .x:hover {
     color: var(--text);
-    background: var(--raised);
+    background: var(--raised-2);
   }
   .inline-link {
     display: inline;

@@ -25,6 +25,10 @@ export interface Playlist { id: number; name: string; tracks: Track[] }
 export interface ArtistLink { name: string; id: string | null }
 export interface AlbumCard { id: string; title: string; kind: string; year: number | null; artists: ArtistLink[]; thumb: string | null }
 export interface ArtistPage { id: string; name: string; subscribers: string | null; banner: string | null; top: Track[]; albums: AlbumCard[]; singles: AlbumCard[] }
+export type TopResult =
+  | { kind: 'artist'; id: string; name: string; detail: string | null; thumb: string | null }
+  | { kind: 'album'; id: string; title: string; detail: string | null; thumb: string | null }
+export interface SearchResults { top: TopResult | null; songs: Track[] }
 export interface AlbumPage { card: AlbumCard; cover: string | null; tracks: Track[] }
 
 export type Quality = 'auto' | 'data_saver' | 'normal' | 'high'
@@ -43,7 +47,7 @@ export type Update =
   | { type: 'auto_quality'; low: boolean }
 
 export const api = {
-  search: (query: string) => invoke<Track[]>('search', { query }),
+  search: (query: string) => invoke<SearchResults>('search', { query }),
   radio: (id: string) => invoke<Track[]>('radio', { id }),
   artist: (id: string) => invoke<ArtistPage>('artist', { id }),
   album: (id: string) => invoke<AlbumPage>('album', { id }),

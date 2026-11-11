@@ -127,6 +127,21 @@ pub struct ArtistPage {
     pub singles: Vec<AlbumCard>,
 }
 
+/// YouTube Music's own top search result, when it is an artist or an album. Songs and music
+/// videos are left to the songs search, which returns the audio track.
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum TopResult {
+    Artist { id: String, name: String, detail: Option<String>, thumb: Option<String> },
+    Album { id: String, title: String, detail: Option<String>, thumb: Option<String> },
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct SearchResults {
+    pub top: Option<TopResult>,
+    pub songs: Vec<Track>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct AlbumPage {
     pub card: AlbumCard,
@@ -196,6 +211,60 @@ impl Source {
     pub async fn search_tracks(&self, query: &str) -> Result<Vec<Track>> {
         let res = self.ytm.search_songs(query).await?;
         Ok(res.into_iter().filter_map(Track::from_ytm).collect())
+    }
+
+    /// Songs, plus YouTube Music's top result when that is an artist or an album. The two
+    /// requests run side by side; a failed top result just leaves it out.
+    pub async fn search(&self, query: &str) -> Result<SearchResults> {
+        let (songs, top) = tokio::join!(self.search_tracks(query), self.top_result(query));
+        Ok(SearchResults {
+            songs: songs?,
+            top: top.unwrap_or_else(|e| {
+                log::debug!("top result for {query:?}: {e:#}");
+                None
+            }),
+        })
+    }
+
+    async fn top_result(&self, query: &str) -> Result<Option<TopResult>> {
+        use ytmusic::Client;
+        let res = self
+            .ytm
+            .execute("search", Client::Music, serde_json::json!({ "query": query }))
+            .await?;
+        let Some(card) = find_key(&res, "musicCardShelfRenderer") else { return Ok(None) };
+        let title_run = card.pointer("/title/runs/0");
+        let title = title_run.and_then(|r| r["text"].as_str()).unwrap_or_default().to_string();
+        let browse = title_run.and_then(|r| r.pointer("/navigationEndpoint/browseEndpoint"));
+        let (Some(id), Some(page)) = (
+            browse.and_then(|b| b["browseId"].as_str()),
+            browse.and_then(|b| {
+                b.pointer("/browseEndpointContextSupportedConfigs/browseEndpointContextMusicConfig/pageType")
+                    .and_then(|p| p.as_str())
+            }),
+        ) else {
+            return Ok(None); // a song or video: the songs list covers it
+        };
+        // "Artist • 479M monthly audience" → "479M monthly audience".
+        let subtitle: String = card
+            .pointer("/subtitle/runs")
+            .and_then(|r| r.as_array())
+            .map(|runs| runs.iter().filter_map(|r| r["text"].as_str()).collect())
+            .unwrap_or_default();
+        let detail = subtitle.split_once(" • ").map(|(_, rest)| rest.replace(" • ", " · "));
+        let thumb = card
+            .get("thumbnail")
+            .and_then(|t| find_key(t, "thumbnails"))
+            .and_then(|t| t.as_array())
+            .and_then(|a| a.iter().max_by_key(|t| t["width"].as_u64().unwrap_or(0)))
+            .and_then(|t| t["url"].as_str())
+            .map(|u| sized(u, 352));
+        let id = id.to_string();
+        Ok(match page {
+            "MUSIC_PAGE_TYPE_ARTIST" => Some(TopResult::Artist { id, name: title, detail, thumb }),
+            "MUSIC_PAGE_TYPE_ALBUM" => Some(TopResult::Album { id, title, detail, thumb }),
+            _ => None,
+        })
     }
 
     pub async fn radio(&self, video_id: &str) -> Result<Vec<Track>> {
