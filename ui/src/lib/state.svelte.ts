@@ -46,6 +46,7 @@ class Ui {
   // 'normal' was the same stream as 'high' and is gone from Settings.
   quality = $state<Quality>(load<Quality>('hum.quality', 'auto') === 'normal' ? 'high' : load<Quality>('hum.quality', 'auto'))
   autoplay = $state(load('hum.autoplay', true))
+  accountRadio = $state(load('hum.accountRadio', false))
   toast = $state<string | null>(null)
   playlistId = $state<number | null>(load<number | null>('hum.playlistId', null))
   artistId = $state<string | null>(load<string | null>('hum.artistId', null))
@@ -180,6 +181,12 @@ export function setQuality(q: Quality) {
   api.setQuality(q)
 }
 
+export function setAccountRadio(on: boolean) {
+  ui.accountRadio = on
+  save('hum.accountRadio', on)
+  api.setAccountRadio(on)
+}
+
 export function setAutoplay(on: boolean) {
   ui.autoplay = on
   save('hum.autoplay', on)
@@ -242,6 +249,7 @@ export async function startListening() {
   applyTheme()
   api.setQuality(ui.quality)
   api.setAutoplay(ui.autoplay)
+  api.setAccountRadio(ui.accountRadio)
   refreshRecent()
   refreshPlaylists()
   onSync(

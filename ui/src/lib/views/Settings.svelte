@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, img, onAccount, type AccountPlaylist, type Profile, type Quality } from '../api'
-  import { player, refreshPlaylists, setQuality, setTheme, setAutoplay, showToast, ui, type ThemePref } from '../state.svelte'
+  import { player, refreshPlaylists, setAccountRadio, setQuality, setTheme, setAutoplay, showToast, ui, type ThemePref } from '../state.svelte'
 
   let lists = $state<AccountPlaylist[] | null>(null)
   $effect(() => {
@@ -137,10 +137,18 @@
 
   <section>
     <h2>Playback</h2>
-    <label class="opt" class:sel={ui.autoplay}>
-      <input type="checkbox" checked={ui.autoplay} onchange={(e) => setAutoplay(e.currentTarget.checked)} />
-      <span><span class="ol">Autoplay radio</span><span class="od">When your queue runs out, keep going with songs like the last one</span></span>
-    </label>
+    <div class="options">
+      <label class="opt" class:sel={ui.autoplay}>
+        <input type="checkbox" checked={ui.autoplay} onchange={(e) => setAutoplay(e.currentTarget.checked)} />
+        <span><span class="ol">Autoplay radio</span><span class="od">When your queue runs out, keep going with songs like the last one</span></span>
+      </label>
+      {#if profile}
+        <label class="opt" class:sel={ui.accountRadio}>
+          <input type="checkbox" checked={ui.accountRadio} onchange={(e) => setAccountRadio(e.currentTarget.checked)} />
+          <span><span class="ol">Radio from my YouTube Music account</span><span class="od">About half the songs change, picked for your account; off gives the radio everyone gets</span></span>
+        </label>
+      {/if}
+    </div>
   </section>
 </div>
 

@@ -64,6 +64,7 @@ export const api = {
   setQuality: (quality: Quality) => invoke<void>('set_quality', { quality }),
   getQuality: () => invoke<Quality>('get_quality'),
   setAutoplay: (on: boolean) => invoke<void>('set_autoplay', { on }),
+  setAccountRadio: (on: boolean) => invoke<void>('set_account_radio', { on }),
   queue: () => invoke<{ tracks: Track[]; index: number }>('queue'),
   setLiked: (track: Track, liked: boolean) => invoke<void>('set_liked', { track, liked }),
   isLiked: (id: string) => invoke<boolean>('is_liked', { id }),
