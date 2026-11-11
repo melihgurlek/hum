@@ -1,6 +1,7 @@
 //! hum core: YouTube Music source, mpv playback, queue and radio. No UI dependencies, so the
 //! same crate can back the desktop app and, later, the Android port.
 
+pub mod color;
 pub mod engine;
 pub mod player;
 pub mod source;

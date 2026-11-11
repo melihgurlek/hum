@@ -62,6 +62,12 @@ impl Player {
 }
 
 fn init_mpv() -> Result<Mpv> {
+    // mpv refuses to start unless LC_NUMERIC is "C". GTK applies the user's locale, and a
+    // Turkish locale uses a decimal comma.
+    #[cfg(unix)]
+    unsafe {
+        libc::setlocale(libc::LC_NUMERIC, c"C".as_ptr());
+    }
     let mpv = Mpv::with_initializer(|init| {
         init.set_option("vid", "no")?;
         init.set_option("video", "no")?;

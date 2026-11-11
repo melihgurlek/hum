@@ -1,0 +1,66 @@
+import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+
+export interface Track {
+  id: string
+  title: string
+  artists: string[]
+  artist_id: string | null
+  album: string | null
+  album_id: string | null
+  duration: number | null
+  thumb: string | null
+  cover: string | null
+}
+
+export type Quality = 'auto' | 'data_saver' | 'normal' | 'high'
+
+export interface Rgb { r: number; g: number; b: number }
+export interface Palette { dominant: Rgb; vivid: Rgb }
+
+export type Update =
+  | { type: 'now_playing'; track: Track; index: number }
+  | { type: 'queue'; tracks: Track[]; index: number }
+  | { type: 'position'; secs: number }
+  | { type: 'duration'; secs: number }
+  | { type: 'paused'; paused: boolean }
+  | { type: 'timing'; video_id: string; ms: number; cached: boolean }
+  | { type: 'error'; message: string }
+
+export const api = {
+  search: (query: string) => invoke<Track[]>('search', { query }),
+  radio: (id: string) => invoke<Track[]>('radio', { id }),
+  play: (tracks: Track[], index: number) => invoke<void>('play', { tracks, index }),
+  playRadio: (track: Track) => invoke<void>('play_radio', { track }),
+  next: () => invoke<void>('next'),
+  previous: () => invoke<void>('previous'),
+  jump: (index: number) => invoke<void>('jump', { index }),
+  togglePause: () => invoke<void>('toggle_pause'),
+  seek: (secs: number) => invoke<void>('seek', { secs }),
+  setVolume: (volume: number) => invoke<void>('set_volume', { volume }),
+  prefetch: (id: string) => invoke<void>('prefetch', { id }),
+  setQuality: (quality: Quality) => invoke<void>('set_quality', { quality }),
+  getQuality: () => invoke<Quality>('get_quality'),
+  setAutoplay: (on: boolean) => invoke<void>('set_autoplay', { on }),
+  queue: () => invoke<{ tracks: Track[]; index: number }>('queue'),
+  coverPalette: (url: string) => invoke<Palette>('cover_palette', { url }),
+}
+
+export function onUpdate(cb: (u: Update) => void): Promise<UnlistenFn> {
+  return listen<Update>('hum://update', (e) => cb(e.payload))
+}
+
+export const artistLine = (t: Track) => t.artists.join(', ')
+
+export function fmtTime(secs: number | null | undefined): string {
+  if (secs == null || !isFinite(secs)) return '–:––'
+  const s = Math.max(0, Math.floor(secs))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+// Cover art is served by the Rust side (disk cache). Windows and Android expose custom
+// protocols as http://<scheme>.localhost, Linux and macOS as <scheme>://localhost.
+const imgBase = /Windows|Android/.test(navigator.userAgent) ? 'http://img.localhost/' : 'img://localhost/'
+export function img(url: string | null | undefined): string | undefined {
+  return url ? imgBase + encodeURIComponent(url) : undefined
+}

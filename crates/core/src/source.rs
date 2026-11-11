@@ -17,10 +17,13 @@ use ytmusic::YtMusic;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, serde::Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Quality {
+    /// The best stream the connection handles. Currently the same as High; stepping down when
+    /// mpv starts stalling for cache is the next step.
+    #[default]
+    Auto,
     /// ~50 kbps. About 0.4 MB per minute.
     DataSaver,
     /// ~130 kbps.
-    #[default]
     Normal,
     /// The best stream available.
     High,
@@ -29,7 +32,7 @@ pub enum Quality {
 /// Bits-per-second ceiling for data saver.
 const SAVER_CEILING: u32 = 80_000;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, serde::Deserialize)]
 pub struct Track {
     pub id: String,
     pub title: String,
@@ -131,7 +134,7 @@ impl Source {
                 drop(stream);
                 fmt
             }
-            Quality::Normal | Quality::High => self.ytm.best_audio(video_id).await?,
+            Quality::Auto | Quality::Normal | Quality::High => self.ytm.best_audio(video_id).await?,
         };
         let stream = Stream {
             video_id: video_id.to_string(),

@@ -54,6 +54,8 @@ struct Inner {
     streams: Mutex<HashMap<String, Stream>>,
     quality: AtomicU8,
     updates: broadcast::Sender<Update>,
+    /// The runtime `start` ran in. Callers may be on threads without one (sync Tauri commands).
+    rt: tokio::runtime::Handle,
 }
 
 #[derive(Clone)]
@@ -69,8 +71,9 @@ fn now_unix() -> i64 {
 fn quality_from(v: u8) -> Quality {
     match v {
         0 => Quality::DataSaver,
+        1 => Quality::Normal,
         2 => Quality::High,
-        _ => Quality::Normal,
+        _ => Quality::Auto,
     }
 }
 
@@ -94,13 +97,14 @@ impl Engine {
                 retried: None,
             }),
             streams: Mutex::new(HashMap::new()),
-            quality: AtomicU8::new(1),
+            quality: AtomicU8::new(3),
             updates,
+            rt: tokio::runtime::Handle::current(),
         }));
         let e = engine.clone();
-        tokio::spawn(async move { e.player_events(prx).await });
+        engine.0.rt.spawn(async move { e.player_events(prx).await });
         let e = engine.clone();
-        tokio::spawn(async move { e.0.source.warm().await });
+        engine.0.rt.spawn(async move { e.0.source.warm().await });
         Ok(engine)
     }
 
@@ -125,6 +129,7 @@ impl Engine {
             Quality::DataSaver => 0,
             Quality::Normal => 1,
             Quality::High => 2,
+            Quality::Auto => 3,
         };
         self.0.quality.store(v, Ordering::Relaxed);
         // Cached URLs were picked for the old quality.
@@ -154,7 +159,7 @@ impl Engine {
     /// Resolve ahead of a likely click (hover). Fire and forget.
     pub fn prefetch(&self, id: String) {
         let e = self.clone();
-        tokio::spawn(async move {
+        self.0.rt.spawn(async move {
             let _ = e.stream(&id).await;
         });
     }
@@ -206,7 +211,7 @@ impl Engine {
     /// Background work once a track is (about to be) playing: radio top-up and prefetch.
     fn after_track_change(&self) {
         let e = self.clone();
-        tokio::spawn(async move {
+        self.0.rt.spawn(async move {
             e.top_up_radio().await;
             e.prefetch_next().await;
         });
