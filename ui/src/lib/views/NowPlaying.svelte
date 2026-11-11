@@ -151,25 +151,32 @@
   .spacer {
     flex: 1;
   }
+  /* Two columns that fill exactly the height Now Playing has, so the panel ends above the
+     player bar however tall the window is. (A wrapping flex row sized the panel by its
+     content plus a 100vh guess, and it ran ~40px under the bar.) */
   .body {
     flex: 1;
     min-height: 0;
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(280px, 440px) minmax(0, 1fr);
     gap: 48px;
     padding: 4px 56px 32px;
-    align-items: stretch;
   }
   .left {
-    flex: 1 1 340px;
-    max-width: 440px;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     gap: 20px;
-    justify-content: center;
+    justify-content: safe center;
   }
+  /* The cover gives way first when the window is short: it takes the height left after the
+     title and controls (its width follows), and never more than the column's width. */
   .art {
-    width: 100%;
+    flex: 0 1 440px;
+    min-height: 96px;
+    width: auto;
+    max-width: 100%;
+    align-self: flex-start;
     aspect-ratio: 1;
     border-radius: var(--r-lg);
     object-fit: cover;
@@ -272,7 +279,21 @@
     background: color-mix(in srgb, black 20%, transparent);
     border-radius: var(--r-lg);
     padding: 18px 20px;
-    max-height: calc(100vh - 160px);
+  }
+  /* Narrow windows: stack, and let the whole screen scroll instead. */
+  @media (max-width: 900px) {
+    .body {
+      grid-template-columns: minmax(0, 1fr);
+      overflow-y: auto;
+      padding: 4px 24px 24px;
+      gap: 24px;
+    }
+    .left {
+      max-width: 440px;
+    }
+    .panel {
+      height: 70vh;
+    }
   }
   :global([data-theme='light']) .panel {
     background: color-mix(in srgb, white 45%, transparent);
