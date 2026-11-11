@@ -56,8 +56,7 @@ cache) is open.
 - Discord status, Last.fm scrobbling.
 - Mini player, tray menu.
 - Code signing for the Windows installer (costs money; worth it once hum is public).
-- **Android port, decided against for now** ([MOBILE.md](MOBILE.md)): the field is crowded and the
-  library already syncs through the account. Same `ui/` and `crates/core`, but no mpv there: needs a Media3 player
+- **Android port, undecided** ([MOBILE.md](MOBILE.md) has the research still to do). Same `ui/` and `crates/core`, but no mpv there: needs a Media3 player
   plugin, phone layouts, background playback, lock-screen controls (weeks).
 
 ## Decided against (and why)

@@ -1,6 +1,6 @@
 # Would a phone version of hum help?
 
-Looked into on 2026-11-11, briefly. Feature lists come from project pages and listings, not from
+First pass 2026-11-11, too brief to decide on. Feature lists come from project pages and listings, not from
 using each app, so treat the "they don't" column as unverified.
 
 ## The field on Android
@@ -27,32 +27,26 @@ offline, lyrics, account sync.
 
 None of that needs a phone to be useful, and all of it could be built into any of those apps.
 
-## What a port would add
+## Undecided: the first pass was too thin
 
-- **The same taste on both devices**: but plays and skips live in hum's local database. The
-  phone and the desktop would each learn separately unless hum syncs its own history, which
-  needs a server or a sync service hum doesn't have. YouTube's history can't carry it (it's paused
-  on the test account anyway, see ROADMAP Later).
-- **Shared library**: already done. Likes and playlists sync through the account (#29), so hum
-  on the desktop and MetroList on the phone see the same library today.
+The first draft concluded "don't port" from one search, and asked the wrong question: what the
+phone would add to the desktop. The real question is whether hum would be the better app where
+people actually listen, which is mostly the phone. Several of hum's features matter *more* there:
+auto quality on a shaky mobile connection, Data used on a metered plan, a cache that costs no
+extra data. MetroList being in maintenance mode is an opening.
 
-Cost: Media3 player plugin instead of mpv, phone layouts, background service, lock screen,
-battery work. Weeks, and then upkeep against apps that already have years on it.
+## Research to do before deciding
 
-## Verdict
+1. Use MetroList and SimpMusic for a few days on the phone. Note what's annoying: start time,
+   data use, battery, how good radio is, design.
+2. Read their open issues and reviews for recurring complaints (playback dying in the
+   background, data use, sync bugs, broken streams after YouTube changes).
+3. Measure on the phone: click to sound, data per hour at each quality, battery per hour.
+4. Price the port: Media3 player plugin, phone layouts, background service, lock screen, and
+   keeping streams working on Android.
+5. Then decide, from what those apps do badly and hum could do well.
 
-Don't port. The phone is the crowded side; the desktop isn't. Desktop YouTube Music apps are
-mostly Electron wrappers around the website, and hum's edge (low CPU and memory, a fast start,
-its own taste ranking) shows most there.
-
-## Things that would help instead
-
-1. **Phone as a remote** (days, not weeks): hum serves a small page on the home network; scan a QR
-   code from Settings and control playback, the queue and search from the phone. It gives the
-   phone something MetroList can't do (drive the desktop), with no second player to maintain.
-2. **Sync hum's own taste between devices**, if a port ever happens: export and import the
-   plays table, or a sync folder. Without it, a port is just one more client.
-3. **Offline mode** on the desktop, now that the cache exists (#33).
+Phone as a remote stays a cheap idea on its own, whatever the decision.
 
 Sources: [alternativeto: Metrolist](https://alternativeto.net/software/metrolist/),
 [alternativeto: RiMusic](https://alternativeto.net/software/rimusic/),
