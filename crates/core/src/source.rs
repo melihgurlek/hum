@@ -124,6 +124,27 @@ impl Source {
         Ok(res.into_iter().filter_map(Track::from_ytm).collect())
     }
 
+    /// YouTube Music's own (plain, unsynced) lyrics: the watch page's Lyrics tab.
+    pub async fn yt_lyrics(&self, video_id: &str) -> Result<Option<String>> {
+        use ytmusic::Client;
+        let next = self
+            .ytm
+            .execute("next", Client::Music, serde_json::json!({ "videoId": video_id }))
+            .await?;
+        let Some(browse_id) = find_str(&next, "browseId", |s| s.starts_with("MPLYt")) else {
+            return Ok(None);
+        };
+        let page = self
+            .ytm
+            .execute("browse", Client::Music, serde_json::json!({ "browseId": browse_id }))
+            .await?;
+        let text = find_key(&page, "musicDescriptionShelfRenderer")
+            .and_then(|shelf| shelf.pointer("/description/runs/0/text"))
+            .and_then(|t| t.as_str())
+            .map(str::to_string);
+        Ok(text)
+    }
+
     pub async fn resolve(&self, video_id: &str, quality: Quality) -> Result<Stream> {
         let t = Instant::now();
         let fmt = match quality {
@@ -167,4 +188,27 @@ fn expiry(url: &str) -> i64 {
                 .map(|d| d.as_secs() as i64 + 5 * 3600)
                 .unwrap_or(0)
         })
+}
+
+/// Depth-first search for the first string under `key` that satisfies `ok`.
+fn find_str(v: &serde_json::Value, key: &str, ok: impl Fn(&str) -> bool + Copy) -> Option<String> {
+    match v {
+        serde_json::Value::Object(m) => {
+            if let Some(s) = m.get(key).and_then(|s| s.as_str()).filter(|s| ok(s)) {
+                return Some(s.to_string());
+            }
+            m.values().find_map(|c| find_str(c, key, ok))
+        }
+        serde_json::Value::Array(a) => a.iter().find_map(|c| find_str(c, key, ok)),
+        _ => None,
+    }
+}
+
+/// Depth-first search for the first object stored under `key`.
+fn find_key<'a>(v: &'a serde_json::Value, key: &str) -> Option<&'a serde_json::Value> {
+    match v {
+        serde_json::Value::Object(m) => m.get(key).or_else(|| m.values().find_map(|c| find_key(c, key))),
+        serde_json::Value::Array(a) => a.iter().find_map(|c| find_key(c, key)),
+        _ => None,
+    }
 }

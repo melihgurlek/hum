@@ -4,6 +4,7 @@
 pub mod color;
 pub mod engine;
 pub mod library;
+pub mod lyrics;
 pub mod player;
 pub mod source;
 

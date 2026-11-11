@@ -16,6 +16,9 @@ export interface Track {
 export interface TrackNote { liked: boolean; plays: number; last_played: number | null; skipped_recently: boolean }
 export interface HistoryEntry { track: Track; played_at: number; outcome: 'completed' | 'skipped_early' | 'skipped_late' }
 
+export interface LyricLine { at: number; text: string }
+export interface Lyrics { lines: LyricLine[] | null; plain: string | null; source: string }
+
 export type Quality = 'auto' | 'data_saver' | 'normal' | 'high'
 
 export interface Rgb { r: number; g: number; b: number }
@@ -54,6 +57,7 @@ export const api = {
   trackNotes: (ids: string[]) => invoke<Record<string, TrackNote>>('track_notes', { ids }),
   forgotten: (limit: number) => invoke<{ track: Track; last_played: number }[]>('forgotten', { limit }),
   quickPicks: (seed: string) => invoke<Track[]>('quick_picks', { seed }),
+  lyrics: (track: Track) => invoke<Lyrics | null>('lyrics', { track }),
   coverPalette: (url: string) => invoke<Palette>('cover_palette', { url }),
 }
 
