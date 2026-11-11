@@ -3,8 +3,15 @@
   import { player, ui, setAutoplay, toggleLike, reason } from '../state.svelte'
   import Icon from '../components/Icon.svelte'
   import Progress from '../components/Progress.svelte'
+  import Lyrics from '../components/Lyrics.svelte'
 
-  let tab = $state<'next' | 'lyrics'>('next')
+  // Remember which tab you left open.
+  let tab = $state<'next' | 'lyrics'>((localStorage.getItem('hum.npTab') as 'next' | 'lyrics') ?? 'lyrics')
+  $effect(() => {
+    try {
+      localStorage.setItem('hum.npTab', tab)
+    } catch {}
+  })
 
   // Why each song is in Up next, from your listening history.
   let notes = $state<Record<string, TrackNote>>({})
@@ -91,7 +98,7 @@
             {/each}
           </div>
         {:else}
-          <p class="empty">Synced lyrics are coming in a later version.</p>
+          <Lyrics />
         {/if}
       </section>
     </div>

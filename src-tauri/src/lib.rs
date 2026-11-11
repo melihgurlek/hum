@@ -145,6 +145,22 @@ async fn quick_picks(app: State<'_, App>, seed: String) -> Res<Vec<Track>> {
     .map_err(err)
 }
 
+/// Lyrics for a track: from the library cache, else LRCLIB, else YouTube Music.
+#[tauri::command]
+async fn lyrics(app: State<'_, App>, track: Track) -> Res<Option<hum_core::lyrics::Lyrics>> {
+    let l = lib(&app)?;
+    let id = track.id.clone();
+    if let Some(hit) = l.run(move |l| l.cached_lyrics(&id)).await.map_err(err)? {
+        return Ok(hit);
+    }
+    let found = hum_core::lyrics::fetch(&app.http, app.engine.source(), &track)
+        .await
+        .map_err(err)?;
+    let store = found.clone();
+    let _ = l.run(move |l| l.store_lyrics(&track.id, store.as_ref())).await;
+    Ok(found)
+}
+
 #[tauri::command]
 fn toggle_pause(app: State<'_, App>) {
     app.engine.toggle_pause();
@@ -360,6 +376,7 @@ pub fn run() {
             track_notes,
             forgotten,
             quick_picks,
+            lyrics,
             ui_log
         ])
         .run(tauri::generate_context!())

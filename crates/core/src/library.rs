@@ -116,6 +116,11 @@ impl Library {
              );
              CREATE INDEX IF NOT EXISTS plays_track ON plays(track_id, played_at);
              CREATE INDEX IF NOT EXISTS plays_time ON plays(played_at);
+             CREATE TABLE IF NOT EXISTS lyrics (
+                 track_id TEXT PRIMARY KEY,
+                 json TEXT,
+                 fetched_at INTEGER NOT NULL
+             );
              CREATE TABLE IF NOT EXISTS likes (
                  track_id TEXT PRIMARY KEY REFERENCES tracks(id),
                  liked_at INTEGER NOT NULL
@@ -172,6 +177,33 @@ impl Library {
             ],
         )?;
         Ok(outcome)
+    }
+
+    /// Cached lyrics: `Some(None)` means "looked recently, there are none".
+    pub fn cached_lyrics(&self, id: &str) -> Result<Option<Option<crate::lyrics::Lyrics>>> {
+        let db = self.db.lock().unwrap();
+        let row: Option<(Option<String>, i64)> = db
+            .query_row(
+                "SELECT json, fetched_at FROM lyrics WHERE track_id = ?1",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        Ok(match row {
+            Some((Some(j), _)) => Some(serde_json::from_str(&j).ok()),
+            // Lyrics get added to LRCLIB over time: look again after a week.
+            Some((None, at)) if now() - at < 7 * DAY => Some(None),
+            _ => None,
+        })
+    }
+
+    pub fn store_lyrics(&self, id: &str, lyrics: Option<&crate::lyrics::Lyrics>) -> Result<()> {
+        let json = lyrics.map(serde_json::to_string).transpose()?;
+        self.db.lock().unwrap().execute(
+            "INSERT OR REPLACE INTO lyrics (track_id, json, fetched_at) VALUES (?1, ?2, ?3)",
+            params![id, json, now()],
+        )?;
+        Ok(())
     }
 
     pub fn set_liked(&self, track: &Track, liked: bool) -> Result<()> {
