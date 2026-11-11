@@ -7,10 +7,14 @@
   let history = $state<HistoryEntry[]>([])
   let loaded = $state(false)
 
-  // Reload when the song changes, so a new like or play shows up without leaving the page.
+  $effect(() => {
+    api.syncLikes().catch(() => {})
+  })
+  // Reload when the song changes or the account sync lands, so new likes and plays show up.
   $effect(() => {
     void player.current?.id
     void player.liked
+    void ui.synced
     Promise.all([api.liked(), api.history(200)])
       .then(([l, h]) => {
         liked = l

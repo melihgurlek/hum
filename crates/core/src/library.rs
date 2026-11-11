@@ -99,6 +99,8 @@ pub struct Playlist {
     pub id: i64,
     pub name: String,
     pub tracks: Vec<Track>,
+    /// On the YouTube Music account too.
+    pub synced: bool,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
@@ -106,6 +108,9 @@ pub struct DataUsed {
     pub month: u64,
     pub total: u64,
 }
+
+/// A playlist row: track id, when it was added, its id on the account playlist.
+type Entry = (String, i64, Option<String>);
 
 #[derive(Clone)]
 pub struct Library {
@@ -164,6 +169,23 @@ impl Library {
                  month TEXT PRIMARY KEY,
                  bytes INTEGER NOT NULL
              );",
+        )?;
+        // v1: YouTube Music account sync. `remote`: the like is on the account; `unliked` and
+        // `deleted_playlists` hold removals not yet sent.
+        if db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))? < 1 {
+            db.execute_batch(
+                "ALTER TABLE likes ADD COLUMN remote INTEGER NOT NULL DEFAULT 0;
+                 ALTER TABLE playlists ADD COLUMN remote_id TEXT;
+                 ALTER TABLE playlist_tracks ADD COLUMN set_video_id TEXT;
+                 CREATE TABLE IF NOT EXISTS unliked (track_id TEXT PRIMARY KEY);
+                 CREATE TABLE IF NOT EXISTS deleted_playlists (remote_id TEXT PRIMARY KEY);
+                 PRAGMA user_version = 1;",
+            )?;
+        }
+        // v2: account playlists kept on the account but not shown in hum.
+        db.execute_batch(
+            "CREATE TABLE IF NOT EXISTS hidden_playlists (remote_id TEXT PRIMARY KEY, name TEXT NOT NULL);
+             PRAGMA user_version = 2;",
         )?;
         Ok(Library {
             db: Arc::new(Mutex::new(db)),
@@ -290,6 +312,10 @@ impl Library {
 
     pub fn delete_playlist(&self, id: i64) -> Result<()> {
         let db = self.db.lock().unwrap();
+        db.execute(
+            "INSERT OR IGNORE INTO deleted_playlists SELECT remote_id FROM playlists WHERE id = ?1 AND remote_id IS NOT NULL",
+            params![id],
+        )?;
         db.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?1", params![id])?;
         db.execute("DELETE FROM playlists WHERE id = ?1", params![id])?;
         Ok(())
@@ -332,8 +358,10 @@ impl Library {
 
     pub fn playlist(&self, id: i64) -> Result<Option<Playlist>> {
         let db = self.db.lock().unwrap();
-        let Some(name) = db
-            .query_row("SELECT name FROM playlists WHERE id = ?1", params![id], |r| r.get::<_, String>(0))
+        let Some((name, synced)) = db
+            .query_row("SELECT name, remote_id IS NOT NULL FROM playlists WHERE id = ?1", params![id], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, bool>(1)?))
+            })
             .optional()?
         else {
             return Ok(None);
@@ -346,7 +374,7 @@ impl Library {
             .query_map(params![id], |r| r.get::<_, String>(0))?
             .filter_map(|j| j.ok().and_then(|j| serde_json::from_str(&j).ok()))
             .collect();
-        Ok(Some(Playlist { id, name, tracks }))
+        Ok(Some(Playlist { id, name, tracks, synced }))
     }
 
     /// Append tracks, skipping ones already in the playlist. Returns how many were added.
@@ -400,26 +428,26 @@ impl Library {
         Ok(())
     }
 
-    fn track_ids(&self, id: i64) -> Result<Vec<(String, i64)>> {
+    fn track_ids(&self, id: i64) -> Result<Vec<Entry>> {
         let db = self.db.lock().unwrap();
         let mut st = db.prepare(
-            "SELECT track_id, added_at FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY pos",
+            "SELECT track_id, added_at, set_video_id FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY pos",
         )?;
         let v = st
-            .query_map(params![id], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .query_map(params![id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
             .flatten()
             .collect();
         Ok(v)
     }
 
-    fn rewrite_order(&self, id: i64, ids: &[(String, i64)]) -> Result<()> {
+    fn rewrite_order(&self, id: i64, ids: &[Entry]) -> Result<()> {
         let mut db = self.db.lock().unwrap();
         let tx = db.transaction()?;
         tx.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?1", params![id])?;
-        for (pos, (track, added)) in ids.iter().enumerate() {
+        for (pos, (track, added, set_id)) in ids.iter().enumerate() {
             tx.execute(
-                "INSERT INTO playlist_tracks (playlist_id, pos, track_id, added_at) VALUES (?1, ?2, ?3, ?4)",
-                params![id, pos as i64, track, added],
+                "INSERT INTO playlist_tracks (playlist_id, pos, track_id, added_at, set_video_id) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![id, pos as i64, track, added, set_id],
             )?;
         }
         tx.execute("UPDATE playlists SET updated_at = ?2 WHERE id = ?1", params![id, now()])?;
@@ -436,8 +464,187 @@ impl Library {
                 params![track.id, now()],
             )?;
         } else {
+            db.execute(
+                "INSERT OR IGNORE INTO unliked SELECT track_id FROM likes WHERE track_id = ?1 AND remote = 1",
+                params![track.id],
+            )?;
             db.execute("DELETE FROM likes WHERE track_id = ?1", params![track.id])?;
         }
+        Ok(())
+    }
+
+    // ---- account sync --------------------------------------------------------------------
+
+    /// Every like, and whether it is on the account.
+    pub fn like_states(&self) -> Result<Vec<(String, bool)>> {
+        let db = self.db.lock().unwrap();
+        let mut st = db.prepare("SELECT track_id, remote FROM likes")?;
+        let v = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.flatten().collect();
+        Ok(v)
+    }
+
+    pub fn mark_liked_remote(&self, id: &str) -> Result<()> {
+        self.db.lock().unwrap().execute("UPDATE likes SET remote = 1 WHERE track_id = ?1", params![id])?;
+        Ok(())
+    }
+
+    /// Likes from the account that hum doesn't have, newest first.
+    pub fn add_remote_likes(&self, tracks: &[Track]) -> Result<()> {
+        let mut db = self.db.lock().unwrap();
+        let tx = db.transaction()?;
+        let t = now();
+        for (i, track) in tracks.iter().enumerate() {
+            Self::upsert_track(&tx, track)?;
+            tx.execute(
+                "INSERT INTO likes (track_id, liked_at, remote) VALUES (?1, ?2, 1)
+                 ON CONFLICT(track_id) DO UPDATE SET remote = 1",
+                params![track.id, t - i as i64],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Unliked on another device.
+    pub fn drop_like(&self, id: &str) -> Result<()> {
+        self.db.lock().unwrap().execute("DELETE FROM likes WHERE track_id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn pending_unlikes(&self) -> Result<Vec<String>> {
+        let db = self.db.lock().unwrap();
+        let mut st = db.prepare("SELECT track_id FROM unliked")?;
+        let v = st.query_map([], |r| r.get(0))?.flatten().collect();
+        Ok(v)
+    }
+
+    pub fn clear_unlike(&self, id: &str) -> Result<()> {
+        self.db.lock().unwrap().execute("DELETE FROM unliked WHERE track_id = ?1", params![id])?;
+        Ok(())
+    }
+
+    /// Every playlist with its account playlist id, if it has one.
+    pub fn playlist_links(&self) -> Result<Vec<(i64, Option<String>)>> {
+        let db = self.db.lock().unwrap();
+        let mut st = db.prepare("SELECT id, remote_id FROM playlists")?;
+        let v = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.flatten().collect();
+        Ok(v)
+    }
+
+    pub fn playlist_remote(&self, id: i64) -> Result<Option<String>> {
+        let db = self.db.lock().unwrap();
+        Ok(db
+            .query_row("SELECT remote_id FROM playlists WHERE id = ?1", params![id], |r| r.get(0))
+            .optional()?
+            .flatten())
+    }
+
+    pub fn link_playlist(&self, id: i64, remote_id: &str) -> Result<()> {
+        self.db.lock().unwrap().execute(
+            "UPDATE playlists SET remote_id = ?2 WHERE id = ?1",
+            params![id, remote_id],
+        )?;
+        Ok(())
+    }
+
+    /// Each entry's id on the account playlist, in order; `None` until synced.
+    pub fn set_video_ids(&self, id: i64) -> Result<Vec<(String, Option<String>)>> {
+        Ok(self.track_ids(id)?.into_iter().map(|(t, _, s)| (t, s)).collect())
+    }
+
+    /// Make playlist `id` (or a new one, when `None`) exactly the account's copy.
+    pub fn replace_playlist(
+        &self,
+        id: Option<i64>,
+        remote_id: &str,
+        name: &str,
+        entries: &[(Track, Option<String>)],
+    ) -> Result<i64> {
+        let mut db = self.db.lock().unwrap();
+        let tx = db.transaction()?;
+        let t = now();
+        let id = match id {
+            Some(id) => {
+                tx.execute("UPDATE playlists SET name = ?2 WHERE id = ?1", params![id, clean_name(name)])?;
+                id
+            }
+            None => {
+                tx.execute(
+                    "INSERT INTO playlists (name, created_at, updated_at, remote_id) VALUES (?1, ?2, ?2, ?3)",
+                    params![clean_name(name), t, remote_id],
+                )?;
+                tx.last_insert_rowid()
+            }
+        };
+        let old: HashMap<String, i64> = tx
+            .prepare("SELECT track_id, added_at FROM playlist_tracks WHERE playlist_id = ?1")?
+            .query_map(params![id], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .flatten()
+            .collect();
+        tx.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?1", params![id])?;
+        for (pos, (track, set_id)) in entries.iter().enumerate() {
+            Self::upsert_track(&tx, track)?;
+            tx.execute(
+                "INSERT INTO playlist_tracks (playlist_id, pos, track_id, added_at, set_video_id) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![id, pos as i64, track.id, old.get(&track.id).copied().unwrap_or(t), set_id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(id)
+    }
+
+    /// Deleted on the account: remove here without queueing a deletion.
+    pub fn drop_playlist(&self, id: i64) -> Result<()> {
+        let db = self.db.lock().unwrap();
+        db.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?1", params![id])?;
+        db.execute("DELETE FROM playlists WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    /// Stop showing account playlist `remote_id` here; it stays on the account.
+    pub fn hide_playlist(&self, remote_id: &str, name: &str) -> Result<()> {
+        let mut db = self.db.lock().unwrap();
+        let tx = db.transaction()?;
+        tx.execute(
+            "INSERT OR REPLACE INTO hidden_playlists (remote_id, name) VALUES (?1, ?2)",
+            params![remote_id, name],
+        )?;
+        tx.execute(
+            "DELETE FROM playlist_tracks WHERE playlist_id IN (SELECT id FROM playlists WHERE remote_id = ?1)",
+            params![remote_id],
+        )?;
+        tx.execute("DELETE FROM playlists WHERE remote_id = ?1", params![remote_id])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn unhide_playlist(&self, remote_id: &str) -> Result<()> {
+        self.db
+            .lock()
+            .unwrap()
+            .execute("DELETE FROM hidden_playlists WHERE remote_id = ?1", params![remote_id])?;
+        Ok(())
+    }
+
+    pub fn hidden_playlists(&self) -> Result<std::collections::HashSet<String>> {
+        let db = self.db.lock().unwrap();
+        let mut st = db.prepare("SELECT remote_id FROM hidden_playlists")?;
+        let v = st.query_map([], |r| r.get(0))?.flatten().collect();
+        Ok(v)
+    }
+
+    pub fn pending_playlist_deletes(&self) -> Result<Vec<String>> {
+        let db = self.db.lock().unwrap();
+        let mut st = db.prepare("SELECT remote_id FROM deleted_playlists")?;
+        let v = st.query_map([], |r| r.get(0))?.flatten().collect();
+        Ok(v)
+    }
+
+    pub fn clear_playlist_delete(&self, remote_id: &str) -> Result<()> {
+        self.db
+            .lock()
+            .unwrap()
+            .execute("DELETE FROM deleted_playlists WHERE remote_id = ?1", params![remote_id])?;
         Ok(())
     }
 
@@ -689,6 +896,45 @@ mod tests {
             thumb: None,
             cover: None,
         }
+    }
+
+    #[test]
+    fn unliking_a_synced_like_is_remembered() {
+        let lib = Library::memory().unwrap();
+        let (a, b) = (track("a", "x"), track("b", "x"));
+        lib.set_liked(&a, true).unwrap();
+        lib.set_liked(&b, true).unwrap();
+        lib.mark_liked_remote("a").unwrap();
+        lib.set_liked(&a, false).unwrap();
+        lib.set_liked(&b, false).unwrap();
+        assert_eq!(lib.pending_unlikes().unwrap(), vec!["a".to_string()]);
+    }
+
+    #[test]
+    fn account_copy_replaces_a_playlist_and_keeps_entry_ids() {
+        let lib = Library::memory().unwrap();
+        let id = lib.replace_playlist(None, "PL1", "Mix", &[(track("a", "x"), Some("s1".into())), (track("b", "x"), Some("s2".into()))]).unwrap();
+        lib.move_in_playlist(id, 0, 1).unwrap();
+        let ids = lib.set_video_ids(id).unwrap();
+        assert_eq!(ids, vec![("b".into(), Some("s2".into())), ("a".into(), Some("s1".into()))]);
+        assert_eq!(lib.playlist_remote(id).unwrap().as_deref(), Some("PL1"));
+        lib.replace_playlist(Some(id), "PL1", "Mix 2", &[(track("c", "x"), None)]).unwrap();
+        let p = lib.playlist(id).unwrap().unwrap();
+        assert_eq!((p.name.as_str(), p.tracks.len()), ("Mix 2", 1));
+        lib.delete_playlist(id).unwrap();
+        assert_eq!(lib.pending_playlist_deletes().unwrap(), vec!["PL1".to_string()]);
+    }
+
+    #[test]
+    fn hiding_an_account_playlist_drops_it_here_only() {
+        let lib = Library::memory().unwrap();
+        lib.replace_playlist(None, "PL1", "Old", &[(track("a", "x"), Some("s1".into()))]).unwrap();
+        lib.hide_playlist("PL1", "Old").unwrap();
+        assert!(lib.playlists().unwrap().is_empty());
+        assert!(lib.pending_playlist_deletes().unwrap().is_empty(), "hiding must not delete on the account");
+        assert!(lib.hidden_playlists().unwrap().contains("PL1"));
+        lib.unhide_playlist("PL1").unwrap();
+        assert!(lib.hidden_playlists().unwrap().is_empty());
     }
 
     #[test]

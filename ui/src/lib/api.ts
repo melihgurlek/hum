@@ -20,7 +20,7 @@ export interface LyricLine { at: number; text: string }
 export interface Lyrics { lines: LyricLine[] | null; plain: string | null; source: string }
 
 export interface PlaylistSummary { id: number; name: string; count: number; covers: string[] }
-export interface Playlist { id: number; name: string; tracks: Track[] }
+export interface Playlist { id: number; name: string; tracks: Track[]; synced: boolean }
 
 export interface ArtistLink { name: string; id: string | null }
 export interface AlbumCard { id: string; title: string; kind: string; year: number | null; artists: ArtistLink[]; thumb: string | null }
@@ -84,6 +84,30 @@ export const api = {
   moveInPlaylist: (id: number, from: number, to: number) => invoke<void>('move_in_playlist', { id, from, to }),
   dataUsed: () => invoke<{ month: number; total: number; auto_low: boolean }>('data_used'),
   coverPalette: (url: string) => invoke<Palette>('cover_palette', { url }),
+  account: () => invoke<Profile | null>('account'),
+  signIn: () => invoke<void>('sign_in'),
+  signOut: () => invoke<void>('sign_out'),
+  syncLikes: () => invoke<void>('sync_likes'),
+  syncPlaylist: (id: number) => invoke<void>('sync_playlist', { id }),
+  hidePlaylist: (id: number) => invoke<void>('hide_playlist', { id }),
+  accountPlaylists: () => invoke<AccountPlaylist[]>('account_playlists'),
+  setPlaylistShown: (id: string, name: string, shown: boolean) => invoke<void>('set_playlist_shown', { id, name, shown }),
+}
+
+export interface AccountPlaylist { id: string; name: string; count: number | null; shown: boolean }
+
+/** The account changed likes or playlists here; or a sync failed. */
+export function onSync(changed: () => void, failed: (msg: string) => void): Promise<UnlistenFn[]> {
+  return Promise.all([listen('hum://library', () => changed()), listen<string>('hum://sync-error', (e) => failed(e.payload))])
+}
+
+export interface Profile { name: string; email: string | null; photo: string | null }
+
+export function onAccount(cb: (p: Profile | null) => void, onError: (msg: string) => void): Promise<UnlistenFn[]> {
+  return Promise.all([
+    listen<Profile | null>('hum://account', (e) => cb(e.payload)),
+    listen<string>('hum://account-error', (e) => onError(e.payload)),
+  ])
 }
 
 export function onUpdate(cb: (u: Update) => void): Promise<UnlistenFn> {

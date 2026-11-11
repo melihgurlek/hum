@@ -1,6 +1,29 @@
 <script lang="ts">
-  import { api, type Quality } from '../api'
-  import { player, setQuality, setTheme, setAutoplay, ui, type ThemePref } from '../state.svelte'
+  import { api, img, onAccount, type AccountPlaylist, type Profile, type Quality } from '../api'
+  import { player, refreshPlaylists, setQuality, setTheme, setAutoplay, showToast, ui, type ThemePref } from '../state.svelte'
+
+  let lists = $state<AccountPlaylist[] | null>(null)
+  $effect(() => {
+    void ui.synced
+    if (profile) api.accountPlaylists().then((l) => (lists = l)).catch(() => (lists = null))
+    else lists = null
+  })
+  let choosing = $state(false)
+  let filter = $state('')
+  const shownCount = $derived(lists?.filter((p) => p.shown).length ?? 0)
+  const filtered = $derived((lists ?? []).filter((p) => p.name.toLowerCase().includes(filter.trim().toLowerCase())))
+  async function setShown(p: AccountPlaylist, shown: boolean) {
+    p.shown = shown
+    await api.setPlaylistShown(p.id, p.name, shown).catch((e) => showToast(String(e)))
+    refreshPlaylists()
+  }
+
+  let profile = $state<Profile | null | undefined>(undefined)
+  $effect(() => {
+    api.account().then((p) => (profile = p)).catch(() => (profile = null))
+    const off = onAccount((p) => (profile = p), (msg) => showToast(`Sign-in failed: ${msg}`))
+    return () => void off.then((fns) => fns.forEach((f) => f()))
+  })
 
   let used = $state<{ month: number; total: number } | null>(null)
   $effect(() => {
@@ -30,6 +53,48 @@
 
 <div class="page scroll">
   <h1>Settings</h1>
+
+  {#if profile !== undefined}
+    <section>
+      <h2>YouTube Music account</h2>
+      {#if profile}
+        <div class="account">
+          {#if profile.photo}<img class="avatar" src={img(profile.photo)} alt="" />{:else}<div class="avatar"></div>{/if}
+          <span class="who"><span class="ol ellipsis">{profile.name}</span>{#if profile.email}<span class="od ellipsis">{profile.email}</span>{/if}</span>
+          <button class="quiet" onclick={() => api.signOut()}>Sign out</button>
+        </div>
+        {#if lists?.length}
+          <div class="account lists">
+            <span class="who"><span class="ol">Playlists from YouTube Music</span><span class="od">{shownCount} of {lists.length} shown in hum; hidden ones stay on your account</span></span>
+            <button class="quiet" onclick={() => (choosing = !choosing)} aria-expanded={choosing}>{choosing ? 'Done' : 'Choose'}</button>
+          </div>
+          {#if choosing}
+            <div class="picker">
+              {#if lists.length > 8}
+                <input class="filter" placeholder="Filter playlists" bind:value={filter} aria-label="Filter playlists" />
+              {/if}
+              <div class="rows scroll">
+                {#each filtered as p (p.id)}
+                  <label class="row">
+                    <input type="checkbox" checked={p.shown} onchange={(e) => setShown(p, e.currentTarget.checked)} />
+                    <span class="ellipsis">{p.name}</span>
+                    {#if p.count != null}<span class="od count">{p.count}</span>{/if}
+                  </label>
+                {:else}
+                  <p class="od none">No playlist matches</p>
+                {/each}
+              </div>
+            </div>
+          {/if}
+        {/if}
+      {:else}
+        <div class="account">
+          <span class="who"><span class="ol">Not signed in</span><span class="od">Sign in to bring your liked songs and playlists from YouTube Music</span></span>
+          <button class="filled" onclick={() => api.signIn().catch((e) => showToast(String(e)))}>Sign in with Google</button>
+        </div>
+      {/if}
+    </section>
+  {/if}
 
   <section>
     <h2>Sound quality</h2>
@@ -141,6 +206,97 @@
     font-size: 12px;
     font-weight: 700;
     vertical-align: 1px;
+  }
+  .lists {
+    margin-top: 6px;
+  }
+  .picker {
+    margin-top: 6px;
+    padding: 8px;
+    border-radius: var(--r-md);
+    background: var(--surface);
+  }
+  .filter {
+    width: 100%;
+    height: 36px;
+    padding: 0 12px;
+    margin-bottom: 6px;
+    border-radius: var(--r-sm);
+    background: var(--raised);
+    color: var(--text);
+  }
+  .rows {
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 40px;
+    padding: 0 8px;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+  }
+  .row:hover {
+    background: var(--raised);
+  }
+  .row input {
+    accent-color: var(--accent, var(--accent-default));
+    width: 16px;
+    height: 16px;
+    flex: none;
+  }
+  .row .ellipsis {
+    flex: 1;
+    min-width: 0;
+  }
+  .count {
+    font-variant-numeric: tabular-nums;
+  }
+  .none {
+    padding: 8px;
+  }
+  .account {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    border-radius: var(--r-md);
+    background: var(--surface);
+    min-height: 64px;
+  }
+  .avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--raised-2);
+    flex: none;
+  }
+  .who {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .filled,
+  .quiet {
+    flex: none;
+    height: 40px;
+    padding: 0 18px;
+    border-radius: 999px;
+    font-weight: 700;
+  }
+  .filled {
+    background: var(--accent, var(--accent-default));
+    color: var(--on-accent);
+  }
+  .quiet {
+    color: var(--muted);
+  }
+  .quiet:hover {
+    color: var(--text);
+    background: var(--raised);
   }
   .usage {
     display: flex;

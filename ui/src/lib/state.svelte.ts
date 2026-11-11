@@ -1,4 +1,4 @@
-import { api, onUpdate, type AlbumPage, type ArtistPage, type SearchResults, type Palette, type PlaylistSummary, type Quality, type Track } from './api'
+import { api, onSync, onUpdate, type AlbumPage, type ArtistPage, type SearchResults, type Palette, type PlaylistSummary, type Quality, type Track } from './api'
 
 export type View = 'home' | 'search' | 'library' | 'settings' | 'playlist' | 'artist' | 'album'
 export type ThemePref = 'system' | 'dark' | 'light'
@@ -60,6 +60,8 @@ class Ui {
   renameNext = $state(false)
   /** Recently played, newest first, from the library (plus the current song, optimistically). */
   recent = $state<Track[]>([])
+  /** Bumped when the account sync changed likes or playlists, so open views reload. */
+  synced = $state(0)
 }
 
 export const player = new Player()
@@ -242,6 +244,13 @@ export async function startListening() {
   api.setAutoplay(ui.autoplay)
   refreshRecent()
   refreshPlaylists()
+  onSync(
+    () => {
+      ui.synced++
+      refreshPlaylists()
+    },
+    showToast,
+  )
   await onUpdate((u) => {
     switch (u.type) {
       case 'now_playing': {
