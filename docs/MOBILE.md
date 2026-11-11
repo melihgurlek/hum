@@ -35,6 +35,26 @@ people actually listen, which is mostly the phone. Several of hum's features mat
 auto quality on a shaky mobile connection, Data used on a metered plan, a cache that costs no
 extra data. MetroList being in maintenance mode is an opening.
 
+## What their users fight with (second pass, from release notes and reviews)
+
+- **MetroList** went into maintenance mode (v13.4.0), followed by a "future of Metrolist"
+  release (v13.6.1). Recent releases keep fixing the same kinds of thing: playback freezing,
+  recovering from YouTube player failures, YouTube changes that broke playback (official apps
+  too), the app lingering in the background after closing, memory and background work in large
+  libraries, startup crashes. A listing showed ~623 open issues. Its data control is a manual
+  "Low" quality; its docs ask you to turn off battery optimization for reliable playback.
+- **SimpMusic** gets praised for its UI. A review summary says the complaints are reliability
+  (buffering, crashes, cache) and discovery (odd recommendations).
+- **OuterTune** lists personalized quick picks too, so hum's Home isn't unique on that.
+
+What that suggests:
+- **Openings for hum:** quality that adapts on its own instead of a manual Low, radio ranked by
+  your plays and skips against "odd recommendations", and a maintained app where the
+  most-used one is in maintenance mode.
+- **The shared risk:** their top pain, streams breaking when YouTube changes, would be hum's
+  too. On Android it's a different player and possibly different client tricks. Whoever keeps
+  streams working wins; hum would depend on ytmusic-rs keeping up on Android as well.
+
 ## Research to do before deciding
 
 1. Use MetroList and SimpMusic for a few days on the phone. Note what's annoying: start time,
@@ -47,6 +67,14 @@ extra data. MetroList being in maintenance mode is an opening.
 5. Then decide, from what those apps do badly and hum could do well.
 
 Phone as a remote stays a cheap idea on its own, whatever the decision.
+
+Sources for the second pass: [MetroList v13.4.0, maintenance mode](https://newreleases.io/project/github/MetrolistGroup/Metrolist/release/v13.4.0),
+[v13.6.1](https://newreleases.io/project/github/MetrolistGroup/Metrolist/release/v13.6.1),
+[v13.6.2](https://newreleases.io/project/github/MetrolistGroup/Metrolist/release/v13.6.2),
+[v13.7.0](https://newreleases.io/project/github/MetrolistGroup/Metrolist/release/v13.7.0),
+[MetroList playback guide](https://mintlify.wiki/MetrolistGroup/Metrolist/guide/playback),
+[SimpMusic reviews](https://www.producthunt.com/products/simpmusic/reviews),
+[OuterTune](https://alternativeto.net/software/outertune/).
 
 Sources: [alternativeto: Metrolist](https://alternativeto.net/software/metrolist/),
 [alternativeto: RiMusic](https://alternativeto.net/software/rimusic/),
