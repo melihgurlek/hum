@@ -1792,6 +1792,7 @@ dependencies = [
  "image",
  "libc",
  "libmpv2",
+ "libmpv2-sys",
  "log",
  "reqwest 0.12.28",
  "rusqlite",

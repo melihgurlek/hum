@@ -312,11 +312,13 @@ impl Engine {
             }
         }
         let s = self.0.source.resolve(id, self.effective_quality()).await?;
-        self.0
-            .streams
-            .lock()
-            .unwrap()
-            .insert(id.to_string(), s.clone());
+        {
+            // Every play and hover adds a URL (~2 KB); drop the ones that have expired.
+            let mut streams = self.0.streams.lock().unwrap();
+            let now = now_unix();
+            streams.retain(|_, s| s.expires_at - 120 > now);
+            streams.insert(id.to_string(), s.clone());
+        }
         Ok((s, false))
     }
 

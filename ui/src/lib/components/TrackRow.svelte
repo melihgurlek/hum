@@ -75,6 +75,9 @@
     padding: 6px 16px 6px 8px;
     border-radius: var(--r-md);
     min-height: 56px;
+    /* Off-screen rows in long lists (liked songs, history) skip layout and paint. */
+    content-visibility: auto;
+    contain-intrinsic-size: auto 56px;
   }
   .row:hover,
   .row:focus-within {
