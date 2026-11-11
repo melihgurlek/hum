@@ -6,6 +6,9 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #22 | A song played from search continues with its own radio, not the other search results |
+| #21 | Now Playing fits the window: lyrics panel no longer runs under the player bar, cover shrinks in short windows |
+| #20 | Player bar takes the cover tint while Now Playing is open; sidebar stays neutral |
 | #19 | Design cleanup: equalizer marks the playing song (the white default accent hid it), search border quiet until focused; dropped Home greeting and fake mood chips, hint text, confirmation toasts and the timing stat; heading scale, three corner sizes, one filled button per screen |
 | #18 | Search top result follows YouTube Music: an artist card ("justin") or album card ("radiohead ok computer"), else the first song. Recent searches are the songs, artists and albums you picked, one click to replay or open |
 | #16 | Auto steps back up only when a recent download ran at 3x what High needs, and waits twice as long after each step-down (15, 30, 60, 120 min), so a borderline connection settles instead of stuttering every 15 minutes |
