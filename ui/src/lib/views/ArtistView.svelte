@@ -25,11 +25,11 @@
 </script>
 
 <div class="page scroll">
+  <BackButton />
   {#if artist}
     <header class="hero" class:plain={!artist.banner}>
       {#if artist.banner}<img class="banner" src={img(artist.banner)} alt="" />{/if}
       <div class="shade"></div>
-      <div class="top"><BackButton /></div>
       <div class="who">
         <h1>{artist.name}</h1>
         {#if artist.subscribers}<p class="subs">{artist.subscribers} subscribers</p>{/if}
@@ -74,12 +74,10 @@
       </section>
     {/if}
   {:else if failed}
-    <div class="top-plain"><BackButton /></div>
-    <p class="muted">Couldn't load this artist. Check your connection.</p>
+    <p class="muted retry">Couldn't load this artist. Check your connection.</p>
     <button class="secondary fit" onclick={load}><span class="trim">Try again</span></button>
   {:else}
     <header class="hero plain loading" aria-busy="true">
-      <div class="top"><BackButton /></div>
       <div class="who"><div class="ghost name"></div><div class="ghost subs-ghost"></div></div>
     </header>
   {/if}
@@ -99,8 +97,8 @@
     height: clamp(240px, 30vw, 360px);
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    padding: 20px 32px 0;
+    justify-content: flex-end;
+    padding: 76px 32px 0;
     flex: none;
     overflow: hidden;
   }
@@ -124,12 +122,11 @@
   .plain .shade {
     display: none;
   }
-  .top,
   .who {
     position: relative;
   }
-  .top-plain {
-    padding-top: 20px;
+  .retry {
+    margin-top: 76px;
   }
   h1 {
     font-size: clamp(36px, 5.5vw, 64px);

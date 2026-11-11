@@ -66,7 +66,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 6px 8px;
+    padding: 6px 16px 6px 8px;
     border-radius: 10px;
     min-height: 56px;
   }

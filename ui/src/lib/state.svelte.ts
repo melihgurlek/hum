@@ -387,6 +387,26 @@ export function openLiked() {
   go('library')
 }
 
+export function openHistory() {
+  ui.libraryTab = 'history'
+  go('library')
+}
+
+// ---- recent searches ------------------------------------------------------
+
+/** Searches you acted on (played or opened a result), newest first. */
+export const searches = $state<{ list: string[] }>({ list: load<string[]>('hum.searches', []) })
+export function rememberSearch(q: string) {
+  q = q.trim()
+  if (!q) return
+  searches.list = [q, ...searches.list.filter((s) => s.toLowerCase() !== q.toLowerCase())].slice(0, 10)
+  save('hum.searches', searches.list)
+}
+export function forgetSearch(q: string | null) {
+  searches.list = q == null ? [] : searches.list.filter((s) => s !== q)
+  save('hum.searches', searches.list)
+}
+
 export async function newPlaylistFromSidebar() {
   const id = await api.createPlaylist('New playlist')
   await refreshPlaylists()
