@@ -19,6 +19,9 @@ export interface HistoryEntry { track: Track; played_at: number; outcome: 'compl
 export interface LyricLine { at: number; text: string }
 export interface Lyrics { lines: LyricLine[] | null; plain: string | null; source: string }
 
+export interface PlaylistSummary { id: number; name: string; count: number; covers: string[] }
+export interface Playlist { id: number; name: string; tracks: Track[] }
+
 export type Quality = 'auto' | 'data_saver' | 'normal' | 'high'
 
 export interface Rgb { r: number; g: number; b: number }
@@ -58,6 +61,14 @@ export const api = {
   forgotten: (limit: number) => invoke<{ track: Track; last_played: number }[]>('forgotten', { limit }),
   quickPicks: (seed: string) => invoke<Track[]>('quick_picks', { seed }),
   lyrics: (track: Track) => invoke<Lyrics | null>('lyrics', { track }),
+  playlists: () => invoke<PlaylistSummary[]>('playlists'),
+  playlist: (id: number) => invoke<Playlist | null>('playlist', { id }),
+  createPlaylist: (name: string, tracks: Track[] = []) => invoke<number>('create_playlist', { name, tracks }),
+  renamePlaylist: (id: number, name: string) => invoke<void>('rename_playlist', { id, name }),
+  deletePlaylist: (id: number) => invoke<void>('delete_playlist', { id }),
+  addToPlaylist: (id: number, tracks: Track[]) => invoke<number>('add_to_playlist', { id, tracks }),
+  removeFromPlaylist: (id: number, index: number) => invoke<void>('remove_from_playlist', { id, index }),
+  moveInPlaylist: (id: number, from: number, to: number) => invoke<void>('move_in_playlist', { id, from, to }),
   coverPalette: (url: string) => invoke<Palette>('cover_palette', { url }),
 }
 

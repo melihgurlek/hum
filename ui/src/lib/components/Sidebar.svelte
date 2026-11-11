@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { artistLine, img } from '../api'
-  import { go, playRadio, ui, type View } from '../state.svelte'
+  import { go, newPlaylistFromSidebar, openLiked, openPlaylist, ui, type View } from '../state.svelte'
   import Icon from './Icon.svelte'
+  import Mosaic from './Mosaic.svelte'
 
   const items: { view: View; label: string; icon: string }[] = [
     { view: 'home', label: 'Home', icon: 'home' },
@@ -23,17 +23,22 @@
     </button>
   {/each}
 
-  {#if ui.recent.length}
-    <h2 class="label">Recently played</h2>
-    <div class="recent scroll">
-      {#each ui.recent.slice(0, 8) as t (t.id)}
-        <button class="mini" onclick={() => playRadio(t)} title={`Radio from ${t.title}`}>
-          {#if t.thumb}<img class="cover" src={img(t.thumb)} alt="" loading="lazy" />{:else}<div class="cover"></div>{/if}
-          <span class="text"><span class="ellipsis t">{t.title}</span><span class="ellipsis muted s">{artistLine(t)}</span></span>
-        </button>
-      {/each}
-    </div>
-  {/if}
+  <div class="head">
+    <h2 class="label">Playlists</h2>
+    <button class="add" aria-label="New playlist" title="New playlist" onclick={newPlaylistFromSidebar}><Icon name="plus" size={18} /></button>
+  </div>
+  <div class="recent scroll">
+    <button class="mini" class:active={ui.view === 'library' && ui.libraryTab === 'liked' && !ui.nowPlayingOpen} onclick={openLiked}>
+      <span class="liked" aria-hidden="true"><Icon name="heart" size={16} /></span>
+      <span class="text"><span class="ellipsis t">Liked songs</span></span>
+    </button>
+    {#each ui.playlists as p (p.id)}
+      <button class="mini" class:active={ui.view === 'playlist' && ui.playlistId === p.id && !ui.nowPlayingOpen} onclick={() => openPlaylist(p.id)}>
+        <Mosaic covers={p.covers} size={32} radius={6} />
+        <span class="text"><span class="ellipsis t">{p.name}</span><span class="ellipsis muted s">{p.count} {p.count === 1 ? 'song' : 'songs'}</span></span>
+      </button>
+    {/each}
+  </div>
 
   <button class="link settings" class:active={ui.view === 'settings' && !ui.nowPlayingOpen} onclick={() => go('settings')}>
     <Icon name="settings" />Settings
@@ -87,12 +92,44 @@
     background: var(--raised);
     color: var(--text);
   }
+  .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 18px 4px 6px 12px;
+  }
   .label {
     font-size: 13px;
     font-weight: 700;
     color: var(--muted);
-    margin: 18px 12px 6px;
     letter-spacing: 0;
+  }
+  .add {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+  }
+  .add:hover {
+    color: var(--text);
+    background: var(--raised);
+  }
+  .mini.active {
+    background: var(--raised);
+  }
+  .liked {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent, var(--accent-default));
+    color: var(--on-accent);
   }
   .recent {
     display: flex;
@@ -112,12 +149,6 @@
   }
   .mini:hover {
     background: var(--raised);
-  }
-  .mini .cover {
-    width: 32px;
-    height: 32px;
-    border-radius: 6px;
-    flex: none;
   }
   .text {
     display: flex;

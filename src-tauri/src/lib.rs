@@ -1,7 +1,7 @@
 //! Thin Tauri shell over hum-core: invoke commands in, `hum://update` events out.
 
 use hum_core::color::{self, Palette};
-use hum_core::library::{HistoryEntry, TrackNote};
+use hum_core::library::{HistoryEntry, Playlist, PlaylistSummary, TrackNote};
 use hum_core::{Engine, Library, Quality, Source, Track};
 mod media;
 
@@ -159,6 +159,55 @@ async fn lyrics(app: State<'_, App>, track: Track) -> Res<Option<hum_core::lyric
     let store = found.clone();
     let _ = l.run(move |l| l.store_lyrics(&track.id, store.as_ref())).await;
     Ok(found)
+}
+
+#[tauri::command]
+async fn playlists(app: State<'_, App>) -> Res<Vec<PlaylistSummary>> {
+    lib(&app)?.run(|l| l.playlists()).await.map_err(err)
+}
+
+#[tauri::command]
+async fn playlist(app: State<'_, App>, id: i64) -> Res<Option<Playlist>> {
+    lib(&app)?.run(move |l| l.playlist(id)).await.map_err(err)
+}
+
+/// Create a playlist, optionally with songs already in it. Returns its id.
+#[tauri::command]
+async fn create_playlist(app: State<'_, App>, name: String, tracks: Vec<Track>) -> Res<i64> {
+    lib(&app)?
+        .run(move |l| {
+            let id = l.create_playlist(&name)?;
+            l.add_to_playlist(id, &tracks)?;
+            Ok(id)
+        })
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+async fn rename_playlist(app: State<'_, App>, id: i64, name: String) -> Res<()> {
+    lib(&app)?.run(move |l| l.rename_playlist(id, &name)).await.map_err(err)
+}
+
+#[tauri::command]
+async fn delete_playlist(app: State<'_, App>, id: i64) -> Res<()> {
+    lib(&app)?.run(move |l| l.delete_playlist(id)).await.map_err(err)
+}
+
+/// Returns how many songs were new to the playlist.
+#[tauri::command]
+async fn add_to_playlist(app: State<'_, App>, id: i64, tracks: Vec<Track>) -> Res<usize> {
+    lib(&app)?.run(move |l| l.add_to_playlist(id, &tracks)).await.map_err(err)
+}
+
+#[tauri::command]
+async fn remove_from_playlist(app: State<'_, App>, id: i64, index: usize) -> Res<()> {
+    lib(&app)?.run(move |l| l.remove_from_playlist(id, index)).await.map_err(err)
+}
+
+#[tauri::command]
+async fn move_in_playlist(app: State<'_, App>, id: i64, from: usize, to: usize) -> Res<()> {
+    lib(&app)?.run(move |l| l.move_in_playlist(id, from, to)).await.map_err(err)
 }
 
 #[tauri::command]
@@ -377,6 +426,14 @@ pub fn run() {
             forgotten,
             quick_picks,
             lyrics,
+            playlists,
+            playlist,
+            create_playlist,
+            rename_playlist,
+            delete_playlist,
+            add_to_playlist,
+            remove_from_playlist,
+            move_in_playlist,
             ui_log
         ])
         .run(tauri::generate_context!())

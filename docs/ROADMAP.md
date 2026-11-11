@@ -6,6 +6,7 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #10 | Playlists: create from the sidebar or the add menu, inline rename, drag to reorder, remove, delete; add songs with the hover +, right-click, or from Now Playing |
 | #8 | Now Playing background picks the cover's real color, not tinted black (Relapse was green) |
 | #7 | Synced lyrics: LRCLIB, YouTube Music fallback, cached; click a line to seek |
 | #6 | Neutral default accent: all color comes from the current cover |
@@ -18,11 +19,10 @@ Updated in every PR. Newest done items at the top of each section.
 
 ## Next
 
-1. **Playlists**: create, rename, add/remove/reorder songs, play.
-2. **Artist and album pages**: top songs, albums, singles, artist radio; clicking an artist or album name anywhere opens them.
-3. **Auto quality that reacts**: step down when mpv stalls for cache; "data used" counter in Settings.
-4. **Windows build** in GitHub Actions (bundle libmpv DLL), smoke-tested.
-5. **Google sign-in** (webview cookie login) to sync likes and playlists with MetroList.
+1. **Artist and album pages**: top songs, albums, singles, artist radio; clicking an artist or album name anywhere opens them.
+2. **Auto quality that reacts**: step down when mpv stalls for cache; "data used" counter in Settings.
+3. **Windows build** in GitHub Actions (bundle libmpv DLL), smoke-tested.
+4. **Google sign-in** (webview cookie login) to sync likes and playlists with MetroList.
 
 ## Later
 

@@ -8,6 +8,8 @@
   import Library from './lib/views/Library.svelte'
   import Settings from './lib/views/Settings.svelte'
   import NowPlaying from './lib/views/NowPlaying.svelte'
+  import PlaylistView from './lib/views/PlaylistView.svelte'
+  import AddMenu from './lib/components/AddMenu.svelte'
 
   onMount(() => {
     startListening()
@@ -30,10 +32,12 @@
     {#if ui.view === 'home'}<Home />
     {:else if ui.view === 'search'}<Search />
     {:else if ui.view === 'library'}<Library />
+    {:else if ui.view === 'playlist'}<PlaylistView />
     {:else}<Settings />{/if}
     {#if ui.nowPlayingOpen}<NowPlaying />{/if}
   </main>
   <div class="player"><PlayerBar /></div>
+  <AddMenu />
   {#if ui.toast}<div class="toast" role="status">{ui.toast}</div>{/if}
 </div>
 
