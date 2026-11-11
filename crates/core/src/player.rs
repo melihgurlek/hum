@@ -12,6 +12,8 @@ use std::thread;
 
 use anyhow::{Result, anyhow};
 use libmpv2::Mpv;
+use std::collections::{HashMap, HashSet};
+
 use libmpv2::events::{Event, PropertyData};
 use libmpv2::Format;
 use tokio::sync::mpsc::UnboundedSender;
@@ -49,6 +51,9 @@ pub enum PlayerEvent {
     Downloaded { bytes: u64, rate: f64 },
     /// The last item in mpv's playlist ended and nothing follows.
     Idle,
+    /// A recording for the song cache reached the end with no seek; `expected` is the
+    /// stream's size.
+    Recorded { path: std::path::PathBuf, expected: Option<u64> },
     Error { video_id: Option<String>, message: String },
 }
 
@@ -121,9 +126,31 @@ fn load(mpv: &Mpv, stream: &Stream, mode: &str, start: Option<f64>) -> Result<()
     if let Some(t) = start {
         opts.push_str(&format!(",start={t:.1}"));
     }
+    // Only a play from the start can record the whole song.
+    if let (Some(path), None) = (&stream.record_to, start) {
+        opts.push_str(&format!(",stream-record={}", escaped(&path.to_string_lossy())));
+    }
     // mpv >= 0.38: loadfile <url> <flags> <index> <options>
     mpv.command("loadfile", &[&stream.url, mode, "-1", &opts])
         .map_err(|e| anyhow!("loadfile: {e}"))
+}
+
+/// A song-cache recording: path, the stream's size, and whether it's still whole (no seek).
+type Recording = (std::path::PathBuf, Option<u64>, bool);
+
+/// Note what a stream about to load means for the cache: on disk or not, recording or not.
+fn track(s: &Stream, start: Option<f64>, recs: &mut HashMap<String, Recording>, local: &mut HashSet<String>) {
+    if s.local {
+        local.insert(s.video_id.clone());
+    } else {
+        local.remove(&s.video_id);
+    }
+    if let Some((old, _, _)) = recs.remove(&s.video_id) {
+        let _ = std::fs::remove_file(old);
+    }
+    if let (Some(p), None) = (&s.record_to, start) {
+        recs.insert(s.video_id.clone(), (p.clone(), s.content_length, true));
+    }
 }
 
 fn run(
@@ -158,6 +185,9 @@ fn run(
     // Whether audio is moving, so the loop knows to wake each second for the data counter.
     let mut paused = false;
     let mut idle = true;
+    // Song-cache recordings by video id: path, expected size, and whether it's still whole.
+    let mut recordings: HashMap<String, Recording> = HashMap::new();
+    let mut local: HashSet<String> = HashSet::new();
 
     loop {
         // Commands first, so a click is acted on within one poll interval.
@@ -166,12 +196,14 @@ fn run(
                 Ok(cmd) => {
                     let res = match cmd {
                         Command::Play(s) => {
+                            track(&s, None, &mut recordings, &mut local);
                             ids = vec![s.video_id.clone()];
                             current = Some(s.video_id.clone());
                             let _ = mpv.set_property("pause", false);
                             load(&mpv, &s, "replace", None)
                         }
                         Command::Reload(s, at) => {
+                            track(&s, Some(at), &mut recordings, &mut local);
                             ids = vec![s.video_id.clone()];
                             current = Some(s.video_id.clone());
                             load(&mpv, &s, "replace", Some(at))
@@ -182,6 +214,7 @@ fn run(
                             ids.retain(|id| Some(id) == current.as_ref());
                             ids.truncate(1);
                             ids.push(s.video_id.clone());
+                            track(&s, None, &mut recordings, &mut local);
                             load(&mpv, &s, "append", None)
                         }
                         Command::SetPaused(p) => mpv
@@ -191,9 +224,14 @@ fn run(
                             let p: bool = mpv.get_property("pause").unwrap_or(false);
                             mpv.set_property("pause", !p).map_err(|e| anyhow!("{e}"))
                         }
-                        Command::Seek(secs) => mpv
-                            .command("seek", &[&format!("{secs}"), "absolute"])
-                            .map_err(|e| anyhow!("{e}")),
+                        Command::Seek(secs) => {
+                            if let Some(r) = current.as_ref().and_then(|id| recordings.get_mut(id)) {
+                                r.2 = false;
+                            }
+                            mpv
+                                .command("seek", &[&format!("{secs}"), "absolute"])
+                                .map_err(|e| anyhow!("{e}"))
+                        }
                         Command::Volume(v) => mpv
                             .set_property("volume", v.clamp(0.0, 100.0))
                             .map_err(|e| anyhow!("{e}")),
@@ -218,7 +256,12 @@ fn run(
         let since = speed_at.elapsed().as_secs_f64();
         if since >= 1.0 {
             speed_at = std::time::Instant::now();
-            let speed = mpv.get_property::<i64>("cache-speed").unwrap_or(0).max(0) as f64;
+            // A cached song reads from disk: no data used, and no speed worth learning from.
+            let on_disk = current.as_ref().is_some_and(|id| local.contains(id));
+            let speed = match on_disk {
+                true => 0.0,
+                false => mpv.get_property::<i64>("cache-speed").unwrap_or(0).max(0) as f64,
+            };
             downloaded += speed * since;
             if downloaded >= 1.0 {
                 let bytes = downloaded as u64;
@@ -275,6 +318,15 @@ fn run(
                 last_pos_sent = -1.0;
             }
             Ok(Event::EndFile(reason)) => {
+                let ended = current.as_ref().and_then(|id| recordings.remove(id));
+                if let Some((path, expected, whole)) = ended {
+                    // 0 is mpv's MPV_END_FILE_REASON_EOF: played to the end.
+                    if whole && reason == 0 {
+                        let _ = events.send(PlayerEvent::Recorded { path, expected });
+                    } else {
+                        let _ = std::fs::remove_file(path);
+                    }
+                }
                 // mpv reports errors via the end-file reason; a natural EOF advances by itself.
                 let reason = format!("{reason:?}");
                 if reason.to_lowercase().contains("error") {

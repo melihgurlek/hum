@@ -89,6 +89,7 @@ struct Inner {
     /// The runtime `start` ran in. Callers may be on threads without one (sync Tauri commands).
     rt: tokio::runtime::Handle,
     library: Option<Library>,
+    songs: std::sync::RwLock<Option<Arc<crate::cache::SongCache>>>,
 }
 
 /// What Auto quality has learned about the connection this session.
@@ -196,12 +197,22 @@ impl Engine {
             updates,
             rt: tokio::runtime::Handle::current(),
             library,
+            songs: Default::default(),
         }));
         let e = engine.clone();
         engine.0.rt.spawn(async move { e.player_events(prx).await });
         let e = engine.clone();
         engine.0.rt.spawn(async move { e.0.source.warm().await });
         Ok(engine)
+    }
+
+    /// Keep fully played songs on disk and play them from there.
+    pub fn set_song_cache(&self, cache: crate::cache::SongCache) {
+        *self.0.songs.write().unwrap() = Some(Arc::new(cache));
+    }
+
+    pub fn song_cache(&self) -> Option<Arc<crate::cache::SongCache>> {
+        self.0.songs.read().unwrap().clone()
     }
 
     pub fn library(&self) -> Option<&Library> {
@@ -304,8 +315,19 @@ impl Engine {
         self.0.state.lock().unwrap().autoplay = on;
     }
 
-    /// A cached, unexpired stream URL, or resolve one now.
+    /// The song from disk, a cached unexpired stream URL, or one resolved now. A network
+    /// stream records itself for the song cache.
     async fn stream(&self, id: &str) -> Result<(Stream, bool)> {
+        let songs = self.song_cache();
+        if let Some(s) = songs.as_ref().and_then(|c| c.lookup(id, self.effective_quality())) {
+            return Ok((s, true));
+        }
+        let (mut s, cached) = self.url(id).await?;
+        s.record_to = songs.and_then(|c| c.record_path(&s));
+        Ok((s, cached))
+    }
+
+    async fn url(&self, id: &str) -> Result<(Stream, bool)> {
         if let Some(s) = self.0.streams.lock().unwrap().get(id) {
             if s.expires_at - 120 > now_unix() {
                 return Ok((s.clone(), true));
@@ -521,6 +543,20 @@ impl Engine {
                     let pending = self.0.data_pending.fetch_add(bytes, Ordering::Relaxed) + bytes;
                     if pending >= DATA_FLUSH_BYTES {
                         self.flush_data(DATA_FLUSH_BYTES);
+                    }
+                }
+                PlayerEvent::Recorded { path, expected } => {
+                    if let Some(c) = self.song_cache() {
+                        self.0.rt.spawn(async move {
+                            // mpv writes the file's index as it closes it; give it a moment.
+                            tokio::time::sleep(Duration::from_secs(2)).await;
+                            match tokio::task::spawn_blocking(move || c.keep(&path, expected)).await {
+                                Ok(Ok(true)) => log::info!("song cache: kept a song"),
+                                Ok(Ok(false)) => {}
+                                Ok(Err(e)) => log::warn!("song cache: {e:#}"),
+                                Err(e) => log::warn!("song cache: {e}"),
+                            }
+                        });
                     }
                 }
                 PlayerEvent::Idle => {

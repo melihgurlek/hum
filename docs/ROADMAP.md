@@ -6,6 +6,7 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #33 | Song cache: a song played to the end without a seek is kept on disk (mpv records it as it plays, no extra data), up to 1 GB, oldest first. Replays start in ~20 ms instead of ~900 ms and use no data. Settings shows saved songs, with Clear |
 | #32 | Settings → Playback: "Radio from my YouTube Music account" (off by default, shown when signed in). Measured: it replaces about half of each radio (13–30 of 50 shared with the anonymous one, which repeats itself 48–50 of 50) |
 | #29 | Google sign-in (Settings), and likes and playlists synced both ways with the YouTube Music account: changes go up at once, the account's come down at startup and when Liked songs or a playlist opens. Search and playback stay anonymous |
 | #28 | Every play button resolves its song while the pointer is on it, not just track rows: Home tiles and buttons, Play on album, artist and playlist pages, Up next, recent searches. A hovered click skips the 100–350 ms resolve (click→sound ~750 ms cold → ~400 ms) |
@@ -43,7 +44,7 @@ Updated in every PR. Newest done items at the top of each section.
   on `feat/play-history`: YouTube accepts the pings, but it couldn't be confirmed they count,
   since the test account's history has been paused since 2026-02. Paused history also means
   YouTube ignores listening for recommendations, so it only matters to people who keep it on.
-- Song cache on disk (replays use no data), offline mode for cached songs.
+- Offline mode: play saved songs with no connection (the cache is there since #33).
 - Crossfade, equalizer, skip silence, sleep timer.
 - Discord status, Last.fm scrobbling.
 - Mini player, tray menu.

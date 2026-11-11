@@ -329,6 +329,33 @@ fn set_account_radio(app: State<'_, App>, on: bool) {
     app.apply_radio();
 }
 
+#[derive(serde::Serialize)]
+struct SavedSongs {
+    count: usize,
+    bytes: u64,
+}
+
+#[tauri::command]
+async fn saved_songs(app: State<'_, App>) -> Res<SavedSongs> {
+    let cache = app.engine.song_cache();
+    let (count, bytes) = tokio::task::spawn_blocking(move || cache.map(|c| c.usage()).unwrap_or((0, 0)))
+        .await
+        .map_err(err)?;
+    Ok(SavedSongs { count, bytes })
+}
+
+#[tauri::command]
+async fn clear_saved_songs(app: State<'_, App>) -> Res<()> {
+    let cache = app.engine.song_cache();
+    tokio::task::spawn_blocking(move || {
+        if let Some(c) = cache {
+            c.clear();
+        }
+    })
+    .await
+    .map_err(err)
+}
+
 #[tauri::command]
 fn set_autoplay(app: State<'_, App>, on: bool) {
     app.engine.set_autoplay(on);
@@ -544,6 +571,8 @@ pub fn run() {
             };
             // Engine::start spawns tokio tasks, so it must run inside the runtime.
             let engine = tauri::async_runtime::block_on(async { Engine::start(source, library) })?;
+            // About 250 songs at High.
+            engine.set_song_cache(hum_core::cache::SongCache::new(app.path().app_cache_dir()?.join("songs"), 1 << 30));
             let mut updates = engine.subscribe();
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -608,6 +637,8 @@ pub fn run() {
             set_quality,
             get_quality,
             set_autoplay,
+            saved_songs,
+            clear_saved_songs,
             set_account_radio,
             queue,
             cover_palette,

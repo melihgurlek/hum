@@ -183,6 +183,11 @@ pub struct Stream {
     pub content_length: Option<u64>,
     /// Unix seconds after which the URL stops working.
     pub expires_at: i64,
+    /// Where mpv records this play for the song cache.
+    #[serde(skip)]
+    pub record_to: Option<PathBuf>,
+    /// A copy from the song cache: no network.
+    pub local: bool,
 }
 
 pub struct Source {
@@ -379,6 +384,8 @@ impl Source {
             codec: fmt.codec,
             user_agent: fmt.user_agent.to_string(),
             content_length: fmt.content_length,
+            record_to: None,
+            local: false,
         };
         log::debug!(
             "resolved {video_id} itag {} {}k in {:?}",

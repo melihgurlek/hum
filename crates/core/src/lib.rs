@@ -2,6 +2,7 @@
 //! same crate can back the desktop app and, later, the Android port.
 
 pub mod account;
+pub mod cache;
 pub mod color;
 pub mod engine;
 pub mod library;
