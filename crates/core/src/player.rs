@@ -18,6 +18,8 @@ use crate::source::Stream;
 pub enum Command {
     /// Replace everything and play this stream now.
     Play(Stream),
+    /// Replace the current track's stream with another one from `secs` (a quality change).
+    Reload(Stream, f64),
     /// Queue this stream to play after the current one (gapless).
     SetNext(Stream),
     SetPaused(bool),
@@ -36,6 +38,10 @@ pub enum PlayerEvent {
     Position(f64),
     Duration(f64),
     Paused(bool),
+    /// Playback stopped to wait for the network, partway through a track.
+    Stalled,
+    /// Bytes downloaded since the last report.
+    Downloaded(u64),
     /// The last item in mpv's playlist ended and nothing follows.
     Idle,
     Error { video_id: Option<String>, message: String },
@@ -97,8 +103,11 @@ fn escaped(v: &str) -> String {
     format!("%{}%{}", v.len(), v)
 }
 
-fn load(mpv: &Mpv, stream: &Stream, mode: &str) -> Result<()> {
-    let opts = format!("user-agent={}", escaped(&stream.user_agent));
+fn load(mpv: &Mpv, stream: &Stream, mode: &str, start: Option<f64>) -> Result<()> {
+    let mut opts = format!("user-agent={}", escaped(&stream.user_agent));
+    if let Some(t) = start {
+        opts.push_str(&format!(",start={t:.1}"));
+    }
     // mpv >= 0.38: loadfile <url> <flags> <index> <options>
     mpv.command("loadfile", &[&stream.url, mode, "-1", &opts])
         .map_err(|e| anyhow!("loadfile: {e}"))
@@ -123,12 +132,16 @@ fn run(
     let _ = ev.observe_property("pause", Format::Flag, 3);
     let _ = ev.observe_property("playlist-pos", Format::Int64, 4);
     let _ = ev.observe_property("idle-active", Format::Flag, 5);
+    let _ = ev.observe_property("paused-for-cache", Format::Flag, 6);
     let _ = ready.send(Ok(()));
 
     // Video ids in mpv playlist order. `playlist-clear` keeps only the current entry.
     let mut ids: Vec<String> = Vec::new();
     let mut current: Option<String> = None;
     let mut last_pos_sent = -1.0f64;
+    // Data used: mpv's `cache-speed` (bytes per second arriving now), summed once a second.
+    let mut speed_at = std::time::Instant::now();
+    let mut downloaded = 0f64;
 
     loop {
         // Commands first, so a click is acted on within one poll interval.
@@ -140,7 +153,12 @@ fn run(
                             ids = vec![s.video_id.clone()];
                             current = Some(s.video_id.clone());
                             let _ = mpv.set_property("pause", false);
-                            load(&mpv, &s, "replace")
+                            load(&mpv, &s, "replace", None)
+                        }
+                        Command::Reload(s, at) => {
+                            ids = vec![s.video_id.clone()];
+                            current = Some(s.video_id.clone());
+                            load(&mpv, &s, "replace", Some(at))
                         }
                         Command::SetNext(s) => {
                             // Drop anything queued after the current entry, then append.
@@ -148,7 +166,7 @@ fn run(
                             ids.retain(|id| Some(id) == current.as_ref());
                             ids.truncate(1);
                             ids.push(s.video_id.clone());
-                            load(&mpv, &s, "append")
+                            load(&mpv, &s, "append", None)
                         }
                         Command::SetPaused(p) => mpv
                             .set_property("pause", p)
@@ -181,6 +199,17 @@ fn run(
             }
         }
 
+        let since = speed_at.elapsed().as_secs_f64();
+        if since >= 1.0 {
+            speed_at = std::time::Instant::now();
+            let speed: i64 = mpv.get_property("cache-speed").unwrap_or(0);
+            downloaded += speed.max(0) as f64 * since;
+            if downloaded >= 1.0 {
+                let _ = events.send(PlayerEvent::Downloaded(downloaded as u64));
+                downloaded = downloaded.fract();
+            }
+        }
+
         // Then events, waiting a short while so commands stay responsive.
         let Some(event) = ev.wait_event(0.02) else {
             continue;
@@ -199,6 +228,10 @@ fn run(
                 }
                 ("pause", PropertyData::Flag(p)) => {
                     let _ = events.send(PlayerEvent::Paused(p));
+                }
+                // A stall at the very start is just the first buffering, not a slow connection.
+                ("paused-for-cache", PropertyData::Flag(true)) if last_pos_sent >= 1.0 => {
+                    let _ = events.send(PlayerEvent::Stalled);
                 }
                 ("idle-active", PropertyData::Flag(true)) if !ids.is_empty() => {
                     let _ = events.send(PlayerEvent::Idle);

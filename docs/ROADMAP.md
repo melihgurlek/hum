@@ -6,6 +6,8 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #14 | Auto quality reacts: after two stalls in two minutes it switches to Data saver (~50 kbps), reloading the current song at the same spot; back to High after 15 calm minutes. "Data used" (this month, in all) in Settings. Removed "Normal", which was the same stream as High |
+| #13 | Play icon right on the first song after startup; search field text centered |
 | #12 | Artist and album pages: top songs, albums, singles, the artist's own Radio (YouTube Music's Mix); artist names and albums are links everywhere (rows, player bar, Now Playing, search); Back button, Alt+Left and mouse back |
 | #10 | Playlists: create from the sidebar or the add menu, inline rename, drag to reorder, remove, delete; add songs with the hover +, right-click, or from Now Playing |
 | #8 | Now Playing background picks the cover's real color, not tinted black (Relapse was green) |
@@ -20,9 +22,8 @@ Updated in every PR. Newest done items at the top of each section.
 
 ## Next
 
-1. **Auto quality that reacts**: step down when mpv stalls for cache; "data used" counter in Settings.
-2. **Windows build** in GitHub Actions (bundle libmpv DLL), smoke-tested.
-3. **Google sign-in** (webview cookie login) to sync likes and playlists with MetroList.
+1. **Windows build** in GitHub Actions (bundle libmpv DLL), smoke-tested.
+2. **Google sign-in** (webview cookie login) to sync likes and playlists with MetroList.
 
 ## Later
 
@@ -37,6 +38,8 @@ Updated in every PR. Newest done items at the top of each section.
 - Artist top songs have no durations until played (YouTube Music doesn't list them there).
 - Only a song's first artist links to a page; YouTube Music's song lists carry one artist id.
 - Home recommendations start empty; they fill in as history builds up.
-- Auto quality currently always picks the best stream (no stepping down yet).
+- Skipping a song early still costs up to ~1 MB: mpv buffers about a minute ahead.
+- Only two stream sizes are used (~130 and ~50 kbps AAC); YouTube's ~65 kbps Opus stream would
+  need ytmusic-rs to stop preferring AAC.
 - The dev app needs `~/.local/share/com.melihgurlek.hum/WebKitCache` cleared if the window
   ever shows unstyled after switching branches.

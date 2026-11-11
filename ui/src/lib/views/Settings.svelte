@@ -1,6 +1,20 @@
 <script lang="ts">
-  import type { Quality } from '../api'
+  import { api, type Quality } from '../api'
   import { player, setQuality, setTheme, setAutoplay, ui, type ThemePref } from '../state.svelte'
+
+  let used = $state<{ month: number; total: number } | null>(null)
+  $effect(() => {
+    api.dataUsed().then((d) => {
+      used = d
+      player.autoLow = d.auto_low
+    }).catch(() => {})
+  })
+  function size(bytes: number): string {
+    if (bytes < 1e6) return `${Math.round(bytes / 1e3)} KB`
+    if (bytes < 1e9) return `${Math.round(bytes / 1e6)} MB`
+    return `${(bytes / 1e9).toFixed(1)} GB`
+  }
+  const month = new Date().toLocaleDateString('en-GB', { month: 'long' })
 
   const themes: { v: ThemePref; label: string }[] = [
     { v: 'system', label: 'Match my system' },
@@ -8,10 +22,9 @@
     { v: 'light', label: 'Light' },
   ]
   const qualities: { v: Quality; label: string; detail: string }[] = [
-    { v: 'auto', label: 'Auto', detail: 'The best quality your connection handles' },
+    { v: 'auto', label: 'Auto', detail: 'High, dropping to Data saver when your connection can’t keep up' },
+    { v: 'high', label: 'High', detail: 'About 130 kbps, roughly 1 MB per minute' },
     { v: 'data_saver', label: 'Data saver', detail: 'About 50 kbps, roughly 0.4 MB per minute' },
-    { v: 'normal', label: 'Normal', detail: 'About 130 kbps, roughly 1 MB per minute' },
-    { v: 'high', label: 'High', detail: 'The best stream available' },
   ]
 </script>
 
@@ -24,12 +37,28 @@
       {#each qualities as q}
         <label class="opt" class:sel={ui.quality === q.v}>
           <input type="radio" name="quality" checked={ui.quality === q.v} onchange={() => setQuality(q.v)} />
-          <span><span class="ol">{q.label}</span><span class="od">{q.detail}</span></span>
+          <span>
+            <span class="ol">{q.label}{#if q.v === 'auto' && ui.quality === 'auto' && player.autoLow}<span class="pill">On Data saver now</span>{/if}</span>
+            <span class="od">{q.v === 'auto' && ui.quality === 'auto' && player.autoLow
+              ? 'Your connection was too slow for High. Auto tries High again after 15 calm minutes.'
+              : q.detail}</span>
+          </span>
         </label>
       {/each}
     </div>
     <p class="note">Takes effect from the next song.</p>
   </section>
+
+  {#if used}
+    <section>
+      <h2>Data used</h2>
+      <div class="usage">
+        <div><span class="num">{size(used.month)}</span><span class="od">in {month}</span></div>
+        <div><span class="num">{size(used.total)}</span><span class="od">in all</span></div>
+      </div>
+      <p class="note">Music streamed by hum. Cover art downloads once and is kept.</p>
+    </section>
+  {/if}
 
   <section>
     <h2>Appearance</h2>
@@ -112,5 +141,33 @@
   }
   .note {
     margin: 10px 0 0;
+  }
+  .pill {
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--raised-2);
+    font-size: 12px;
+    font-weight: 700;
+    vertical-align: 1px;
+  }
+  .usage {
+    display: flex;
+    gap: 12px;
+  }
+  .usage > div {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  .num {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
   }
 </style>

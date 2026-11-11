@@ -40,6 +40,7 @@ export type Update =
   | { type: 'paused'; paused: boolean }
   | { type: 'timing'; video_id: string; ms: number; cached: boolean }
   | { type: 'error'; message: string }
+  | { type: 'auto_quality'; low: boolean }
 
 export const api = {
   search: (query: string) => invoke<Track[]>('search', { query }),
@@ -77,6 +78,7 @@ export const api = {
   addToPlaylist: (id: number, tracks: Track[]) => invoke<number>('add_to_playlist', { id, tracks }),
   removeFromPlaylist: (id: number, index: number) => invoke<void>('remove_from_playlist', { id, index }),
   moveInPlaylist: (id: number, from: number, to: number) => invoke<void>('move_in_playlist', { id, from, to }),
+  dataUsed: () => invoke<{ month: number; total: number; auto_low: boolean }>('data_used'),
   coverPalette: (url: string) => invoke<Palette>('cover_palette', { url }),
 }
 

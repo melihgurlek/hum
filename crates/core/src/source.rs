@@ -17,19 +17,20 @@ use ytmusic::YtMusic;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, serde::Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Quality {
-    /// The best stream the connection handles. Currently the same as High; stepping down when
-    /// mpv starts stalling for cache is the next step.
+    /// High, stepping down to DataSaver when playback stalls (see the engine).
     #[default]
     Auto,
-    /// ~50 kbps. About 0.4 MB per minute.
+    /// ~50 kbps AAC (itag 139). About 0.4 MB per minute.
     DataSaver,
-    /// ~130 kbps.
+    /// Kept so old settings still load. YouTube's AAC streams come in two sizes only, so this
+    /// was always the same stream as High; it plays as High.
     Normal,
-    /// The best stream available.
+    /// The best stream available: ~130 kbps AAC (itag 140), about 1 MB per minute.
     High,
 }
 
-/// Bits-per-second ceiling for data saver.
+/// Bits-per-second ceiling for data saver. The library prefers AAC, whose small stream is
+/// ~50 kbps and large one ~130 kbps.
 const SAVER_CEILING: u32 = 80_000;
 
 #[derive(Clone, Debug, Serialize, serde::Deserialize)]
