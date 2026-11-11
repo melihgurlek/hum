@@ -394,17 +394,34 @@ export function openHistory() {
 
 // ---- recent searches ------------------------------------------------------
 
-/** Searches you acted on (played or opened a result), newest first. */
-export const searches = $state<{ list: string[] }>({ list: load<string[]>('hum.searches', []) })
-export function rememberSearch(q: string) {
-  q = q.trim()
-  if (!q) return
-  searches.list = [q, ...searches.list.filter((s) => s.toLowerCase() !== q.toLowerCase())].slice(0, 10)
+/** What you played or opened from search results, newest first. */
+export type Recent =
+  | { kind: 'song'; track: Track }
+  | { kind: 'artist'; id: string; name: string; thumb: string | null }
+  | { kind: 'album'; id: string; title: string; detail: string | null; thumb: string | null }
+export const recentKey = (r: Recent) => (r.kind === 'song' ? 'song:' + r.track.id : `${r.kind}:${r.id}`)
+
+// Entries saved as plain query strings by an earlier version are dropped.
+export const searches = $state<{ list: Recent[] }>({
+  list: load<unknown[]>('hum.searches', []).filter((r): r is Recent => typeof r === 'object' && r !== null),
+})
+export function rememberPick(r: Recent) {
+  const key = recentKey(r)
+  searches.list = [r, ...searches.list.filter((x) => recentKey(x) !== key)].slice(0, 12)
   save('hum.searches', searches.list)
 }
-export function forgetSearch(q: string | null) {
-  searches.list = q == null ? [] : searches.list.filter((s) => s !== q)
+export function forgetPick(key: string | null) {
+  searches.list = key == null ? [] : searches.list.filter((x) => recentKey(x) !== key)
   save('hum.searches', searches.list)
+}
+
+export async function playArtistTop(id: string) {
+  try {
+    const a = await loadArtist(id)
+    if (a.top.length) playList(a.top, 0)
+  } catch (e) {
+    showToast(String(e))
+  }
 }
 
 export async function newPlaylistFromSidebar() {

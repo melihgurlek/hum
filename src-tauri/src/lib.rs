@@ -23,8 +23,8 @@ fn err(e: impl std::fmt::Display) -> String {
 }
 
 #[tauri::command]
-async fn search(app: State<'_, App>, query: String) -> Res<Vec<Track>> {
-    app.engine.source().search_tracks(&query).await.map_err(err)
+async fn search(app: State<'_, App>, query: String) -> Res<hum_core::source::SearchResults> {
+    app.engine.source().search(&query).await.map_err(err)
 }
 
 /// A song's radio, without playing it (Home's quick picks).
