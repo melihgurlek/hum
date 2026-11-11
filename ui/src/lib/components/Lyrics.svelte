@@ -123,7 +123,7 @@
     color: var(--np-muted);
     opacity: 0.55;
     padding: 6px 8px;
-    border-radius: 10px;
+    border-radius: var(--r-md);
     transition:
       opacity 0.25s,
       color 0.25s;

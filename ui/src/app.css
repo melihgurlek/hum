@@ -1,5 +1,11 @@
 @import '@fontsource-variable/plus-jakarta-sans';
 
+:root {
+  /* Three corner sizes: thumbnails and small controls, rows and covers, cards and panels. */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+}
 :root,
 :root[data-theme='dark'] {
   --bg: #121214;
@@ -76,7 +82,7 @@ a {
 :focus-visible {
   outline: 2px solid var(--accent, var(--accent-default));
   outline-offset: 2px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
 }
 h1,
 h2,
