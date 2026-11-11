@@ -88,8 +88,8 @@
             <div class="muted">{artistLine(top)}{top.album ? ` — ${top.album}` : ''}</div>
           </div>
           <div class="actions">
-            <button class="primary" onclick={() => playList(results, 0)}><Icon name="play" size={16} />Play</button>
-            <button class="secondary" onclick={() => playRadio(top)}><Icon name="radio" size={16} />Radio</button>
+            <button class="primary" onclick={() => playList(results, 0)}><Icon name="play" size={16} /><span class="trim">Play</span></button>
+            <button class="secondary" onclick={() => playRadio(top)}><Icon name="radio" size={16} /><span class="trim">Radio</span></button>
           </div>
         </div>
       </section>

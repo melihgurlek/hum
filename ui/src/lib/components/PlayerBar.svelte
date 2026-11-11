@@ -57,7 +57,7 @@
   <div class="right">
     {#if ui.quality === 'data_saver'}
       <button class="pill" onclick={() => setQuality('auto')} title="Streaming at about 50 kbps. Click to switch back to Auto.">
-        <Icon name="leaf" size={14} /> Data saver
+        <Icon name="leaf" size={14} /><span class="trim">Data saver</span>
       </button>
     {/if}
     <button class="icon-btn" aria-label="Up next" onclick={() => (ui.nowPlayingOpen = true)}>

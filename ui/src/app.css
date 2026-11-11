@@ -116,3 +116,9 @@ h3 {
   scrollbar-width: thin;
   scrollbar-color: var(--raised-2) transparent;
 }
+
+/* Center single-line labels on their capital letters, not the font's line box. Plus Jakarta
+   Sans has more room above its glyphs than below, which left labels ~1.5 px low in buttons. */
+.trim {
+  text-box: trim-both cap alphabetic;
+}
