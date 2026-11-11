@@ -28,7 +28,8 @@ Both, from one token set, following the OS (`prefers-color-scheme`), overridable
 | `--muted` | `#9a9aa4` | `#5f5f68` |
 | `--accent` | from current cover | from current cover |
 
-Default accent when nothing is playing: dark `#ff8a4c`, light `#2f5bea`.
+Default accent when nothing is playing is neutral (dark `#ededef`, light `#1d1d21`): hum has no
+color of its own, all color comes from the current cover.
 
 ## Cover-derived color
 
