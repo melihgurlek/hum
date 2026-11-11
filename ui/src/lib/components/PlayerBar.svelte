@@ -8,7 +8,7 @@
   let volume = $state(100)
 </script>
 
-<footer class="bar" aria-label="Player">
+<footer class="bar" class:tinted={ui.nowPlayingOpen} aria-label="Player">
   <div class="left">
     {#if player.current}
       <div class="np">
@@ -90,6 +90,18 @@
     padding: 10px 20px;
     background: var(--bar);
     border-top: 1px solid var(--line);
+    transition: background-color 0.4s, border-color 0.4s;
+  }
+  /* Under Now Playing the bar is part of that screen: it takes the cover's deep shade (the
+     background's outer color) and the screen's text colors. The sidebar stays neutral. */
+  .bar.tinted {
+    --text: var(--np-text);
+    --muted: var(--np-muted);
+    --line: color-mix(in srgb, var(--np-text) 14%, transparent);
+    --raised: color-mix(in srgb, var(--np-text) 10%, transparent);
+    --raised-2: color-mix(in srgb, var(--np-text) 16%, transparent);
+    color: var(--text);
+    background: var(--np-bg-2, var(--np-bg-2-default));
   }
   .left,
   .right {
