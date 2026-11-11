@@ -1,6 +1,18 @@
 <script lang="ts">
-  import { api, img, onAccount, type Profile, type Quality } from '../api'
-  import { player, setQuality, setTheme, setAutoplay, showToast, ui, type ThemePref } from '../state.svelte'
+  import { api, img, onAccount, type AccountPlaylist, type Profile, type Quality } from '../api'
+  import { player, refreshPlaylists, setQuality, setTheme, setAutoplay, showToast, ui, type ThemePref } from '../state.svelte'
+
+  let lists = $state<AccountPlaylist[] | null>(null)
+  $effect(() => {
+    void ui.synced
+    if (profile) api.accountPlaylists().then((l) => (lists = l)).catch(() => (lists = null))
+    else lists = null
+  })
+  async function setShown(p: AccountPlaylist, shown: boolean) {
+    p.shown = shown
+    await api.setPlaylistShown(p.id, p.name, shown).catch((e) => showToast(String(e)))
+    refreshPlaylists()
+  }
 
   let profile = $state<Profile | null | undefined>(undefined)
   $effect(() => {
@@ -47,6 +59,17 @@
           <span class="who"><span class="ol ellipsis">{profile.name}</span>{#if profile.email}<span class="od ellipsis">{profile.email}</span>{/if}</span>
           <button class="quiet" onclick={() => api.signOut()}>Sign out</button>
         </div>
+        {#if lists?.length}
+          <h3>Your playlists on YouTube Music</h3>
+          <div class="options">
+            {#each lists as p (p.id)}
+              <label class="opt">
+                <input type="checkbox" checked={p.shown} onchange={(e) => setShown(p, e.currentTarget.checked)} />
+                <span><span class="ol">{p.name}</span><span class="od">{p.count != null ? `${p.count} ${p.count === 1 ? 'song' : 'songs'}, ` : ''}{p.shown ? 'shown in hum' : 'hidden in hum, kept on YouTube Music'}</span></span>
+              </label>
+            {/each}
+          </div>
+        {/if}
       {:else}
         <div class="account">
           <span class="who"><span class="ol">Not signed in</span><span class="od">Sign in to bring your liked songs and playlists from YouTube Music</span></span>
@@ -166,6 +189,12 @@
     font-size: 12px;
     font-weight: 700;
     vertical-align: 1px;
+  }
+  h3 {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--muted);
+    margin: 18px 0 8px;
   }
   .account {
     display: flex;

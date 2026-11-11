@@ -127,6 +127,24 @@ fn sync_playlist(app: State<'_, App>, id: i64) {
 }
 
 #[tauri::command]
+async fn hide_playlist(app: State<'_, App>, id: i64) -> Res<()> {
+    synced(&app, move |s| s.hide_playlist(id)).await
+}
+
+#[tauri::command]
+async fn account_playlists(app: State<'_, App>) -> Res<Vec<hum_core::sync::AccountPlaylist>> {
+    match &app.sync {
+        Some(s) => s.account_playlists().await.map_err(err),
+        None => Ok(Vec::new()),
+    }
+}
+
+#[tauri::command]
+async fn set_playlist_shown(app: State<'_, App>, id: String, name: String, shown: bool) -> Res<()> {
+    synced(&app, move |s| s.set_playlist_shown(&id, &name, shown)).await
+}
+
+#[tauri::command]
 async fn set_liked(app: State<'_, App>, track: Track, liked: bool) -> Res<()> {
     synced(&app, move |s| s.set_liked(&track, liked)).await
 }
@@ -592,6 +610,9 @@ pub fn run() {
             move_in_playlist,
             account,
             sync_likes,
+            hide_playlist,
+            account_playlists,
+            set_playlist_shown,
             sync_playlist,
             sign_in,
             sign_out,

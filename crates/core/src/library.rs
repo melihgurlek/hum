@@ -182,6 +182,11 @@ impl Library {
                  PRAGMA user_version = 1;",
             )?;
         }
+        // v2: account playlists kept on the account but not shown in hum.
+        db.execute_batch(
+            "CREATE TABLE IF NOT EXISTS hidden_playlists (remote_id TEXT PRIMARY KEY, name TEXT NOT NULL);
+             PRAGMA user_version = 2;",
+        )?;
         Ok(Library {
             db: Arc::new(Mutex::new(db)),
         })
@@ -596,6 +601,38 @@ impl Library {
         Ok(())
     }
 
+    /// Stop showing account playlist `remote_id` here; it stays on the account.
+    pub fn hide_playlist(&self, remote_id: &str, name: &str) -> Result<()> {
+        let mut db = self.db.lock().unwrap();
+        let tx = db.transaction()?;
+        tx.execute(
+            "INSERT OR REPLACE INTO hidden_playlists (remote_id, name) VALUES (?1, ?2)",
+            params![remote_id, name],
+        )?;
+        tx.execute(
+            "DELETE FROM playlist_tracks WHERE playlist_id IN (SELECT id FROM playlists WHERE remote_id = ?1)",
+            params![remote_id],
+        )?;
+        tx.execute("DELETE FROM playlists WHERE remote_id = ?1", params![remote_id])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn unhide_playlist(&self, remote_id: &str) -> Result<()> {
+        self.db
+            .lock()
+            .unwrap()
+            .execute("DELETE FROM hidden_playlists WHERE remote_id = ?1", params![remote_id])?;
+        Ok(())
+    }
+
+    pub fn hidden_playlists(&self) -> Result<std::collections::HashSet<String>> {
+        let db = self.db.lock().unwrap();
+        let mut st = db.prepare("SELECT remote_id FROM hidden_playlists")?;
+        let v = st.query_map([], |r| r.get(0))?.flatten().collect();
+        Ok(v)
+    }
+
     pub fn pending_playlist_deletes(&self) -> Result<Vec<String>> {
         let db = self.db.lock().unwrap();
         let mut st = db.prepare("SELECT remote_id FROM deleted_playlists")?;
@@ -886,6 +923,18 @@ mod tests {
         assert_eq!((p.name.as_str(), p.tracks.len()), ("Mix 2", 1));
         lib.delete_playlist(id).unwrap();
         assert_eq!(lib.pending_playlist_deletes().unwrap(), vec!["PL1".to_string()]);
+    }
+
+    #[test]
+    fn hiding_an_account_playlist_drops_it_here_only() {
+        let lib = Library::memory().unwrap();
+        lib.replace_playlist(None, "PL1", "Old", &[(track("a", "x"), Some("s1".into()))]).unwrap();
+        lib.hide_playlist("PL1", "Old").unwrap();
+        assert!(lib.playlists().unwrap().is_empty());
+        assert!(lib.pending_playlist_deletes().unwrap().is_empty(), "hiding must not delete on the account");
+        assert!(lib.hidden_playlists().unwrap().contains("PL1"));
+        lib.unhide_playlist("PL1").unwrap();
+        assert!(lib.hidden_playlists().unwrap().is_empty());
     }
 
     #[test]

@@ -159,6 +159,39 @@ impl Sync {
         Ok(())
     }
 
+    /// Hide a synced playlist here; it stays on the account.
+    pub fn hide_playlist(&self, id: i64) -> Result<()> {
+        if let (Some(remote), Some(p)) = (self.lib.playlist_remote(id)?, self.lib.playlist(id)?) {
+            self.lib.hide_playlist(&remote, &p.name)?;
+        }
+        Ok(())
+    }
+
+    /// The account's own playlists, and which of them show here.
+    pub async fn account_playlists(&self) -> Result<Vec<AccountPlaylist>> {
+        let Some(ytm) = self.account.client() else { return Ok(Vec::new()) };
+        let hidden = self.lib.hidden_playlists()?;
+        Ok(own(ytm.library_playlists().await?)
+            .into_iter()
+            .map(|p| AccountPlaylist {
+                shown: !hidden.contains(bare(&p.id)),
+                id: bare(&p.id).to_string(),
+                name: p.title,
+                count: p.track_count,
+            })
+            .collect())
+    }
+
+    pub fn set_playlist_shown(&self, remote_id: &str, name: &str, shown: bool) -> Result<()> {
+        if shown {
+            self.lib.unhide_playlist(remote_id)?;
+            self.send(Op::Pull);
+        } else {
+            self.lib.hide_playlist(remote_id, name)?;
+        }
+        Ok(())
+    }
+
     async fn apply(&self, ytm: &YtMusic, op: Op) -> Result<()> {
         match op {
             Op::Pull => {
@@ -242,12 +275,10 @@ impl Sync {
     }
 
     async fn apply_playlists(&self, ytm: &YtMusic) -> Result<()> {
-        let mut lists: Vec<ytmusic::Playlist> = ytm
-            .library_playlists()
-            .await
-            .context("reading playlists")?
+        let hidden = self.lib.hidden_playlists()?;
+        let mut lists: Vec<ytmusic::Playlist> = own(ytm.library_playlists().await.context("reading playlists")?)
             .into_iter()
-            .filter(|p| p.owned && !matches!(bare(&p.id), "LM" | "SE"))
+            .filter(|p| !hidden.contains(bare(&p.id)))
             .collect();
         for remote in self.lib.pending_playlist_deletes()? {
             if let Some(i) = lists.iter().position(|p| bare(&p.id) == bare(&remote)) {
@@ -318,6 +349,19 @@ impl Op {
             Op::Move(..) => ("moving a song on YouTube Music", false),
         }
     }
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct AccountPlaylist {
+    pub id: String,
+    pub name: String,
+    pub count: Option<u32>,
+    pub shown: bool,
+}
+
+/// Playlists the account made, not ones it saved or YouTube's own (Liked, Episodes).
+fn own(lists: Vec<ytmusic::Playlist>) -> Vec<ytmusic::Playlist> {
+    lists.into_iter().filter(|p| p.owned && !matches!(bare(&p.id), "LM" | "SE")).collect()
 }
 
 fn bare(id: &str) -> &str {

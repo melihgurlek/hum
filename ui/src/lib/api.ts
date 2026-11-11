@@ -89,7 +89,12 @@ export const api = {
   signOut: () => invoke<void>('sign_out'),
   syncLikes: () => invoke<void>('sync_likes'),
   syncPlaylist: (id: number) => invoke<void>('sync_playlist', { id }),
+  hidePlaylist: (id: number) => invoke<void>('hide_playlist', { id }),
+  accountPlaylists: () => invoke<AccountPlaylist[]>('account_playlists'),
+  setPlaylistShown: (id: string, name: string, shown: boolean) => invoke<void>('set_playlist_shown', { id, name, shown }),
 }
+
+export interface AccountPlaylist { id: string; name: string; count: number | null; shown: boolean }
 
 /** The account changed likes or playlists here; or a sync failed. */
 export function onSync(changed: () => void, failed: (msg: string) => void): Promise<UnlistenFn[]> {

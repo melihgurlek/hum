@@ -80,6 +80,15 @@
     go('home')
   }
 
+  async function hide() {
+    if (!pl) return
+    const name = pl.name
+    await api.hidePlaylist(pl.id)
+    await refreshPlaylists()
+    showToast(`Hid ${name}. Show it again in Settings.`)
+    go('home')
+  }
+
   async function drop(to: number) {
     const from = dragFrom
     dragFrom = dragOver = null
@@ -120,12 +129,18 @@
           </button>
           {#if confirmDelete}
             <span class="confirm">
-              Delete “{pl.name}”{pl.synced ? ' here and from YouTube Music' : ''}?
-              <button class="danger" onclick={del}><span class="trim">Delete</span></button>
+              {#if pl.synced}
+                Remove “{pl.name}”?
+                <button class="secondary" onclick={hide} title="It stays on your YouTube Music account"><span class="trim">Hide in hum</span></button>
+                <button class="danger" onclick={del}><span class="trim">Delete from YouTube Music</span></button>
+              {:else}
+                Delete “{pl.name}”?
+                <button class="danger" onclick={del}><span class="trim">Delete</span></button>
+              {/if}
               <button class="secondary" onclick={() => (confirmDelete = false)}><span class="trim">Keep</span></button>
             </span>
           {:else}
-            <button class="icon-btn" aria-label="Delete playlist" title="Delete playlist" onclick={() => (confirmDelete = true)}>
+            <button class="icon-btn" aria-label={pl.synced ? 'Remove playlist' : 'Delete playlist'} title={pl.synced ? 'Remove playlist' : 'Delete playlist'} onclick={() => (confirmDelete = true)}>
               <Icon name="trash" size={18} />
             </button>
           {/if}
