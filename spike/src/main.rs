@@ -173,8 +173,68 @@ async fn run() -> Result<()> {
     Ok(())
 }
 
+/// Full-download check: does the whole file come through, not just the first chunk?
+#[cfg(feature = "ytm")]
+async fn full() -> Result<()> {
+    use std::sync::Arc;
+    let ytm = Arc::new(ytmusic::YtMusic::anonymous());
+    for id in ["bOGTg4msji0", "12oIkuOrkMo", "u9Dg-g7t2l4"] {
+        let t = Instant::now();
+        match ytm.open_audio(id).await {
+            Ok((fmt, mut stream)) => {
+                let mut got = 0usize;
+                let mut err = None;
+                loop {
+                    match stream.chunk().await {
+                        Ok(Some(b)) => got += b.len(),
+                        Ok(None) => break,
+                        Err(e) => { err = Some(format!("{e:#}")); break; }
+                    }
+                }
+                println!("ytm {id} itag {} {}k: {got}/{:?} bytes in {} {}", fmt.itag, fmt.bitrate/1000,
+                    fmt.content_length, ms(t.elapsed()), err.unwrap_or_default());
+            }
+            Err(e) => println!("ytm {id}: open failed {e:#}"),
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "rp")]
+async fn full() -> Result<()> {
+    use rustypipe::client::{ClientType, RustyPipe};
+    let rp = RustyPipe::new();
+    let http = reqwest::Client::new();
+    for ct in [ClientType::Ios, ClientType::Tv, ClientType::Android, ClientType::Desktop, ClientType::DesktopMusic, ClientType::Mobile] {
+        let id = "bOGTg4msji0";
+        let t = Instant::now();
+        let p = match rp.query().player_from_client(id, ct).await {
+            Ok(p) => p,
+            Err(e) => { println!("rp {ct:?}: player failed: {e}"); continue; }
+        };
+        let Some(s) = p.audio_streams.iter().max_by_key(|s| s.bitrate) else { println!("rp {ct:?}: no audio"); continue; };
+        let (mut start, mut ok, mut bad) = (0u64, 0, 0);
+        while start < s.size {
+            let end = (start + 512 * 1024 - 1).min(s.size - 1);
+            let st = http.get(&s.url).header("Range", format!("bytes={start}-{end}")).send().await?.status();
+            if st.is_success() { ok += 1 } else { bad += 1; if bad > 2 { break; } }
+            start = end + 1;
+        }
+        println!("rp {ct:?} itag {}: chunks ok {ok} failed {bad} in {}", s.itag, ms(t.elapsed()));
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("off")).init();
+    if std::env::var("FULL").is_ok() { return full().await; }
+    #[cfg(feature = "ytm")]
+    if std::env::var("URL").is_ok() {
+        let ytm = ytmusic::YtMusic::anonymous();
+        let f = ytm.best_audio("bOGTg4msji0").await?;
+        println!("{}\n{}\n{:?}", f.url, f.user_agent, f.content_length);
+        return Ok(());
+    }
     run().await
 }

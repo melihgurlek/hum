@@ -1,0 +1,11 @@
+[workspace]
+resolver = "3"
+members = ["crates/core", "src-tauri"]
+exclude = ["spike"]
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[profile.dev.package."*"]
+opt-level = 2
