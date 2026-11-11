@@ -1,6 +1,13 @@
 <script lang="ts">
-  import { api, type Quality } from '../api'
-  import { player, setQuality, setTheme, setAutoplay, ui, type ThemePref } from '../state.svelte'
+  import { api, img, onAccount, type Profile, type Quality } from '../api'
+  import { player, setQuality, setTheme, setAutoplay, showToast, ui, type ThemePref } from '../state.svelte'
+
+  let profile = $state<Profile | null | undefined>(undefined)
+  $effect(() => {
+    api.account().then((p) => (profile = p)).catch(() => (profile = null))
+    const off = onAccount((p) => (profile = p), (msg) => showToast(`Sign-in failed: ${msg}`))
+    return () => void off.then((fns) => fns.forEach((f) => f()))
+  })
 
   let used = $state<{ month: number; total: number } | null>(null)
   $effect(() => {
@@ -30,6 +37,24 @@
 
 <div class="page scroll">
   <h1>Settings</h1>
+
+  {#if profile !== undefined}
+    <section>
+      <h2>YouTube Music account</h2>
+      {#if profile}
+        <div class="account">
+          {#if profile.photo}<img class="avatar" src={img(profile.photo)} alt="" />{:else}<div class="avatar"></div>{/if}
+          <span class="who"><span class="ol ellipsis">{profile.name}</span>{#if profile.email}<span class="od ellipsis">{profile.email}</span>{/if}</span>
+          <button class="quiet" onclick={() => api.signOut()}>Sign out</button>
+        </div>
+      {:else}
+        <div class="account">
+          <span class="who"><span class="ol">Not signed in</span><span class="od">Sign in to bring your liked songs and playlists from YouTube Music</span></span>
+          <button class="filled" onclick={() => api.signIn().catch((e) => showToast(String(e)))}>Sign in with Google</button>
+        </div>
+      {/if}
+    </section>
+  {/if}
 
   <section>
     <h2>Sound quality</h2>
@@ -141,6 +166,47 @@
     font-size: 12px;
     font-weight: 700;
     vertical-align: 1px;
+  }
+  .account {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    border-radius: var(--r-md);
+    background: var(--surface);
+    min-height: 64px;
+  }
+  .avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--raised-2);
+    flex: none;
+  }
+  .who {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .filled,
+  .quiet {
+    flex: none;
+    height: 40px;
+    padding: 0 18px;
+    border-radius: 999px;
+    font-weight: 700;
+  }
+  .filled {
+    background: var(--accent, var(--accent-default));
+    color: var(--on-accent);
+  }
+  .quiet {
+    color: var(--muted);
+  }
+  .quiet:hover {
+    color: var(--text);
+    background: var(--raised);
   }
   .usage {
     display: flex;

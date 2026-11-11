@@ -84,6 +84,18 @@ export const api = {
   moveInPlaylist: (id: number, from: number, to: number) => invoke<void>('move_in_playlist', { id, from, to }),
   dataUsed: () => invoke<{ month: number; total: number; auto_low: boolean }>('data_used'),
   coverPalette: (url: string) => invoke<Palette>('cover_palette', { url }),
+  account: () => invoke<Profile | null>('account'),
+  signIn: () => invoke<void>('sign_in'),
+  signOut: () => invoke<void>('sign_out'),
+}
+
+export interface Profile { name: string; email: string | null; photo: string | null }
+
+export function onAccount(cb: (p: Profile | null) => void, onError: (msg: string) => void): Promise<UnlistenFn[]> {
+  return Promise.all([
+    listen<Profile | null>('hum://account', (e) => cb(e.payload)),
+    listen<string>('hum://account-error', (e) => onError(e.payload)),
+  ])
 }
 
 export function onUpdate(cb: (u: Update) => void): Promise<UnlistenFn> {
