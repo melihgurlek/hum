@@ -183,10 +183,12 @@ impl Library {
             )?;
         }
         // v2: account playlists kept on the account but not shown in hum.
-        db.execute_batch(
-            "CREATE TABLE IF NOT EXISTS hidden_playlists (remote_id TEXT PRIMARY KEY, name TEXT NOT NULL);
-             PRAGMA user_version = 2;",
-        )?;
+        if db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))? < 2 {
+            db.execute_batch(
+                "CREATE TABLE IF NOT EXISTS hidden_playlists (remote_id TEXT PRIMARY KEY, name TEXT NOT NULL);
+                 PRAGMA user_version = 2;",
+            )?;
+        }
         Ok(Library {
             db: Arc::new(Mutex::new(db)),
         })
