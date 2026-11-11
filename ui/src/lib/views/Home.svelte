@@ -48,7 +48,7 @@
     <div class="cta-row">
       <button class="cta" onclick={() => playRadio(seed)}>
         <span class="play"><Icon name="play" size={16} /></span>
-        Keep going with {seed.artists[0] ?? seed.title} radio
+        <span class="trim">Keep going with {seed.artists[0] ?? seed.title} radio</span>
       </button>
     </div>
 
@@ -84,14 +84,14 @@
     <section class="empty">
       <h2>Start with a song you like</h2>
       <p class="muted">Play anything and hum keeps going with songs like it. Your home fills up as you listen.</p>
-      <button class="cta" onclick={() => go('search')}><span class="play"><Icon name="search" size={16} /></span>Search for a song</button>
+      <button class="cta" onclick={() => go('search')}><span class="play"><Icon name="search" size={16} /></span><span class="trim">Search for a song</span></button>
     </section>
   {/if}
 
   <section>
     <h2>Moods</h2>
     <div class="chips">
-      {#each moods as m}<button class="chip" onclick={() => mood(m)}>{m}</button>{/each}
+      {#each moods as m}<button class="chip" onclick={() => mood(m)}><span class="trim">{m}</span></button>{/each}
     </div>
   </section>
 </div>

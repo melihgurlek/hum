@@ -58,8 +58,8 @@
 
       <section class="panel" aria-label="Up next and lyrics">
         <div class="tabs" role="tablist">
-          <button role="tab" aria-selected={tab === 'next'} class:sel={tab === 'next'} onclick={() => (tab = 'next')}>Up next</button>
-          <button role="tab" aria-selected={tab === 'lyrics'} class:sel={tab === 'lyrics'} onclick={() => (tab = 'lyrics')}>Lyrics</button>
+          <button role="tab" aria-selected={tab === 'next'} class:sel={tab === 'next'} onclick={() => (tab = 'next')}><span class="trim">Up next</span></button>
+          <button role="tab" aria-selected={tab === 'lyrics'} class:sel={tab === 'lyrics'} onclick={() => (tab = 'lyrics')}><span class="trim">Lyrics</span></button>
           <span class="spacer"></span>
           <label class="auto">
             Autoplay radio
