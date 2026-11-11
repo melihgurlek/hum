@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, artistLine, fmtTime, img } from '../api'
-  import { player, ui, setQuality } from '../state.svelte'
+  import { player, ui, setQuality, toggleLike } from '../state.svelte'
   import Icon from './Icon.svelte'
   import Progress from './Progress.svelte'
 
@@ -20,6 +20,10 @@
           <span class="title ellipsis">{player.current.title}</span>
           <span class="sub ellipsis">{artistLine(player.current)}</span>
         </span>
+      </button>
+      <button class="icon-btn" class:on={player.liked} aria-pressed={player.liked}
+        aria-label={player.liked ? 'Remove from Liked songs' : 'Add to Liked songs'} onclick={toggleLike}>
+        <Icon name={player.liked ? 'heart' : 'heartOutline'} size={20} />
       </button>
     {:else}
       <span class="muted">Pick a song to start</span>

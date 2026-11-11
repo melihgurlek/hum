@@ -14,6 +14,7 @@ use anyhow::Result;
 use serde::Serialize;
 use tokio::sync::{broadcast, mpsc};
 
+use crate::library::{self, Library};
 use crate::player::{Command, Player, PlayerEvent};
 use crate::source::{Quality, Source, Stream, Track};
 
@@ -45,6 +46,15 @@ struct State {
     radio_seed: Option<String>,
     position: f64,
     retried: Option<String>,
+    /// The play in progress, recorded to the library when the track changes.
+    playing: Option<PlayRecord>,
+}
+
+struct PlayRecord {
+    track: Track,
+    started_at: i64,
+    position: f64,
+    duration: f64,
 }
 
 struct Inner {
@@ -56,6 +66,7 @@ struct Inner {
     updates: broadcast::Sender<Update>,
     /// The runtime `start` ran in. Callers may be on threads without one (sync Tauri commands).
     rt: tokio::runtime::Handle,
+    library: Option<Library>,
 }
 
 #[derive(Clone)]
@@ -79,7 +90,7 @@ fn quality_from(v: u8) -> Quality {
 
 impl Engine {
     /// Must be called inside a tokio runtime.
-    pub fn start(source: Source) -> Result<Engine> {
+    pub fn start(source: Source, library: Option<Library>) -> Result<Engine> {
         let (ptx, prx) = mpsc::unbounded_channel();
         let player = Player::spawn(ptx)?;
         let (updates, _) = broadcast::channel(256);
@@ -95,17 +106,40 @@ impl Engine {
                 radio_seed: None,
                 position: 0.0,
                 retried: None,
+                playing: None,
             }),
             streams: Mutex::new(HashMap::new()),
             quality: AtomicU8::new(3),
             updates,
             rt: tokio::runtime::Handle::current(),
+            library,
         }));
         let e = engine.clone();
         engine.0.rt.spawn(async move { e.player_events(prx).await });
         let e = engine.clone();
         engine.0.rt.spawn(async move { e.0.source.warm().await });
         Ok(engine)
+    }
+
+    pub fn library(&self) -> Option<&Library> {
+        self.0.library.as_ref()
+    }
+
+    /// Record the play in progress, if any.
+    fn finish_play(&self) {
+        let rec = self.0.state.lock().unwrap().playing.take();
+        let (Some(rec), Some(lib)) = (rec, self.0.library.clone()) else { return };
+        if rec.position < 1.0 {
+            return; // never really started
+        }
+        self.0.rt.spawn(async move {
+            let res = lib
+                .run(move |l| l.record_play(&rec.track, rec.started_at, rec.position, rec.duration))
+                .await;
+            if let Err(e) = res {
+                log::warn!("recording play: {e:#}");
+            }
+        });
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<Update> {
@@ -182,6 +216,7 @@ impl Engine {
 
     async fn play_index(&self, index: usize) -> Result<()> {
         let requested = Instant::now();
+        self.finish_play();
         let track = {
             let mut st = self.0.state.lock().unwrap();
             let Some(track) = st.queue.get(index).cloned() else {
@@ -228,7 +263,11 @@ impl Engine {
             current
         };
         let Some(seed) = seed else { return };
-        match self.0.source.radio(&seed).await {
+        let ranked = match (self.0.source.radio(&seed).await, self.0.library.clone()) {
+            (Ok(tracks), Some(lib)) => lib.run(move |l| l.rank_radio(tracks)).await,
+            (res, _) => res,
+        };
+        match ranked {
             Ok(tracks) => {
                 let snapshot = {
                     let mut st = self.0.state.lock().unwrap();
@@ -327,12 +366,24 @@ impl Engine {
             match ev {
                 PlayerEvent::Started { video_id } => self.on_started(video_id),
                 PlayerEvent::Position(secs) => {
-                    self.0.state.lock().unwrap().position = secs;
+                    {
+                        let mut st = self.0.state.lock().unwrap();
+                        st.position = secs;
+                        if let Some(rec) = st.playing.as_mut() {
+                            rec.position = secs;
+                        }
+                    }
                     self.emit(Update::Position { secs });
                 }
-                PlayerEvent::Duration(secs) => self.emit(Update::Duration { secs }),
+                PlayerEvent::Duration(secs) => {
+                    if let Some(rec) = self.0.state.lock().unwrap().playing.as_mut() {
+                        rec.duration = secs;
+                    }
+                    self.emit(Update::Duration { secs });
+                }
                 PlayerEvent::Paused(paused) => self.emit(Update::Paused { paused }),
                 PlayerEvent::Idle => {
+                    self.finish_play();
                     // Reached the end with nothing prefetched: try the next item.
                     let has_next = {
                         let st = self.0.state.lock().unwrap();
@@ -351,6 +402,17 @@ impl Engine {
     }
 
     fn on_started(&self, video_id: String) {
+        let same = self
+            .0
+            .state
+            .lock()
+            .unwrap()
+            .playing
+            .as_ref()
+            .is_some_and(|r| r.track.id == video_id);
+        if !same {
+            self.finish_play();
+        }
         let (timing, advanced) = {
             let mut st = self.0.state.lock().unwrap();
             let timing = match st.requested_at.take() {
@@ -375,6 +437,16 @@ impl Engine {
                 None
             };
             st.retried = None;
+            if !same {
+                if let Some(track) = st.queue.iter().find(|t| t.id == video_id).cloned() {
+                    st.playing = Some(PlayRecord {
+                        duration: track.duration.unwrap_or(0) as f64,
+                        track,
+                        started_at: library::now(),
+                        position: 0.0,
+                    });
+                }
+            }
             (timing, advanced)
         };
         if let Some((video_id, ms, cached)) = timing {
