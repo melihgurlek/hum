@@ -340,6 +340,23 @@ export function hoverPrefetch(id: string) {
 export function hoverCancel() {
   clearTimeout(hoverTimer)
 }
+/** `use:prefetchOnHover={id}`: resolve the song a button would start, while the pointer is on
+    it. `null` (nothing to play yet) does nothing. */
+export function prefetchOnHover(node: HTMLElement, id: string | null | undefined) {
+  let current = id
+  const enter = () => current && hoverPrefetch(current)
+  node.addEventListener('mouseenter', enter)
+  node.addEventListener('mouseleave', hoverCancel)
+  return {
+    update(next: string | null | undefined) {
+      current = next
+    },
+    destroy() {
+      node.removeEventListener('mouseenter', enter)
+      node.removeEventListener('mouseleave', hoverCancel)
+    },
+  }
+}
 
 export async function refreshRecent() {
   try {

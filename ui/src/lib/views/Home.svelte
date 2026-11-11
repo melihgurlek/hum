@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, artistLine, type Track, img } from '../api'
-  import { capSet, go, playList, playRadio, quickPicksCache as cache, ui } from '../state.svelte'
+  import { capSet, go, playList, playRadio, prefetchOnHover, quickPicksCache as cache, ui } from '../state.svelte'
   import Icon from '../components/Icon.svelte'
   import TrackRow from '../components/TrackRow.svelte'
 
@@ -40,7 +40,7 @@
 <div class="page scroll">
   {#if seed}
     <div class="cta-row">
-      <button class="cta" onclick={() => playRadio(seed)}>
+      <button class="cta" use:prefetchOnHover={seed.id} onclick={() => playRadio(seed)}>
         <span class="play"><Icon name="play" size={16} /></span>
         <span class="trim">Keep going with {seed.artists[0] ?? seed.title} radio</span>
       </button>
@@ -49,7 +49,7 @@
     <section>
       <div class="head">
         <h2>Quick picks</h2>
-        {#if picks.length}<button class="link" onclick={() => playList(picks, 0)}>Play all</button>{/if}
+        {#if picks.length}<button class="link" use:prefetchOnHover={picks[0]?.id} onclick={() => playList(picks, 0)}>Play all</button>{/if}
       </div>
       {#if loading && !picks.length}
         <p class="muted">Finding songs like {seed.title}…</p>
@@ -66,7 +66,7 @@
       <section>
         <div class="head">
           <h2>Haven't played these in a while</h2>
-          <button class="link" onclick={() => playList(forgotten.map((f) => f.track), 0)}>Play all</button>
+          <button class="link" use:prefetchOnHover={forgotten[0]?.track.id} onclick={() => playList(forgotten.map((f) => f.track), 0)}>Play all</button>
         </div>
         <div class="picks">
           {#each forgotten as f, i (f.track.id)}
@@ -81,7 +81,7 @@
       <h2>Recently played</h2>
       <div class="tiles">
         {#each ui.recent.slice(0, 12) as t (t.id)}
-          <button class="tile" onclick={() => playRadio(t)} title={`Radio from ${t.title}`}>
+          <button class="tile" use:prefetchOnHover={t.id} onclick={() => playRadio(t)} title={`Radio from ${t.title}`}>
             {#if t.cover}<img class="cover art" src={img(t.cover)} alt="" loading="lazy" />{:else}<div class="cover art"></div>{/if}
             <span class="ellipsis tt">{t.title}</span>
             <span class="ellipsis muted ts">{artistLine(t)}</span>

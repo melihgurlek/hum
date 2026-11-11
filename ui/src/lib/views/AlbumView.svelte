@@ -1,6 +1,6 @@
 <script lang="ts">
   import { img, type AlbumPage } from '../api'
-  import { loadAlbum, openAddMenu, playList, shuffled, ui } from '../state.svelte'
+  import { loadAlbum, openAddMenu, playList, prefetchOnHover, shuffled, ui } from '../state.svelte'
   import Icon from '../components/Icon.svelte'
   import TrackRow from '../components/TrackRow.svelte'
   import ArtistLinks from '../components/ArtistLinks.svelte'
@@ -42,7 +42,7 @@
           {album.tracks.length} {album.tracks.length === 1 ? 'song' : 'songs'}{totalMin ? `, about ${totalMin} min` : ''}
         </p>
         <div class="actions">
-          <button class="primary" disabled={!album.tracks.length} onclick={() => album && playList(album.tracks, 0)}>
+          <button class="primary" disabled={!album.tracks.length} use:prefetchOnHover={album.tracks[0]?.id} onclick={() => album && playList(album.tracks, 0)}>
             <Icon name="play" size={16} /><span class="trim">Play</span>
           </button>
           <button class="secondary" disabled={!album.tracks.length} onclick={() => album && playList(shuffled(album.tracks), 0)}>

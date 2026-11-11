@@ -6,6 +6,7 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #28 | Every play button resolves its song while the pointer is on it, not just track rows: Home tiles and buttons, Play on album, artist and playlist pages, Up next, recent searches. A hovered click skips the 100–350 ms resolve (click→sound ~750 ms cold → ~400 ms) |
 | #27 | Playing no longer costs a fifth of a CPU core: the progress bar steps once a second instead of gliding (a CSS transition restarted every second kept the webview drawing 60 fps), and the playing mark in lists is static. Linux webview 19 % → 1.8 % of a core while playing. Windows installer tested on a real machine: sound, covers, media keys work ([PERFORMANCE.md](PERFORMANCE.md)) |
 | #25 | Windows build in GitHub Actions: NSIS installer (38 MB) with shinchiro's libmpv (version and SHA-256 recorded per build), smoke test on every relevant PR; first run green |
 | #24 | Performance: idle player sleeps until needed (was 50 wakeups/s), search and quick-picks caches survive navigation, 20 s read-ahead, stripped release binary |
@@ -32,11 +33,7 @@ Updated in every PR. Newest done items at the top of each section.
 
 ## Next
 
-1. **Faster stream resolution** ([YTMUSIC-RS.md](YTMUSIC-RS.md)): ytmusic-rs probes every URL
-   before mpv opens it (an extra round trip per song), and Data saver opens a stream only to pick
-   its bitrate. Fork, fix both, send upstream. Don't replace the stream half; the metadata half
-   could become hum's own later.
-2. **Google sign-in** (webview cookie login) to sync likes and playlists with the YouTube Music
+1. **Google sign-in** (webview cookie login) to sync likes and playlists with the YouTube Music
    account, so hum (desktop) and MetroList (phone) share one library. Few days; Android would need
    it anyway.
 
@@ -52,6 +49,13 @@ Updated in every PR. Newest done items at the top of each section.
   what would hum on Android do better than MetroList, which already works well on the phone?
 
 ## Decided against (and why)
+
+- **Forking ytmusic-rs to drop its URL probe**: measured on 12 songs, the probe is 4–250 ms
+  (median ~50 ms) of a ~750 ms cold click; mpv's own connection (~400 ms) and the player request
+  (100–320 ms) are the rest. Not worth a fork, and the probe catches refused URLs. Hovering
+  pre-resolves instead (#28).
+- **Fluid progress bar**: 60 fps costs ~19 % of a core, 4 updates a second ~4.6 %, once a second
+  ~1.8 %. Steps of 2–3 px a second are barely visible.
 
 - **Search field on Home**: Search is one click in the sidebar and opens with the field focused.
 - **Keyboard-shortcut hints**: nobody drives a music player by shortcuts.
