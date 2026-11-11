@@ -34,12 +34,14 @@ Updated in every PR. Newest done items at the top of each section.
 
 ## Next
 
-1. **Send plays to the account's history**, so YouTube Music's recommendations (on the phone
-   too) learn from what's played in hum. Today hum plays anonymously and the account never hears.
-2. **Test sign-in on Windows** (WebView2).
+1. **Test sign-in on Windows** (WebView2).
 
 ## Later
 
+- Send plays to the account's history, as an off-by-default setting (as Stash does). Code parked
+  on `feat/play-history`: YouTube accepts the pings, but it couldn't be confirmed they count,
+  since the test account's history has been paused since 2026-02. Paused history also means
+  YouTube ignores listening for recommendations, so it only matters to people who keep it on.
 - Song cache on disk (replays use no data), offline mode for cached songs.
 - Crossfade, equalizer, skip silence, sleep timer.
 - Discord status, Last.fm scrobbling.
