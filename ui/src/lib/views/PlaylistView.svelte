@@ -268,7 +268,6 @@
   .list {
     display: flex;
     flex-direction: column;
-    max-width: 900px;
   }
   .drag {
     display: flex;
