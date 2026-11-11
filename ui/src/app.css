@@ -10,7 +10,8 @@
   --text: #f2f2f3;
   --muted: #a1a1aa;
   --bar: #0c0c0e;
-  --accent-default: #ff8a4c;
+  /* No color of our own: until a cover tints the app, the accent is the text color. */
+  --accent-default: #ededef;
   --on-accent: #121214;
   --np-bg-default: #2a1610;
   --np-bg-2-default: #160b08;
@@ -27,7 +28,7 @@
   --text: #17171a;
   --muted: #5f5f68;
   --bar: #ffffff;
-  --accent-default: #2f5bea;
+  --accent-default: #1d1d21;
   --on-accent: #ffffff;
   --np-bg-default: #e9e4dc;
   --np-bg-2-default: #ddd6cb;

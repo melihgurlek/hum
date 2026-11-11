@@ -124,7 +124,9 @@ function applyPalette() {
   // Now Playing: a deep (or pale) shade of the cover's dominant color.
   const bg: Hsl = dark ? [dh, Math.min(ds, 0.5), 0.17] : [dh, Math.min(ds, 0.45), 0.9]
   const bg2: Hsl = dark ? [dh, Math.min(ds, 0.5), 0.1] : [dh, Math.min(ds, 0.4), 0.82]
-  root.setProperty('--accent', hsl(accent))
+  // A colorless cover (black and white, grey) has no hue worth amplifying: stay neutral.
+  if (vs < 0.18) root.removeProperty('--accent')
+  else root.setProperty('--accent', hsl(accent))
   root.setProperty('--np-bg', hsl(bg))
   root.setProperty('--np-bg-2', hsl(bg2))
 }
