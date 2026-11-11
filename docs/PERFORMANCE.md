@@ -56,9 +56,9 @@ player.
 
 - Idle is quiet: the #24 work holds on Windows.
 - **Playing costs ~28 % of a core in the webview**, not in hum.exe (mpv decoding is the 2 %).
-  Something in the UI redraws constantly while a song plays: most likely the position updates
-  driving the progress bar, the playing-indicator animation, or both. Worth a profile in DevTools
-  (Performance tab) before guessing; it matters for laptop battery.
+  Fixed in #27: the progress bar's 1 s CSS transition, restarted every second, and the animated
+  playing mark each kept the webview drawing 60 frames a second. Measured on Linux's webview:
+  19 % of a core playing before, 1.8 % after (0.5 % paused). Not yet re-measured on Windows.
 - Working set counts shared WebView2 pages several times; private memory is the closer number.
   Most of it is WebView2 (365 MB of the 414 MB working set at idle).
 

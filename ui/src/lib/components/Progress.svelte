@@ -1,18 +1,13 @@
 <script lang="ts">
-  // The fill glides by CSS transition between the engine's once-a-second position reports,
-  // so nothing re-renders in between and nothing repaints at all while paused.
+  // The fill moves once a second, on the engine's position reports. No CSS transition: a
+  // transition restarted every second keeps the webview drawing 60 frames a second for the
+  // whole song (~19 % of a core on Linux, ~28 % on Windows, vs ~2 % stepping).
   import { api } from '../api'
   import { player } from '../state.svelte'
 
   let { tone = 'bar' }: { tone?: 'bar' | 'np' } = $props()
 
-  const gliding = $derived(!player.paused && !player.loading && player.duration > 0)
-  const fraction = $derived.by(() => {
-    if (!player.duration) return 0
-    // Aim one second ahead and let the 1 s linear transition carry the fill there.
-    const target = gliding ? player.position + 1 : player.position
-    return Math.min(1, Math.max(0, target / player.duration))
-  })
+  const fraction = $derived(player.duration ? Math.min(1, Math.max(0, player.position / player.duration)) : 0)
 
   let el: HTMLDivElement
   function seek(e: MouseEvent) {
@@ -39,7 +34,7 @@
   aria-valuemax={Math.round(player.duration)}
   aria-valuenow={Math.round(player.position)}
 >
-  <div class="fill" class:gliding style="transform: scaleX({fraction})"></div>
+  <div class="fill" style="transform: scaleX({fraction})"></div>
 </div>
 
 <style>
@@ -79,8 +74,5 @@
   }
   .track:hover .fill {
     background: var(--accent, var(--accent-default));
-  }
-  .fill.gliding {
-    transition: transform 1s linear;
   }
 </style>
