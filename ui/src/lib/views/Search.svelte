@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api, artistLinks, img, type SearchResults, type Track } from '../api'
   import {
-    forgetPick, openAlbum, openArtist, playAlbum, playArtistRadio, playArtistTop, playList, playRadio,
+    forgetPick, openAlbum, openArtist, playAlbum, playArtistRadio, playArtistTop, playRadio,
     recentKey, rememberPick, searches, ui, hoverPrefetch, hoverCancel, type Recent,
   } from '../state.svelte'
   import ArtistLinks from '../components/ArtistLinks.svelte'
@@ -61,14 +61,16 @@
   const topSong = $derived(top ? null : (results.songs[0] ?? null))
   const listed = $derived(top ? results.songs : results.songs.slice(1))
 
-  function playSong(list: Track[], i: number) {
-    rememberPick({ kind: 'song', track: list[i] })
-    playList(list, i)
+  // A song from search plays and then keeps going with songs like it. The other results only
+  // share a word with the query, so they'd make a nonsense queue ("beta" → an unrelated song).
+  function playSong(t: Track) {
+    rememberPick({ kind: 'song', track: t })
+    playRadio(t)
   }
 
   function openRecent(r: Recent) {
     rememberPick(r)
-    if (r.kind === 'song') playList([r.track], 0)
+    if (r.kind === 'song') playRadio(r.track)
     else if (r.kind === 'artist') openArtist(r.id)
     else openAlbum(r.id)
   }
@@ -170,8 +172,7 @@
               </div>
             </div>
             <div class="actions">
-              <button class="primary" onclick={() => playSong(results.songs, 0)}><Icon name="play" size={16} /><span class="trim">Play</span></button>
-              <button class="secondary" onclick={() => (rememberPick({ kind: 'song', track: t }), playRadio(t))}><Icon name="radio" size={16} /><span class="trim">Radio</span></button>
+              <button class="primary" onclick={() => playSong(t)}><Icon name="play" size={16} /><span class="trim">Play</span></button>
             </div>
           </div>
         {/if}
@@ -180,7 +181,7 @@
         <h2>Songs</h2>
         <div class="list">
           {#each listed as t (t.id)}
-            <TrackRow track={t} onplay={() => playSong(results.songs, results.songs.indexOf(t))} />
+            <TrackRow track={t} onplay={() => playSong(t)} />
           {/each}
         </div>
       </section>
