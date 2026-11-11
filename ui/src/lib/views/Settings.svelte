@@ -8,6 +8,10 @@
     if (profile) api.accountPlaylists().then((l) => (lists = l)).catch(() => (lists = null))
     else lists = null
   })
+  let choosing = $state(false)
+  let filter = $state('')
+  const shownCount = $derived(lists?.filter((p) => p.shown).length ?? 0)
+  const filtered = $derived((lists ?? []).filter((p) => p.name.toLowerCase().includes(filter.trim().toLowerCase())))
   async function setShown(p: AccountPlaylist, shown: boolean) {
     p.shown = shown
     await api.setPlaylistShown(p.id, p.name, shown).catch((e) => showToast(String(e)))
@@ -60,15 +64,28 @@
           <button class="quiet" onclick={() => api.signOut()}>Sign out</button>
         </div>
         {#if lists?.length}
-          <h3>Your playlists on YouTube Music</h3>
-          <div class="options">
-            {#each lists as p (p.id)}
-              <label class="opt">
-                <input type="checkbox" checked={p.shown} onchange={(e) => setShown(p, e.currentTarget.checked)} />
-                <span><span class="ol">{p.name}</span><span class="od">{p.count != null ? `${p.count} ${p.count === 1 ? 'song' : 'songs'}, ` : ''}{p.shown ? 'shown in hum' : 'hidden in hum, kept on YouTube Music'}</span></span>
-              </label>
-            {/each}
+          <div class="account lists">
+            <span class="who"><span class="ol">Playlists from YouTube Music</span><span class="od">{shownCount} of {lists.length} shown in hum; hidden ones stay on your account</span></span>
+            <button class="quiet" onclick={() => (choosing = !choosing)} aria-expanded={choosing}>{choosing ? 'Done' : 'Choose'}</button>
           </div>
+          {#if choosing}
+            <div class="picker">
+              {#if lists.length > 8}
+                <input class="filter" placeholder="Filter playlists" bind:value={filter} aria-label="Filter playlists" />
+              {/if}
+              <div class="rows scroll">
+                {#each filtered as p (p.id)}
+                  <label class="row">
+                    <input type="checkbox" checked={p.shown} onchange={(e) => setShown(p, e.currentTarget.checked)} />
+                    <span class="ellipsis">{p.name}</span>
+                    {#if p.count != null}<span class="od count">{p.count}</span>{/if}
+                  </label>
+                {:else}
+                  <p class="od none">No playlist matches</p>
+                {/each}
+              </div>
+            </div>
+          {/if}
         {/if}
       {:else}
         <div class="account">
@@ -190,11 +207,55 @@
     font-weight: 700;
     vertical-align: 1px;
   }
-  h3 {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--muted);
-    margin: 18px 0 8px;
+  .lists {
+    margin-top: 6px;
+  }
+  .picker {
+    margin-top: 6px;
+    padding: 8px;
+    border-radius: var(--r-md);
+    background: var(--surface);
+  }
+  .filter {
+    width: 100%;
+    height: 36px;
+    padding: 0 12px;
+    margin-bottom: 6px;
+    border-radius: var(--r-sm);
+    background: var(--raised);
+    color: var(--text);
+  }
+  .rows {
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 40px;
+    padding: 0 8px;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+  }
+  .row:hover {
+    background: var(--raised);
+  }
+  .row input {
+    accent-color: var(--accent, var(--accent-default));
+    width: 16px;
+    height: 16px;
+    flex: none;
+  }
+  .row .ellipsis {
+    flex: 1;
+    min-width: 0;
+  }
+  .count {
+    font-variant-numeric: tabular-nums;
+  }
+  .none {
+    padding: 8px;
   }
   .account {
     display: flex;
