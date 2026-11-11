@@ -12,6 +12,8 @@ serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 ytmusic = { git = "https://github.com/sonorahq/ytmusic-rs", rev = "db4ab87" }
 libmpv2 = "7"
+# Only for mpv_wakeup, which libmpv2 doesn't wrap. Same version libmpv2 7 uses.
+libmpv2-sys = "4"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 rusqlite = { version = "0.42", features = ["bundled"] }

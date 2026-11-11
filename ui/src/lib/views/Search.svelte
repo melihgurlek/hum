@@ -2,7 +2,7 @@
   import { api, artistLinks, img, type SearchResults, type Track } from '../api'
   import {
     forgetPick, openAlbum, openArtist, playAlbum, playArtistRadio, playArtistTop, playRadio,
-    recentKey, rememberPick, searches, ui, hoverPrefetch, hoverCancel, type Recent,
+    capSet, recentKey, rememberPick, searchCache, searches, ui, hoverPrefetch, hoverCancel, type Recent,
   } from '../state.svelte'
   import ArtistLinks from '../components/ArtistLinks.svelte'
   import Icon from '../components/Icon.svelte'
@@ -15,22 +15,20 @@
   let timer: ReturnType<typeof setTimeout> | undefined
   let input: HTMLInputElement
 
-  // Results stay cached per query for this session, so going back is instant.
-  const cache = new Map<string, SearchResults>()
 
   async function run(q: string) {
     q = q.trim()
     if (!q || q === lastQuery) return
     lastQuery = q
     error = null
-    if (cache.has(q)) {
-      results = cache.get(q)!
+    if (searchCache.has(q)) {
+      results = searchCache.get(q)!
       return
     }
     searching = true
     try {
       const r = await api.search(q)
-      cache.set(q, r)
+      capSet(searchCache, q, r, 30)
       if (q === lastQuery) results = r
     } catch (e) {
       if (q === lastQuery) error = 'Search failed. Check your connection and try again.'

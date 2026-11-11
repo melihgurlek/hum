@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, artistLine, type Track, img } from '../api'
-  import { go, playList, playRadio, ui } from '../state.svelte'
+  import { capSet, go, playList, playRadio, quickPicksCache as cache, ui } from '../state.svelte'
   import Icon from '../components/Icon.svelte'
   import TrackRow from '../components/TrackRow.svelte'
 
@@ -9,8 +9,7 @@
   let loading = $state(false)
 
   // Quick picks: the last song's radio ranked by your taste, with a few favorites mixed in.
-  // Cached for the session so returning to Home is instant.
-  const cache = new Map<string, Track[]>()
+  // Cached for the session (in state) so returning to Home is instant.
   $effect(() => {
     const s = seed
     if (!s) return
@@ -22,7 +21,7 @@
     api
       .quickPicks(s.id)
       .then((r) => {
-        cache.set(s.id, r)
+        capSet(cache, s.id, r, 10)
         if (seed?.id === s.id) picks = r
       })
       .catch(() => {})

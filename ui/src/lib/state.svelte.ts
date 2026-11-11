@@ -1,4 +1,4 @@
-import { api, onUpdate, type AlbumPage, type ArtistPage, type Palette, type PlaylistSummary, type Quality, type Track } from './api'
+import { api, onUpdate, type AlbumPage, type ArtistPage, type SearchResults, type Palette, type PlaylistSummary, type Quality, type Track } from './api'
 
 export type View = 'home' | 'search' | 'library' | 'settings' | 'playlist' | 'artist' | 'album'
 export type ThemePref = 'system' | 'dark' | 'light'
@@ -106,7 +106,17 @@ export function back() {
   show(prev)
 }
 
-// Artist and album pages stay cached for the session, so Back is instant.
+/** Set `key`, dropping the oldest entries past `cap` (Maps keep insertion order). */
+export function capSet<K, V>(map: Map<K, V>, key: K, value: V, cap: number) {
+  map.delete(key)
+  map.set(key, value)
+  while (map.size > cap) map.delete(map.keys().next().value as K)
+}
+
+// Session caches, so Back and revisits are instant. They live here, not in the views, because
+// a view's own variables are thrown away whenever you navigate off it.
+export const searchCache = new Map<string, SearchResults>()
+export const quickPicksCache = new Map<string, Track[]>()
 const artistCache = new Map<string, Promise<ArtistPage>>()
 const albumCache = new Map<string, Promise<AlbumPage>>()
 function cached<T>(cache: Map<string, Promise<T>>, id: string, fetch: (id: string) => Promise<T>): Promise<T> {
@@ -114,7 +124,7 @@ function cached<T>(cache: Map<string, Promise<T>>, id: string, fetch: (id: strin
   if (!p) {
     p = fetch(id)
     p.catch(() => cache.delete(id))
-    cache.set(id, p)
+    capSet(cache, id, p, 30)
   }
   return p
 }
