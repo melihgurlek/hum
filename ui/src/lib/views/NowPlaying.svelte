@@ -171,7 +171,7 @@
   .art {
     width: 100%;
     aspect-ratio: 1;
-    border-radius: 16px;
+    border-radius: var(--r-lg);
     object-fit: cover;
     background: color-mix(in srgb, black 25%, transparent);
     box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
@@ -270,7 +270,7 @@
     flex-direction: column;
     gap: 14px;
     background: color-mix(in srgb, black 20%, transparent);
-    border-radius: 20px;
+    border-radius: var(--r-lg);
     padding: 18px 20px;
     max-height: calc(100vh - 160px);
   }
@@ -318,7 +318,7 @@
     align-items: center;
     gap: 12px;
     padding: 6px 8px;
-    border-radius: 10px;
+    border-radius: var(--r-md);
     text-align: left;
     min-height: 52px;
   }
@@ -328,7 +328,7 @@
   .qart {
     width: 40px;
     height: 40px;
-    border-radius: 6px;
+    border-radius: var(--r-sm);
     object-fit: cover;
     flex: none;
     background: color-mix(in srgb, black 25%, transparent);

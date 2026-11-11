@@ -139,7 +139,6 @@ export async function playAlbum(id: string, shuffle = false) {
 
 export async function playArtistRadio(id: string, name: string) {
   player.loading = true
-  showToast(`Starting ${name} radio`)
   try {
     await api.playArtistRadio(id)
   } catch (e) {
@@ -349,7 +348,6 @@ export async function toggleLike() {
   player.liked = next
   try {
     await api.setLiked(t, next)
-    showToast(next ? 'Added to Liked songs' : 'Removed from Liked songs')
   } catch (e) {
     player.liked = !next
     showToast(String(e))
@@ -457,7 +455,6 @@ export async function addToNewPlaylist(name: string, tracks: Track[]) {
   ui.addMenu = null
   try {
     await api.createPlaylist(name, tracks)
-    showToast(`Created ${name.trim() || 'New playlist'}`)
     refreshPlaylists()
   } catch (e) {
     showToast(String(e))

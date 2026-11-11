@@ -70,7 +70,7 @@
   .mark {
     width: 28px;
     height: 28px;
-    border-radius: 8px;
+    border-radius: var(--r-sm);
     background: var(--accent, var(--accent-default));
     color: var(--on-accent);
     display: flex;
@@ -84,7 +84,7 @@
     gap: 12px;
     padding: 0 12px;
     min-height: 44px;
-    border-radius: 10px;
+    border-radius: var(--r-md);
     color: var(--muted);
     font-weight: 600;
     text-align: left;
@@ -111,7 +111,7 @@
   .add {
     width: 32px;
     height: 32px;
-    border-radius: 8px;
+    border-radius: var(--r-sm);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -127,7 +127,7 @@
   .liked {
     width: 32px;
     height: 32px;
-    border-radius: 6px;
+    border-radius: var(--r-sm);
     flex: none;
     display: flex;
     align-items: center;
@@ -151,7 +151,7 @@
     align-items: center;
     gap: 10px;
     padding: 6px 12px;
-    border-radius: 10px;
+    border-radius: var(--r-md);
     text-align: left;
     min-height: 44px;
   }

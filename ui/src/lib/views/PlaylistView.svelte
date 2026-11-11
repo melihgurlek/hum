@@ -63,7 +63,6 @@
     if (!pl) return
     const [t] = pl.tracks.splice(index, 1)
     await api.removeFromPlaylist(pl.id, index)
-    showToast(`Removed ${t.title}`)
     refreshPlaylists()
   }
 
@@ -167,12 +166,11 @@
           </div>
         {/each}
       </div>
-      <p class="hint muted">Drag songs to reorder. Right-click any song in hum to add it to a playlist.</p>
     {:else}
       <div class="empty">
         <p>This playlist is empty.</p>
         <p class="muted">Use the <strong>+</strong> next to any song, or right-click it, to add it here.</p>
-        <button class="secondary" onclick={() => go('search')}><Icon name="search" size={16} /><span class="trim">Find songs</span></button>
+        <button class="primary" onclick={() => go('search')}><Icon name="search" size={16} /><span class="trim">Find songs</span></button>
       </div>
     {/if}
   {/if}
@@ -212,7 +210,7 @@
     text-align: left;
     padding: 2px 6px;
     margin-left: -6px;
-    border-radius: 8px;
+    border-radius: var(--r-sm);
   }
   .name:hover {
     background: var(--raised);
@@ -248,7 +246,14 @@
     background: var(--accent, var(--accent-default));
     color: var(--on-accent);
   }
+  /* One filled button per screen (Play); the rest stay quiet until hovered. */
   .secondary {
+    background: transparent;
+    color: var(--muted);
+    padding: 0 14px;
+  }
+  .secondary:hover:not(:disabled) {
+    color: var(--text);
     background: var(--raised);
   }
   .danger {
@@ -272,7 +277,7 @@
   .drag {
     display: flex;
     align-items: center;
-    border-radius: 10px;
+    border-radius: var(--r-md);
     border-top: 2px solid transparent;
   }
   .drag.over {
@@ -294,10 +299,6 @@
   .rowwrap {
     flex: 1;
     min-width: 0;
-  }
-  .hint {
-    font-size: 13px;
-    margin: 0;
   }
   .empty {
     display: flex;

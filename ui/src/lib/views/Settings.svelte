@@ -46,7 +46,6 @@
         </label>
       {/each}
     </div>
-    <p class="note">Switches right away, without restarting the song.</p>
   </section>
 
   {#if used}
@@ -56,7 +55,6 @@
         <div><span class="num">{size(used.month)}</span><span class="od">in {month}</span></div>
         <div><span class="num">{size(used.total)}</span><span class="od">in all</span></div>
       </div>
-      <p class="note">Music streamed by hum. Cover art downloads once and is kept.</p>
     </section>
   {/if}
 
@@ -78,9 +76,6 @@
       <input type="checkbox" checked={ui.autoplay} onchange={(e) => setAutoplay(e.currentTarget.checked)} />
       <span><span class="ol">Autoplay radio</span><span class="od">When your queue runs out, keep going with songs like the last one</span></span>
     </label>
-    {#if player.lastTiming}
-      <p class="note">Last song started {player.lastTiming.ms} ms after you pressed play{player.lastTiming.cached ? ' (it was loaded ahead of time)' : ''}.</p>
-    {/if}
   </section>
 </div>
 
@@ -94,8 +89,8 @@
     max-width: 720px;
   }
   h1 {
-    font-size: 30px;
-    font-weight: 800;
+    font-size: 24px;
+    font-weight: 700;
   }
   h2 {
     font-size: 18px;
@@ -112,7 +107,7 @@
     align-items: center;
     gap: 14px;
     padding: 12px 16px;
-    border-radius: 12px;
+    border-radius: var(--r-md);
     background: var(--surface);
     border: 2px solid transparent;
     cursor: pointer;
@@ -134,13 +129,9 @@
   .ol {
     font-weight: 600;
   }
-  .od,
-  .note {
+  .od {
     color: var(--muted);
     font-size: 13px;
-  }
-  .note {
-    margin: 10px 0 0;
   }
   .pill {
     margin-left: 8px;
@@ -161,7 +152,7 @@
     flex-direction: column;
     gap: 2px;
     padding: 14px 16px;
-    border-radius: 12px;
+    border-radius: var(--r-md);
     background: var(--surface);
   }
   .num {
