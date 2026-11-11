@@ -58,8 +58,9 @@ impl Outcome {
 
 /// Plays fade with a 30-day half-life.
 const HALF_LIFE_DAYS: f64 = 30.0;
-/// A like counts like two completed plays that never fade.
+/// A like counts like two completed plays, fading from the last time it was liked or played.
 const LIKE_WEIGHT: f64 = 2.0;
+const LIKE_HALF_LIFE_DAYS: f64 = 90.0;
 const DAY: i64 = 86_400;
 
 pub fn now() -> i64 {
@@ -183,10 +184,21 @@ impl Library {
             )?;
         }
         // v2: account playlists kept on the account but not shown in hum.
-        db.execute_batch(
-            "CREATE TABLE IF NOT EXISTS hidden_playlists (remote_id TEXT PRIMARY KEY, name TEXT NOT NULL);
-             PRAGMA user_version = 2;",
-        )?;
+        if db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))? < 2 {
+            db.execute_batch(
+                "CREATE TABLE IF NOT EXISTS hidden_playlists (remote_id TEXT PRIMARY KEY, name TEXT NOT NULL);
+                 PRAGMA user_version = 2;",
+            )?;
+        }
+        // v3: likes that came from the account, whose like date is unknown. Retro: synced likes
+        // never played here can only have come from the account.
+        if db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))? < 3 {
+            db.execute_batch(
+                "ALTER TABLE likes ADD COLUMN imported INTEGER NOT NULL DEFAULT 0;
+                 UPDATE likes SET imported = 1 WHERE remote = 1 AND track_id NOT IN (SELECT track_id FROM plays);
+                 PRAGMA user_version = 3;",
+            )?;
+        }
         Ok(Library {
             db: Arc::new(Mutex::new(db)),
         })
@@ -496,7 +508,7 @@ impl Library {
         for (i, track) in tracks.iter().enumerate() {
             Self::upsert_track(&tx, track)?;
             tx.execute(
-                "INSERT INTO likes (track_id, liked_at, remote) VALUES (?1, ?2, 1)
+                "INSERT INTO likes (track_id, liked_at, remote, imported) VALUES (?1, ?2, 1, 1)
                  ON CONFLICT(track_id) DO UPDATE SET remote = 1",
                 params![track.id, t - i as i64],
             )?;
@@ -748,21 +760,31 @@ impl Library {
                 r.get::<_, String>(3)?,
             ))
         })?;
+        let mut last_played: HashMap<String, i64> = HashMap::new();
         for (id, artist, at, outcome) in rows.flatten() {
+            let last = last_played.entry(id.clone()).or_default();
+            *last = (*last).max(at);
             let age_days = ((t - at as f64) / DAY as f64).max(0.0);
             let w = Outcome::weight(&outcome) * 0.5f64.powf(age_days / HALF_LIFE_DAYS);
             *tracks.entry(id).or_default() += w;
             *artists.entry(artist).or_default() += w;
         }
         let mut st = db.prepare(
-            "SELECT l.track_id, t.artist FROM likes l JOIN tracks t ON t.id = l.track_id",
+            "SELECT l.track_id, t.artist, l.liked_at, l.imported FROM likes l JOIN tracks t ON t.id = l.track_id",
         )?;
-        for (id, artist) in st
-            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+        for (id, artist, liked_at, imported) in st
+            .query_map([], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?, r.get::<_, bool>(3)?))
+            })?
             .flatten()
         {
-            *tracks.entry(id).or_default() += LIKE_WEIGHT;
-            *artists.entry(artist).or_default() += LIKE_WEIGHT;
+            // An imported like's date is unknown (maybe years ago): it counts once played here.
+            let since = last_played.get(&id).copied().max((!imported).then_some(liked_at));
+            let Some(since) = since else { continue };
+            let age_days = ((t - since as f64) / DAY as f64).max(0.0);
+            let w = LIKE_WEIGHT * 0.5f64.powf(age_days / LIKE_HALF_LIFE_DAYS);
+            *tracks.entry(id).or_default() += w;
+            *artists.entry(artist).or_default() += w;
         }
         Ok((tracks, artists))
     }
@@ -1009,6 +1031,18 @@ mod tests {
         assert_eq!(lib.top_tracks(5).unwrap()[0].id, "l");
         lib.set_liked(&t, false).unwrap();
         assert!(!lib.is_liked("l").unwrap());
+    }
+
+    #[test]
+    fn imported_likes_count_only_once_played() {
+        let lib = Library::memory().unwrap();
+        lib.add_remote_likes(&[track("old", "a")]).unwrap();
+        assert!(lib.top_tracks(5).unwrap().is_empty(), "a like from the account alone is no favorite");
+        lib.record_play(&track("old", "a"), now() - 400 * DAY, 200.0, 200.0).unwrap();
+        lib.record_play(&track("new", "b"), now() - DAY, 200.0, 200.0).unwrap();
+        lib.set_liked(&track("new", "b"), true).unwrap();
+        let top = lib.top_tracks(5).unwrap();
+        assert_eq!(top.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), vec!["new"], "played 400 days ago fades out");
     }
 
     #[test]
