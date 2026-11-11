@@ -18,6 +18,7 @@ pub struct Profile {
 pub struct Account {
     dir: PathBuf,
     signed_in: RwLock<Option<Signed>>,
+    sts: std::sync::Mutex<Option<u32>>,
 }
 
 #[derive(Clone)]
@@ -40,7 +41,7 @@ impl Account {
             .ok()
             .filter(|seed| has_session(seed))
             .map(|seed| Signed { ytm: Arc::new(client(&dir, &seed)), profile: None });
-        Account { dir, signed_in: RwLock::new(signed_in) }
+        Account { dir, signed_in: RwLock::new(signed_in), sts: std::sync::Mutex::new(None) }
     }
 
     pub fn is_signed_in(&self) -> bool {
@@ -93,6 +94,81 @@ impl Account {
         Ok(Some(p))
     }
 
+    /// Add a play to the account's history, as YouTube Music's player does: a signed-in player
+    /// response names stats URLs, and fetching them with the account's cookies counts the play.
+    pub async fn report_play(&self, video_id: &str, secs: f64) -> Result<()> {
+        let Some(ytm) = self.client() else { return Ok(()) };
+        // Without the player script's timestamp the signed-in player often answers UNPLAYABLE.
+        let payload = serde_json::json!({
+            "videoId": video_id,
+            "racyCheckOk": true,
+            "contentCheckOk": true,
+            "playbackContext": { "contentPlaybackContext": { "signatureTimestamp": self.sts().await? } },
+        });
+        let player = ytm.execute("player", ytmusic::Client::Music, payload).await?;
+        let tracking = |key: &str| {
+            player.pointer(&format!("/playbackTracking/{key}/baseUrl")).and_then(|v| v.as_str()).map(str::to_string)
+        };
+        let playback = tracking("videostatsPlaybackUrl").context("the player response has no playback tracking URL")?;
+        let cpn = cpn();
+        let http = reqwest::Client::new();
+        for (url, watched) in [(Some(playback), false), (tracking("videostatsWatchtimeUrl"), true)] {
+            let Some(url) = url else { continue };
+            let mut url = reqwest::Url::parse(&url)?;
+            url.query_pairs_mut().append_pair("ver", "2").append_pair("cpn", &cpn);
+            if watched {
+                let secs = format!("{:.0}", secs.max(1.0));
+                url.query_pairs_mut().append_pair("st", "0").append_pair("et", &secs);
+            }
+            let cookies = self.cookie_header(&url).context("no saved cookies")?;
+            let status = http
+                .get(url)
+                .header("Cookie", cookies)
+                .header("User-Agent", ytmusic::Client::Music.user_agent())
+                .header("Origin", "https://music.youtube.com")
+                .header("Referer", "https://music.youtube.com/")
+                .send()
+                .await?
+                .status();
+            if !status.is_success() {
+                bail!("YouTube answered {status}");
+            }
+        }
+        Ok(())
+    }
+
+    /// YouTube Music's player script timestamp, read once per run.
+    async fn sts(&self) -> Result<u32> {
+        if let Some(sts) = *self.sts.lock().unwrap() {
+            return Ok(sts);
+        }
+        let http = reqwest::Client::new();
+        let ua = ytmusic::Client::Music.user_agent();
+        let page = http.get("https://music.youtube.com/").header("User-Agent", ua).send().await?.text().await?;
+        let js = page
+            .split("\"jsUrl\":\"")
+            .nth(1)
+            .and_then(|s| s.split('"').next())
+            .context("no player script on the YouTube Music page")?;
+        let code = http.get(format!("https://music.youtube.com{js}")).send().await?.text().await?;
+        let sts: u32 = code
+            .split("signatureTimestamp:")
+            .nth(1)
+            .map(|s| s.chars().take_while(char::is_ascii_digit).collect::<String>())
+            .context("no signature timestamp in the player script")?
+            .parse()?;
+        *self.sts.lock().unwrap() = Some(sts);
+        Ok(sts)
+    }
+
+    /// The session's cookies now, rotated ones included.
+    fn cookie_header(&self, url: &reqwest::Url) -> Option<String> {
+        let file = std::fs::File::open(self.dir.join("cookies.json")).ok()?;
+        let store = cookie_store::serde::json::load(std::io::BufReader::new(file)).ok()?;
+        let pairs: Vec<String> = store.get_request_values(url).map(|(n, v)| format!("{n}={v}")).collect();
+        (!pairs.is_empty()).then(|| pairs.join("; "))
+    }
+
     /// Google stops accepting a session nobody rotates, as an open tab would.
     pub async fn rotate(&self) {
         let Some(ytm) = self.client() else { return };
@@ -101,6 +177,12 @@ impl Account {
             Err(e) => log::warn!("account: cookie rotation: {e:#}"),
         }
     }
+}
+
+/// A client playback nonce: 16 characters from YouTube's URL-safe alphabet.
+fn cpn() -> String {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    (0..16).map(|_| ALPHABET[rand::random_range(0..64)] as char).collect()
 }
 
 fn client(dir: &Path, seed: &str) -> YtMusic {

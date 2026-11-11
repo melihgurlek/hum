@@ -51,6 +51,8 @@ pub enum Update {
     Error { message: String },
     /// Auto quality stepped down (`low`) because the connection stalled, or back up.
     AutoQuality { low: bool },
+    /// A play ended and was recorded.
+    Played { video_id: String, outcome: crate::library::Outcome },
 }
 
 struct State {
@@ -216,12 +218,15 @@ impl Engine {
         if rec.position < 1.0 {
             return; // never really started
         }
+        let e = self.clone();
         self.0.rt.spawn(async move {
+            let video_id = rec.track.id.clone();
             let res = lib
                 .run(move |l| l.record_play(&rec.track, rec.started_at, rec.position, rec.duration))
                 .await;
-            if let Err(e) = res {
-                log::warn!("recording play: {e:#}");
+            match res {
+                Ok(outcome) => e.emit(Update::Played { video_id, outcome }),
+                Err(err) => log::warn!("recording play: {err:#}"),
             }
         });
     }
