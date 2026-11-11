@@ -6,6 +6,7 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #25 | Windows build in GitHub Actions: NSIS installer (38 MB) with shinchiro's libmpv (version and SHA-256 recorded per build), smoke test on every relevant PR; first run green |
 | #24 | Performance: idle player sleeps until needed (was 50 wakeups/s), search and quick-picks caches survive navigation, 20 s read-ahead, stripped release binary |
 | #22 | A song played from search continues with its own radio, not the other search results |
 | #21 | Now Playing fits the window: lyrics panel no longer runs under the player bar, cover shrinks in short windows |
@@ -30,8 +31,18 @@ Updated in every PR. Newest done items at the top of each section.
 
 ## Next
 
-1. **Windows build** in GitHub Actions (bundle libmpv DLL), smoke-tested.
-2. **Google sign-in** (webview cookie login) to sync likes and playlists with MetroList.
+1. **Test the Windows installer on a real Windows machine** (CI can't hear audio). Get it from the
+   latest main or "Run workflow" run of *Windows build*, artifact `hum-windows-x64`. Unsigned, so
+   SmartScreen asks: More info → Run anyway. Check:
+   - a song plays **with sound**;
+   - **cover images** load (Windows serves them from `http://img.localhost/`, the likeliest break);
+   - **media keys** and the Windows media overlay (title, play/pause);
+   - Now Playing colors, lyrics, search, an artist page;
+   - startup feels as quick as on Linux.
+   Problems: screenshot + `%LOCALAPPDATA%\com.melihgurlek.hum\logs\hum.log`; fixes are made from Linux.
+2. **Google sign-in** (webview cookie login) to sync likes and playlists with the YouTube Music
+   account, so hum (desktop) and MetroList (phone) share one library. Few days; Android would need
+   it anyway.
 
 ## Later
 
@@ -39,14 +50,31 @@ Updated in every PR. Newest done items at the top of each section.
 - Crossfade, equalizer, skip silence, sleep timer.
 - Discord status, Last.fm scrobbling.
 - Mini player, tray menu.
-- Android port: same `ui/` and `crates/core`, Media3 player plugin.
+- Code signing for the Windows installer (costs money; worth it once hum is public).
+- **Android port, on hold.** Same `ui/` and `crates/core`, but no mpv there: needs a Media3 player
+  plugin, phone layouts, background playback, lock-screen controls (weeks). Open question first:
+  what would hum on Android do better than MetroList, which already works well on the phone?
+
+## Decided against (and why)
+
+- **Search field on Home**: Search is one click in the sidebar and opens with the field focused.
+- **Keyboard-shortcut hints**: nobody drives a music player by shortcuts.
+- **Stricter artist spread in radio**: hum's radio is YouTube Music's own and measured as varied
+  (about 1 in 4 songs by the seed artist, same as YouTube continued). Easy to tighten if wanted.
+- **Patching souvlaki** (100 idle wakeups/s from its 10 ms poll): left as is. It accepts outside
+  PRs and has no AI policy, if that changes.
+- **Memory trims that cost UX**: capping mpv's back buffer (slow seek-back), smaller tile covers
+  (blurry on HiDPI), paging long lists, `MALLOC_ARENA_MAX` (−4 MB, noise). Most of the ~287 MB is
+  WebKit's fixed cost; no unbounded growth found in our code.
+- **Leaving the webview for a native UI (egui, like spotifast)**: would save ~150 MB but means
+  rewriting the UI and losing cover-tinted design and the shared Android `ui/`.
 
 ## Known issues
 
 - Artist top songs have no durations until played (YouTube Music doesn't list them there).
 - Only a song's first artist links to a page; YouTube Music's song lists carry one artist id.
 - Home starts nearly empty (one search button); it fills in as history builds up.
-- Skipping a song early still costs up to ~1 MB: mpv buffers about a minute ahead.
+- Skipping a song early costs up to ~0.3 MB at High: mpv reads 20 s ahead.
 - Only two stream sizes are used (~130 and ~50 kbps AAC); YouTube's ~65 kbps Opus stream would
   need ytmusic-rs to stop preferring AAC.
 - The dev app needs `~/.local/share/com.melihgurlek.hum/WebKitCache` cleared if the window
