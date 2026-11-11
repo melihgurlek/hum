@@ -1,6 +1,6 @@
 <script lang="ts">
   import { img, type ArtistPage } from '../api'
-  import { loadArtist, playArtistRadio, playList, ui } from '../state.svelte'
+  import { loadArtist, playArtistRadio, playList, prefetchOnHover, ui } from '../state.svelte'
   import Icon from '../components/Icon.svelte'
   import TrackRow from '../components/TrackRow.svelte'
   import AlbumCard from '../components/AlbumCard.svelte'
@@ -37,7 +37,7 @@
     </header>
 
     <div class="actions">
-      <button class="primary" disabled={!artist.top.length} onclick={() => artist && playList(artist.top, 0)}>
+      <button class="primary" disabled={!artist.top.length} use:prefetchOnHover={artist.top[0]?.id} onclick={() => artist && playList(artist.top, 0)}>
         <Icon name="play" size={16} /><span class="trim">Play</span>
       </button>
       <button class="secondary" onclick={() => artist && playArtistRadio(artist.id, artist.name)}>

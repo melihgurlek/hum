@@ -2,7 +2,7 @@
   import { api, artistLinks, img, type SearchResults, type Track } from '../api'
   import {
     forgetPick, openAlbum, openArtist, playAlbum, playArtistRadio, playArtistTop, playRadio,
-    capSet, recentKey, rememberPick, searchCache, searches, ui, hoverPrefetch, hoverCancel, type Recent,
+    capSet, recentKey, rememberPick, searchCache, searches, ui, hoverPrefetch, hoverCancel, prefetchOnHover, type Recent,
   } from '../state.svelte'
   import ArtistLinks from '../components/ArtistLinks.svelte'
   import Icon from '../components/Icon.svelte'
@@ -111,7 +111,7 @@
         <div class="rlist">
           {#each searches.list as r (recentKey(r))}
             <div class="rrow">
-              <button class="ropen" onclick={() => openRecent(r)}>
+              <button class="ropen" use:prefetchOnHover={r.kind === 'song' ? r.track.id : null} onclick={() => openRecent(r)}>
                 {#if recentThumb(r)}
                   <img class="cover rart" class:round={r.kind === 'artist'} src={img(recentThumb(r))} alt="" loading="lazy" width="48" height="48" />
                 {:else}

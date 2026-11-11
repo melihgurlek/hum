@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, type Playlist } from '../api'
-  import { go, playList, refreshPlaylists, showToast, ui } from '../state.svelte'
+  import { go, playList, prefetchOnHover, refreshPlaylists, showToast, ui } from '../state.svelte'
   import Icon from '../components/Icon.svelte'
   import Mosaic from '../components/Mosaic.svelte'
   import TrackRow from '../components/TrackRow.svelte'
@@ -107,7 +107,7 @@
           {pl.tracks.length} {pl.tracks.length === 1 ? 'song' : 'songs'}{totalMin ? `, about ${totalMin} min` : ''}
         </p>
         <div class="actions">
-          <button class="primary" disabled={!pl.tracks.length} onclick={() => pl && playList(pl.tracks, 0)}>
+          <button class="primary" disabled={!pl.tracks.length} use:prefetchOnHover={pl.tracks[0]?.id} onclick={() => pl && playList(pl.tracks, 0)}>
             <Icon name="play" size={16} /><span class="trim">Play</span>
           </button>
           <button class="secondary" disabled={!pl.tracks.length} onclick={() => playList(shuffled(), 0)}>

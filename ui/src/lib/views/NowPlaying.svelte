@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, artistLine, artistLinks, fmtTime, img, type TrackNote } from '../api'
-  import { player, ui, setAutoplay, toggleLike, reason, openAddMenu, openAlbum } from '../state.svelte'
+  import { player, ui, setAutoplay, toggleLike, reason, openAddMenu, openAlbum, prefetchOnHover } from '../state.svelte'
   import ArtistLinks from '../components/ArtistLinks.svelte'
   import Icon from '../components/Icon.svelte'
   import Progress from '../components/Progress.svelte'
@@ -92,7 +92,7 @@
         {#if tab === 'next'}
           <div class="queue scroll">
             {#each player.upNext.slice(0, 50) as q, i (q.id)}
-              <button class="qrow" onclick={() => api.jump(player.index + 1 + i)}>
+              <button class="qrow" use:prefetchOnHover={q.id} onclick={() => api.jump(player.index + 1 + i)}>
                 {#if q.thumb}<img class="qart" src={img(q.thumb)} alt="" loading="lazy" />{:else}<div class="qart"></div>{/if}
                 <span class="qtext"><span class="ellipsis qt">{q.title}</span><span class="ellipsis qs">{artistLine(q)}</span></span>
                 <span class="why">{why(q.id)}</span>

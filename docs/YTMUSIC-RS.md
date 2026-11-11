@@ -61,3 +61,6 @@ yt-dlp keeps up week to week; a solo rewrite would be less reliable, not more.
   become hum's code; the fragile part stays with people tracking YouTube.
 
 Both can be done; the fork first.
+
+**Decided 2026-11-11: no fork.** Measured, the probe is ~50 ms (median) of a ~750 ms cold click;
+see ROADMAP, Decided against. Hovering a play button pre-resolves the song instead (#28).
