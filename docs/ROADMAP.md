@@ -6,6 +6,7 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #29 | Google sign-in (Settings), and likes and playlists synced both ways with the YouTube Music account: changes go up at once, the account's come down at startup and when Liked songs or a playlist opens. Search and playback stay anonymous |
 | #28 | Every play button resolves its song while the pointer is on it, not just track rows: Home tiles and buttons, Play on album, artist and playlist pages, Up next, recent searches. A hovered click skips the 100–350 ms resolve (click→sound ~750 ms cold → ~400 ms) |
 | #27 | Playing no longer costs a fifth of a CPU core: the progress bar steps once a second instead of gliding (a CSS transition restarted every second kept the webview drawing 60 fps), and the playing mark in lists is static. Linux webview 19 % → 1.8 % of a core while playing. Windows installer tested on a real machine: sound, covers, media keys work ([PERFORMANCE.md](PERFORMANCE.md)) |
 | #25 | Windows build in GitHub Actions: NSIS installer (38 MB) with shinchiro's libmpv (version and SHA-256 recorded per build), smoke test on every relevant PR; first run green |
@@ -33,9 +34,9 @@ Updated in every PR. Newest done items at the top of each section.
 
 ## Next
 
-1. **Google sign-in** (webview cookie login) to sync likes and playlists with the YouTube Music
-   account, so hum (desktop) and MetroList (phone) share one library. Few days; Android would need
-   it anyway.
+1. **Send plays to the account's history**, so YouTube Music's recommendations (on the phone
+   too) learn from what's played in hum. Today hum plays anonymously and the account never hears.
+2. **Test sign-in on Windows** (WebView2).
 
 ## Later
 
@@ -70,6 +71,10 @@ Updated in every PR. Newest done items at the top of each section.
   rewriting the UI and losing cover-tinted design and the shared Android `ui/`.
 
 ## Known issues
+
+- Playlists saved from other people don't show; only your own sync.
+- Edits to a synced playlist made while signed out (other than deleting it) are overwritten by the
+  account's copy at the next sync.
 
 - libmpv-2.dll is 116 of the 133 MB installed (shinchiro's build has every codec, video too).
 
