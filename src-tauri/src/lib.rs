@@ -19,6 +19,15 @@ struct App {
     http: reqwest::Client,
     account: Arc<Account>,
     sync: Option<Sync>,
+    account_radio: std::sync::atomic::AtomicBool,
+}
+
+impl App {
+    /// Radio comes from the account when that's on and someone is signed in.
+    fn apply_radio(&self) {
+        let on = self.account_radio.load(std::sync::atomic::Ordering::Relaxed);
+        self.engine.source().set_radio_client(self.account.client().filter(|_| on));
+    }
 }
 
 struct SyncEvents(tauri::AppHandle);
@@ -315,6 +324,12 @@ fn get_quality(app: State<'_, App>) -> Quality {
 }
 
 #[tauri::command]
+fn set_account_radio(app: State<'_, App>, on: bool) {
+    app.account_radio.store(on, std::sync::atomic::Ordering::Relaxed);
+    app.apply_radio();
+}
+
+#[tauri::command]
 fn set_autoplay(app: State<'_, App>, on: bool) {
     app.engine.set_autoplay(on);
 }
@@ -390,7 +405,9 @@ async fn sign_in(handle: tauri::AppHandle) -> Res<()> {
                 tauri::async_runtime::block_on(async move {
                     match account.sign_in(&header).await {
                         Ok(profile) => {
-                            if let Some(s) = &handle.state::<App>().sync {
+                            let app = handle.state::<App>();
+                            app.apply_radio();
+                            if let Some(s) = &app.sync {
                                 s.pull();
                             }
                             let _ = handle.emit("hum://account", Some(profile));
@@ -413,6 +430,7 @@ async fn sign_in(handle: tauri::AppHandle) -> Res<()> {
 #[tauri::command]
 fn sign_out(app: State<'_, App>, handle: tauri::AppHandle) {
     app.account.sign_out();
+    app.apply_radio();
     let _ = handle.emit("hum://account", None::<Profile>);
 }
 
@@ -567,6 +585,7 @@ pub fn run() {
                 http: reqwest::Client::new(),
                 account,
                 sync,
+                account_radio: Default::default(),
             });
             Ok(())
         })
@@ -589,6 +608,7 @@ pub fn run() {
             set_quality,
             get_quality,
             set_autoplay,
+            set_account_radio,
             queue,
             cover_palette,
             set_liked,

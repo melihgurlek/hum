@@ -187,6 +187,8 @@ pub struct Stream {
 
 pub struct Source {
     ytm: Arc<YtMusic>,
+    /// The signed-in client, when radio should come from the account.
+    radio_ytm: std::sync::RwLock<Option<Arc<YtMusic>>>,
 }
 
 impl Source {
@@ -195,7 +197,7 @@ impl Source {
         let ytm = YtMusic::anonymous()
             .cache_player(storage_dir.join("player.json"))
             .cache_resolutions(storage_dir.join("resolutions.json"));
-        Ok(Source { ytm: Arc::new(ytm) })
+        Ok(Source { ytm: Arc::new(ytm), radio_ytm: Default::default() })
     }
 
     /// Open connections and fetch the visitor session, so the first real click doesn't pay for
@@ -267,8 +269,14 @@ impl Source {
         })
     }
 
+    /// Radio from this client instead of the anonymous one; `None` goes back.
+    pub fn set_radio_client(&self, ytm: Option<Arc<YtMusic>>) {
+        *self.radio_ytm.write().unwrap() = ytm;
+    }
+
     pub async fn radio(&self, video_id: &str) -> Result<Vec<Track>> {
-        let res = self.ytm.track_radio(video_id).await?;
+        let ytm = self.radio_ytm.read().unwrap().clone().unwrap_or_else(|| self.ytm.clone());
+        let res = ytm.track_radio(video_id).await?;
         Ok(res.into_iter().filter_map(Track::from_ytm).collect())
     }
 
