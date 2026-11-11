@@ -24,8 +24,17 @@ const RADIO_LOOKAHEAD: usize = 10;
 /// Auto steps down after this many stalls within `STALL_WINDOW`. One stall can be a blip.
 const STALLS_TO_STEP_DOWN: usize = 2;
 const STALL_WINDOW: Duration = Duration::from_secs(120);
-/// Auto tries the best quality again after this long without a stall.
+/// Auto tries the best quality again after this long without a stall, doubled after every
+/// step-down this session (so a connection that keeps failing High settles on Data saver),
+/// up to `STEP_UP_MAX_WAIT`.
 const STEP_UP_AFTER: Duration = Duration::from_secs(15 * 60);
+const STEP_UP_MAX_WAIT: Duration = Duration::from_secs(2 * 60 * 60);
+/// ... and only if a download recently ran at least this fast, in bytes per second: three times
+/// what High needs (~130 kbps, ~16 KB/s). mpv fills its buffer in a burst at the connection's
+/// full speed whenever a song starts, so even Data saver streams show what the line can do.
+const STEP_UP_MIN_RATE: f64 = 48_000.0;
+/// A speed measurement older than this says nothing about the connection now.
+const RATE_FRESH: Duration = Duration::from_secs(5 * 60);
 /// Downloaded bytes are written to the library in batches of at least this much.
 const DATA_FLUSH_BYTES: u64 = 1 << 20;
 
@@ -88,6 +97,57 @@ struct AutoState {
     /// When Auto stepped down to data-saver streams, if it has.
     low_since: Option<Instant>,
     stalls: Vec<Instant>,
+    /// Step-downs this session, for the doubling wait.
+    downs: u32,
+    /// The fastest recent download speed and when it was seen.
+    peak: Option<(Instant, f64)>,
+}
+
+impl AutoState {
+    /// Record a stall; true when Auto should step down now.
+    fn stall(&mut self, now: Instant, auto: bool) -> bool {
+        self.stalls.retain(|t| now.duration_since(*t) < STALL_WINDOW);
+        self.stalls.push(now);
+        let step = auto && self.low_since.is_none() && self.stalls.len() >= STALLS_TO_STEP_DOWN;
+        if step {
+            self.low_since = Some(now);
+            self.downs += 1;
+            // Speeds seen before were evidently not enough.
+            self.peak = None;
+        }
+        step
+    }
+
+    fn sample(&mut self, now: Instant, rate: f64) {
+        let keep = self
+            .peak
+            .is_some_and(|(at, r)| r >= rate && now.duration_since(at) < RATE_FRESH);
+        if !keep {
+            self.peak = Some((now, rate));
+        }
+    }
+
+    fn wait(&self) -> Duration {
+        STEP_UP_AFTER
+            .saturating_mul(1 << self.downs.saturating_sub(1).min(8))
+            .min(STEP_UP_MAX_WAIT)
+    }
+
+    /// Calm for long enough, and the connection was recently measured fast enough for High.
+    fn step_up_ready(&self, now: Instant) -> bool {
+        let wait = self.wait();
+        let calm = |t: &Instant| now.duration_since(*t) >= wait;
+        let fast = self.peak.is_some_and(|(at, r)| {
+            now.duration_since(at) < RATE_FRESH && r >= STEP_UP_MIN_RATE
+        });
+        self.low_since.as_ref().is_some_and(calm) && self.stalls.iter().all(calm) && fast
+    }
+
+    fn step_up(&mut self) {
+        self.low_since = None;
+        self.stalls.clear();
+        self.peak = None;
+    }
 }
 
 #[derive(Clone)]
@@ -454,7 +514,8 @@ impl Engine {
                 }
                 PlayerEvent::Paused(paused) => self.emit(Update::Paused { paused }),
                 PlayerEvent::Stalled => self.on_stall().await,
-                PlayerEvent::Downloaded(bytes) => {
+                PlayerEvent::Downloaded { bytes, rate } => {
+                    self.0.auto.lock().unwrap().sample(Instant::now(), rate);
                     let pending = self.0.data_pending.fetch_add(bytes, Ordering::Relaxed) + bytes;
                     if pending >= DATA_FLUSH_BYTES {
                         self.flush_data(DATA_FLUSH_BYTES);
@@ -554,36 +615,27 @@ impl Engine {
     /// Playback waited for the network. On Auto, the second stall in a short while switches to
     /// data-saver streams, starting with the current song at the same spot.
     async fn on_stall(&self) {
-        let step_down = {
+        let is_auto = self.quality() == Quality::Auto;
+        let (step_down, wait) = {
             let mut auto = self.0.auto.lock().unwrap();
-            let now = Instant::now();
-            auto.stalls.retain(|t| now.duration_since(*t) < STALL_WINDOW);
-            auto.stalls.push(now);
+            let step = auto.stall(Instant::now(), is_auto);
             log::info!("stalled for cache ({} recently)", auto.stalls.len());
-            let step = self.quality() == Quality::Auto
-                && auto.low_since.is_none()
-                && auto.stalls.len() >= STALLS_TO_STEP_DOWN;
-            if step {
-                auto.low_since = Some(now);
-            }
-            step
+            (step, auto.wait())
         };
         if !step_down {
             return;
         }
-        log::info!("auto quality: stepping down to data saver");
+        log::info!("auto quality: stepping down to data saver, next try at High in {wait:?} at the earliest");
         self.emit(Update::AutoQuality { low: true });
         self.requality_current();
     }
 
-    /// After a long enough calm on data-saver streams, Auto tries the best quality again.
+    /// After a long enough calm on data-saver streams, and with the connection measured fast
+    /// enough, Auto tries the best quality again from the next song (never mid-song).
     fn maybe_step_up(&self) {
         let mut auto = self.0.auto.lock().unwrap();
-        let calm = |t: &Instant| t.elapsed() >= STEP_UP_AFTER;
-        let ready = auto.low_since.as_ref().is_some_and(calm) && auto.stalls.iter().all(calm);
-        if ready {
-            auto.low_since = None;
-            auto.stalls.clear();
+        if auto.step_up_ready(Instant::now()) {
+            auto.step_up();
             drop(auto);
             log::info!("auto quality: trying the best quality again");
             self.0.streams.lock().unwrap().clear();
@@ -607,5 +659,57 @@ impl Engine {
             self.emit(Update::Error { message: "That song wouldn't play, skipping it.".into() });
             let _ = self.next().await;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const S: Duration = Duration::from_secs(1);
+    const MIN: Duration = Duration::from_secs(60);
+
+    #[test]
+    fn steps_down_on_second_stall_in_window_only_on_auto() {
+        let t = Instant::now();
+        let mut a = AutoState::default();
+        assert!(!a.stall(t, true));
+        assert!(!a.stall(t + 3 * MIN, true), "first stall aged out of the window");
+        assert!(a.stall(t + 4 * MIN, true));
+        let mut manual = AutoState::default();
+        assert!(!manual.stall(t, false) && !manual.stall(t + S, false));
+    }
+
+    #[test]
+    fn steps_up_only_when_calm_and_measured_fast() {
+        let t = Instant::now();
+        let mut a = AutoState::default();
+        a.stall(t, true);
+        a.stall(t + S, true);
+        let later = t + 16 * MIN;
+        assert!(!a.step_up_ready(later), "no speed measured yet");
+        a.sample(later - MIN, 20_000.0);
+        assert!(!a.step_up_ready(later), "too slow for High");
+        a.sample(later - MIN, 300_000.0);
+        a.sample(later - S, 16_000.0); // a slower reading doesn't hide the recent burst
+        assert!(a.step_up_ready(later));
+        assert!(!a.step_up_ready(t + 10 * MIN), "not calm long enough");
+        a.sample(later + 10 * MIN, 16_000.0);
+        assert!(!a.step_up_ready(later + 10 * MIN), "the fast reading went stale");
+    }
+
+    #[test]
+    fn wait_doubles_with_each_step_down_and_caps() {
+        let t = Instant::now();
+        let mut a = AutoState::default();
+        let mut waits = vec![];
+        for i in 0..5u32 {
+            let at = t + Duration::from_secs(i as u64 * 10_000);
+            a.stall(at, true);
+            a.stall(at + S, true);
+            waits.push(a.wait().as_secs() / 60);
+            a.step_up();
+        }
+        assert_eq!(waits, [15, 30, 60, 120, 120]);
     }
 }

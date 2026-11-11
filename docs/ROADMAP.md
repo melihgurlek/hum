@@ -6,6 +6,7 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #16 | Auto steps back up only when a recent download ran at 3x what High needs, and waits twice as long after each step-down (15, 30, 60, 120 min), so a borderline connection settles instead of stuttering every 15 minutes |
 | #15 | Quality changes apply to the playing song at once (same spot); Back button stays in view while scrolling; History in the sidebar; recent searches; spacing fixes (row durations, Now Playing album line) |
 | #14 | Auto quality reacts: after two stalls in two minutes it switches to Data saver (~50 kbps), reloading the current song at the same spot; back to High after 15 calm minutes. "Data used" (this month, in all) in Settings. Removed "Normal", which was the same stream as High |
 | #13 | Play icon right on the first song after startup; search field text centered |
