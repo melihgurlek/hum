@@ -10,6 +10,7 @@
     queue: '<path d="M3 6h13M3 12h13M3 18h8M18 15v6l4-3z"/>',
     volume: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6"/>',
     chevronDown: '<path d="M6 9l6 6 6-6"/>',
+    back: '<path d="M15 18l-6-6 6-6"/>',
     leaf: '<path d="M5 19c0-8 6-14 15-14 0 9-6 15-14 15"/><path d="M5 19l7-7"/>',
     x: '<path d="M6 6l12 12M18 6L6 18"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',

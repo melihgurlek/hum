@@ -1,6 +1,6 @@
-import { api, onUpdate, type Palette, type PlaylistSummary, type Quality, type Track } from './api'
+import { api, onUpdate, type AlbumPage, type ArtistPage, type Palette, type PlaylistSummary, type Quality, type Track } from './api'
 
-export type View = 'home' | 'search' | 'library' | 'settings' | 'playlist'
+export type View = 'home' | 'search' | 'library' | 'settings' | 'playlist' | 'artist' | 'album'
 export type ThemePref = 'system' | 'dark' | 'light'
 
 function load<T>(key: string, fallback: T): T {
@@ -45,6 +45,10 @@ class Ui {
   autoplay = $state(load('hum.autoplay', true))
   toast = $state<string | null>(null)
   playlistId = $state<number | null>(load<number | null>('hum.playlistId', null))
+  artistId = $state<string | null>(load<string | null>('hum.artistId', null))
+  albumId = $state<string | null>(load<string | null>('hum.albumId', null))
+  /** Pages visited before this one, for Back (button, Alt+Left, mouse back). */
+  history = $state<Place[]>([])
   playlists = $state<PlaylistSummary[]>([])
   libraryTab = $state<'liked' | 'history'>('liked')
   /** The "Add to playlist" menu: which songs, and where to show it. */
@@ -65,10 +69,89 @@ export function showToast(msg: string) {
   toastTimer = setTimeout(() => (ui.toast = null), 4000)
 }
 
-export function go(view: View) {
-  ui.view = view
+interface Place { view: View; playlistId: number | null; artistId: string | null; albumId: string | null }
+const here = (): Place => ({ view: ui.view, playlistId: ui.playlistId, artistId: ui.artistId, albumId: ui.albumId })
+
+function show(p: Place) {
+  ui.view = p.view
+  ui.playlistId = p.playlistId
+  ui.artistId = p.artistId
+  ui.albumId = p.albumId
   ui.nowPlayingOpen = false
-  save('hum.view', view)
+  save('hum.view', p.view)
+  save('hum.playlistId', p.playlistId)
+  save('hum.artistId', p.artistId)
+  save('hum.albumId', p.albumId)
+}
+
+function navigate(change: Partial<Place>) {
+  const from = here()
+  const to = { ...from, ...change }
+  const same = to.view === from.view && to.playlistId === from.playlistId && to.artistId === from.artistId && to.albumId === from.albumId
+  if (!same) ui.history = [...ui.history.slice(-49), from]
+  show(to)
+}
+
+export function go(view: View) {
+  navigate({ view })
+}
+
+export function back() {
+  const prev = ui.history.at(-1)
+  if (!prev) return
+  ui.history = ui.history.slice(0, -1)
+  show(prev)
+}
+
+// Artist and album pages stay cached for the session, so Back is instant.
+const artistCache = new Map<string, Promise<ArtistPage>>()
+const albumCache = new Map<string, Promise<AlbumPage>>()
+function cached<T>(cache: Map<string, Promise<T>>, id: string, fetch: (id: string) => Promise<T>): Promise<T> {
+  let p = cache.get(id)
+  if (!p) {
+    p = fetch(id)
+    p.catch(() => cache.delete(id))
+    cache.set(id, p)
+  }
+  return p
+}
+export const loadArtist = (id: string) => cached(artistCache, id, api.artist)
+export const loadAlbum = (id: string) => cached(albumCache, id, api.album)
+
+export function openArtist(id: string | null | undefined) {
+  if (id) navigate({ view: 'artist', artistId: id })
+}
+export function openAlbum(id: string | null | undefined) {
+  if (id) navigate({ view: 'album', albumId: id })
+}
+
+export async function playAlbum(id: string, shuffle = false) {
+  try {
+    const a = await loadAlbum(id)
+    if (a.tracks.length) playList(shuffle ? shuffled(a.tracks) : a.tracks, 0)
+  } catch (e) {
+    showToast(String(e))
+  }
+}
+
+export async function playArtistRadio(id: string, name: string) {
+  player.loading = true
+  showToast(`Starting ${name} radio`)
+  try {
+    await api.playArtistRadio(id)
+  } catch (e) {
+    player.loading = false
+    showToast(String(e))
+  }
+}
+
+export function shuffled<T>(list: T[]): T[] {
+  const t = [...list]
+  for (let i = t.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[t[i], t[j]] = [t[j], t[i]]
+  }
+  return t
 }
 
 export function setTheme(t: ThemePref) {
@@ -286,9 +369,7 @@ export async function refreshPlaylists() {
 }
 
 export function openPlaylist(id: number) {
-  ui.playlistId = id
-  save('hum.playlistId', id)
-  go('playlist')
+  navigate({ view: 'playlist', playlistId: id })
 }
 
 export function openLiked() {

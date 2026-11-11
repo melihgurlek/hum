@@ -56,6 +56,84 @@ fn sized(url: &str, px: u32) -> String {
     }
 }
 
+/// Same as [`sized`], for a non-square image (artist banners).
+fn sized_wh(url: &str, w: u32, h: u32) -> String {
+    match url.rfind('=') {
+        Some(i) if url[i..].starts_with("=w") => format!("{}=w{w}-h{h}-p-l90-rj", &url[..i]),
+        _ => url.to_string(),
+    }
+}
+
+fn best_thumb(thumbs: &[ytmusic::Thumbnail]) -> Option<&str> {
+    thumbs.iter().max_by_key(|th| th.width).map(|th| th.url.as_str())
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ArtistLink {
+    pub name: String,
+    pub id: Option<String>,
+}
+
+impl From<ytmusic::ArtistRef> for ArtistLink {
+    fn from(a: ytmusic::ArtistRef) -> Self {
+        ArtistLink { name: a.name, id: a.id }
+    }
+}
+
+/// An album or single, as a card on an artist page.
+#[derive(Clone, Debug, Serialize)]
+pub struct AlbumCard {
+    pub id: String,
+    pub title: String,
+    /// "Album", "Single", "EP" or "Compilation".
+    pub kind: &'static str,
+    pub year: Option<i32>,
+    pub artists: Vec<ArtistLink>,
+    pub thumb: Option<String>,
+}
+
+fn kind_name(k: ytmusic::AlbumKind) -> &'static str {
+    match k {
+        ytmusic::AlbumKind::Album => "Album",
+        ytmusic::AlbumKind::Single => "Single",
+        ytmusic::AlbumKind::Ep => "EP",
+        ytmusic::AlbumKind::Compilation => "Compilation",
+    }
+}
+
+impl AlbumCard {
+    fn from_ytm(a: ytmusic::Album) -> AlbumCard {
+        AlbumCard {
+            thumb: best_thumb(&a.thumbnails).map(|u| sized(u, 352)),
+            id: a.browse_id,
+            title: a.title,
+            kind: kind_name(a.kind),
+            year: a.year,
+            artists: a.artists.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ArtistPage {
+    pub id: String,
+    pub name: String,
+    pub subscribers: Option<String>,
+    /// Wide header image, when the artist has one.
+    pub banner: Option<String>,
+    pub top: Vec<Track>,
+    pub albums: Vec<AlbumCard>,
+    pub singles: Vec<AlbumCard>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct AlbumPage {
+    pub card: AlbumCard,
+    /// Cover sized for the page header.
+    pub cover: Option<String>,
+    pub tracks: Vec<Track>,
+}
+
 impl Track {
     fn from_ytm(t: ytmusic::Track) -> Option<Track> {
         let id = t.video_id?;
@@ -122,6 +200,63 @@ impl Source {
     pub async fn radio(&self, video_id: &str) -> Result<Vec<Track>> {
         let res = self.ytm.track_radio(video_id).await?;
         Ok(res.into_iter().filter_map(Track::from_ytm).collect())
+    }
+
+    pub async fn artist(&self, id: &str) -> Result<ArtistPage> {
+        let a = self.ytm.artist(id).await?;
+        Ok(ArtistPage {
+            id: a.browse_id,
+            name: a.name,
+            subscribers: a.subscribers,
+            banner: best_thumb(&a.thumbnails).map(|u| sized_wh(u, 1440, 600)),
+            top: a.top_tracks.into_iter().filter_map(Track::from_ytm).collect(),
+            albums: a.albums.into_iter().map(AlbumCard::from_ytm).collect(),
+            singles: a.singles.into_iter().map(AlbumCard::from_ytm).collect(),
+        })
+    }
+
+    pub async fn album(&self, id: &str) -> Result<AlbumPage> {
+        let d = self.ytm.album(id).await?;
+        let cover = best_thumb(&d.album.thumbnails).map(|u| sized(u, 544));
+        Ok(AlbumPage {
+            cover,
+            card: AlbumCard::from_ytm(d.album),
+            tracks: d.tracks.into_iter().filter_map(Track::from_ytm).collect(),
+        })
+    }
+
+    /// The artist's own Mix: their songs with similar artists between, as YouTube Music's
+    /// Radio button on the artist page plays it.
+    pub async fn artist_radio(&self, id: &str) -> Result<Vec<Track>> {
+        use ytmusic::Client;
+        let page = self
+            .ytm
+            .execute("browse", Client::Music, serde_json::json!({ "browseId": id }))
+            .await?;
+        let endpoint = find_key(&page, "startRadioButton")
+            .and_then(|b| find_key(b, "watchEndpoint"))
+            .ok_or_else(|| anyhow::anyhow!("this artist has no radio"))?;
+        let mut body = serde_json::json!({
+            "playlistId": endpoint["playlistId"],
+            "enablePersistentPlaylistPanel": true,
+            "isAudioOnly": true,
+        });
+        for k in ["videoId", "params"] {
+            if let Some(v) = endpoint.get(k) {
+                body[k] = v.clone();
+            }
+        }
+        let next = self.ytm.execute("next", Client::Music, body).await?;
+        let mut tracks = Vec::new();
+        for panel in ytmusic::parse::find_renderers(&next, "playlistPanelRenderer") {
+            for item in panel.get("contents").and_then(|c| c.as_array()).into_iter().flatten() {
+                if let Some(t) = ytmusic::parse::panel_track(item).and_then(Track::from_ytm) {
+                    tracks.push(t);
+                }
+            }
+        }
+        anyhow::ensure!(!tracks.is_empty(), "this artist's radio is empty");
+        Ok(tracks)
     }
 
     /// YouTube Music's own (plain, unsynced) lyrics: the watch page's Lyrics tab.

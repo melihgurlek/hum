@@ -34,6 +34,23 @@ async fn radio(app: State<'_, App>, id: String) -> Res<Vec<Track>> {
 }
 
 #[tauri::command]
+async fn artist(app: State<'_, App>, id: String) -> Res<hum_core::source::ArtistPage> {
+    app.engine.source().artist(&id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn album(app: State<'_, App>, id: String) -> Res<hum_core::source::AlbumPage> {
+    app.engine.source().album(&id).await.map_err(err)
+}
+
+/// Play the artist's Mix. Autoplay keeps it going from the last song like any other queue.
+#[tauri::command]
+async fn play_artist_radio(app: State<'_, App>, id: String) -> Res<()> {
+    let tracks = app.engine.source().artist_radio(&id).await.map_err(err)?;
+    app.engine.play(tracks, 0).await.map_err(err)
+}
+
+#[tauri::command]
 async fn play(app: State<'_, App>, tracks: Vec<Track>, index: usize) -> Res<()> {
     app.engine.play(tracks, index).await.map_err(err)
 }
@@ -403,6 +420,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             search,
             radio,
+            artist,
+            album,
+            play_artist_radio,
             play,
             play_radio,
             next,

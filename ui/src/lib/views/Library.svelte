@@ -57,7 +57,7 @@
   {:else if history.length}
     <div class="list">
       {#each history as h, i (h.played_at + h.track.id)}
-        <TrackRow track={h.track} detail={`${h.track.artists.join(', ')}, ${when(h.played_at)}${outcomeText[h.outcome]}`}
+        <TrackRow track={h.track} suffix={`, ${when(h.played_at)}${outcomeText[h.outcome]}`}
           onplay={() => playList(historyTracks, i)} />
       {/each}
     </div>

@@ -6,6 +6,7 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #12 | Artist and album pages: top songs, albums, singles, the artist's own Radio (YouTube Music's Mix); artist names and albums are links everywhere (rows, player bar, Now Playing, search); Back button, Alt+Left and mouse back |
 | #10 | Playlists: create from the sidebar or the add menu, inline rename, drag to reorder, remove, delete; add songs with the hover +, right-click, or from Now Playing |
 | #8 | Now Playing background picks the cover's real color, not tinted black (Relapse was green) |
 | #7 | Synced lyrics: LRCLIB, YouTube Music fallback, cached; click a line to seek |
@@ -19,10 +20,9 @@ Updated in every PR. Newest done items at the top of each section.
 
 ## Next
 
-1. **Artist and album pages**: top songs, albums, singles, artist radio; clicking an artist or album name anywhere opens them.
-2. **Auto quality that reacts**: step down when mpv stalls for cache; "data used" counter in Settings.
-3. **Windows build** in GitHub Actions (bundle libmpv DLL), smoke-tested.
-4. **Google sign-in** (webview cookie login) to sync likes and playlists with MetroList.
+1. **Auto quality that reacts**: step down when mpv stalls for cache; "data used" counter in Settings.
+2. **Windows build** in GitHub Actions (bundle libmpv DLL), smoke-tested.
+3. **Google sign-in** (webview cookie login) to sync likes and playlists with MetroList.
 
 ## Later
 
@@ -34,6 +34,8 @@ Updated in every PR. Newest done items at the top of each section.
 
 ## Known issues
 
+- Artist top songs have no durations until played (YouTube Music doesn't list them there).
+- Only a song's first artist links to a page; YouTube Music's song lists carry one artist id.
 - Home recommendations start empty; they fill in as history builds up.
 - Auto quality currently always picks the best stream (no stepping down yet).
 - The dev app needs `~/.local/share/com.melihgurlek.hum/WebKitCache` cleared if the window

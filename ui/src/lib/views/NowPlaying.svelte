@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { api, artistLine, fmtTime, img, type TrackNote } from '../api'
-  import { player, ui, setAutoplay, toggleLike, reason, openAddMenu } from '../state.svelte'
+  import { api, artistLine, artistLinks, fmtTime, img, type TrackNote } from '../api'
+  import { player, ui, setAutoplay, toggleLike, reason, openAddMenu, openAlbum } from '../state.svelte'
+  import ArtistLinks from '../components/ArtistLinks.svelte'
   import Icon from '../components/Icon.svelte'
   import Progress from '../components/Progress.svelte'
   import Lyrics from '../components/Lyrics.svelte'
@@ -50,8 +51,11 @@
         <div class="meta">
           <div class="titles">
             <h1>{t.title}</h1>
-            <div class="artist">{artistLine(t)}</div>
-            {#if t.album}<div class="album">{t.album}</div>{/if}
+            <div class="artist"><ArtistLinks artists={artistLinks(t)} /></div>
+            {#if t.album}
+              {#if t.album_id}<button class="album album-link" onclick={() => openAlbum(t.album_id)}>{t.album}</button>
+              {:else}<div class="album">{t.album}</div>{/if}
+            {/if}
           </div>
           <button class="heart" class:on={player.liked} aria-pressed={player.liked}
             aria-label={player.liked ? 'Remove from Liked songs' : 'Add to Liked songs'} onclick={toggleLike}>
@@ -207,6 +211,17 @@
   .album {
     font-size: 14px;
     color: var(--np-muted);
+  }
+  .album-link {
+    display: block;
+    padding: 0;
+    text-align: left;
+    font: inherit;
+    font-size: 14px;
+  }
+  .album-link:hover,
+  .album-link:focus-visible {
+    text-decoration: underline;
   }
   .progress {
     display: flex;
