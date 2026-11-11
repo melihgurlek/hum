@@ -2,6 +2,8 @@
 
 use hum_core::color::{self, Palette};
 use hum_core::{Engine, Quality, Source, Track};
+mod media;
+
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
@@ -224,6 +226,14 @@ pub fn run() {
                     }
                 }
             });
+            #[cfg(windows)]
+            let hwnd = app
+                .get_webview_window("main")
+                .and_then(|w| w.hwnd().ok())
+                .map(|h| h.0 as usize);
+            #[cfg(not(windows))]
+            let hwnd = None;
+            media::spawn(app.handle().clone(), engine.clone(), hwnd);
             app.manage(App {
                 engine,
                 http: reqwest::Client::new(),

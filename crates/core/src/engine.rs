@@ -291,6 +291,20 @@ impl Engine {
         self.play_index(index).await
     }
 
+    pub fn set_paused(&self, paused: bool) {
+        self.0.player.send(Command::SetPaused(paused));
+    }
+
+    /// Last reported position, in seconds.
+    pub fn position(&self) -> f64 {
+        self.0.state.lock().unwrap().position
+    }
+
+    pub fn current(&self) -> Option<Track> {
+        let st = self.0.state.lock().unwrap();
+        st.queue.get(st.index).cloned()
+    }
+
     pub fn toggle_pause(&self) {
         self.0.player.send(Command::TogglePause);
     }
