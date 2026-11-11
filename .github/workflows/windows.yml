@@ -1,9 +1,18 @@
 name: Windows build
 
+# Private repo: Windows minutes count double against the free 2,000/month, so PRs build only
+# when they touch something that can break Windows. UI-only and docs changes skip it.
 on:
   push:
     branches: [main]
   pull_request:
+    paths:
+      - 'crates/**'
+      - 'src-tauri/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'ui/package*.json'
+      - '.github/workflows/windows.yml'
   workflow_dispatch:
 
 concurrency:
@@ -63,9 +72,15 @@ jobs:
         run: npm ci
         working-directory: ui
 
+      # PRs only need "does it build and start"; the installer is made on main (and on demand).
       - name: Build
         shell: pwsh
-        run: ui/node_modules/.bin/tauri.cmd build
+        run: |
+          if ('${{ github.event_name }}' -eq 'pull_request') {
+            ui/node_modules/.bin/tauri.cmd build --no-bundle
+          } else {
+            ui/node_modules/.bin/tauri.cmd build
+          }
 
       # The runner can't hear anything, so: does the app start, load mpv and the webview, and
       # stay up without errors? A missing DLL or a webview failure shows up here.
@@ -86,9 +101,12 @@ jobs:
           if ($text -notmatch 'source warm') { throw "the engine never started (no 'source warm' line)" }
 
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
         with:
           name: hum-windows-x64
           path: |
             target/release/bundle/nsis/*.exe
             mpv/VERSION.txt
           if-no-files-found: error
+          # Artifact storage is 500 MB on the free plan; installers are ~40 MB each.
+          retention-days: 7
