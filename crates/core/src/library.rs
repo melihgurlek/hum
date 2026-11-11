@@ -101,6 +101,12 @@ pub struct Playlist {
     pub tracks: Vec<Track>,
 }
 
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+pub struct DataUsed {
+    pub month: u64,
+    pub total: u64,
+}
+
 #[derive(Clone)]
 pub struct Library {
     db: Arc<Mutex<Connection>>,
@@ -153,11 +159,38 @@ impl Library {
              CREATE TABLE IF NOT EXISTS likes (
                  track_id TEXT PRIMARY KEY REFERENCES tracks(id),
                  liked_at INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS data_used (
+                 month TEXT PRIMARY KEY,
+                 bytes INTEGER NOT NULL
              );",
         )?;
         Ok(Library {
             db: Arc::new(Mutex::new(db)),
         })
+    }
+
+    /// Add downloaded audio bytes to this month's total (local time).
+    pub fn add_data_used(&self, bytes: u64) -> Result<()> {
+        self.db.lock().unwrap().execute(
+            "INSERT INTO data_used (month, bytes) VALUES (strftime('%Y-%m', 'now', 'localtime'), ?1)
+             ON CONFLICT(month) DO UPDATE SET bytes = bytes + ?1",
+            params![bytes as i64],
+        )?;
+        Ok(())
+    }
+
+    /// Audio bytes downloaded this month and in all.
+    pub fn data_used(&self) -> Result<DataUsed> {
+        let db = self.db.lock().unwrap();
+        let (month, total) = db.query_row(
+            "SELECT COALESCE(SUM(CASE WHEN month = strftime('%Y-%m', 'now', 'localtime') THEN bytes END), 0),
+                    COALESCE(SUM(bytes), 0)
+             FROM data_used",
+            [],
+            |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
+        )?;
+        Ok(DataUsed { month: month as u64, total: total as u64 })
     }
 
     /// In-memory, for tests.
@@ -730,5 +763,15 @@ mod tests {
         assert_eq!(lib.top_tracks(5).unwrap()[0].id, "l");
         lib.set_liked(&t, false).unwrap();
         assert!(!lib.is_liked("l").unwrap());
+    }
+
+    #[test]
+    fn data_used_adds_up_per_month() {
+        let l = Library::memory().unwrap();
+        assert_eq!(l.data_used().unwrap(), DataUsed { month: 0, total: 0 });
+        l.add_data_used(1_000).unwrap();
+        l.add_data_used(500).unwrap();
+        l.db.lock().unwrap().execute("INSERT INTO data_used VALUES ('2001-01', 7)", []).unwrap();
+        assert_eq!(l.data_used().unwrap(), DataUsed { month: 1_500, total: 1_507 });
     }
 }

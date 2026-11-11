@@ -32,6 +32,8 @@ class Player {
   palette = $state<Palette | null>(null)
   liked = $state(false)
   loading = $state(false)
+  /** Auto quality stepped down to data saver because the connection stalled. */
+  autoLow = $state(false)
 
   upNext = $derived(this.queue.slice(this.index + 1))
 }
@@ -41,7 +43,8 @@ class Ui {
   nowPlayingOpen = $state(false)
   query = $state('')
   theme = $state<ThemePref>(load<ThemePref>('hum.theme', 'system'))
-  quality = $state<Quality>(load<Quality>('hum.quality', 'auto'))
+  // 'normal' was the same stream as 'high' and is gone from Settings.
+  quality = $state<Quality>(load<Quality>('hum.quality', 'auto') === 'normal' ? 'high' : load<Quality>('hum.quality', 'auto'))
   autoplay = $state(load('hum.autoplay', true))
   toast = $state<string | null>(null)
   playlistId = $state<number | null>(load<number | null>('hum.playlistId', null))
@@ -280,6 +283,10 @@ export async function startListening() {
       case 'timing':
         player.lastTiming = { ms: u.ms, cached: u.cached }
         player.loading = false
+        break
+      case 'auto_quality':
+        player.autoLow = u.low
+        if (u.low) showToast('Slow connection: switched to lower sound quality')
         break
       case 'error':
         showToast(u.message)

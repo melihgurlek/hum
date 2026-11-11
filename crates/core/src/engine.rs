@@ -6,9 +6,9 @@
 //! - No lock is held across an `.await`.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use serde::Serialize;
@@ -21,6 +21,14 @@ use crate::source::{Quality, Source, Stream, Track};
 /// Fetch more radio when fewer than this many tracks are left after the current one.
 const RADIO_LOOKAHEAD: usize = 10;
 
+/// Auto steps down after this many stalls within `STALL_WINDOW`. One stall can be a blip.
+const STALLS_TO_STEP_DOWN: usize = 2;
+const STALL_WINDOW: Duration = Duration::from_secs(120);
+/// Auto tries the best quality again after this long without a stall.
+const STEP_UP_AFTER: Duration = Duration::from_secs(15 * 60);
+/// Downloaded bytes are written to the library in batches of at least this much.
+const DATA_FLUSH_BYTES: u64 = 1 << 20;
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Update {
@@ -32,6 +40,8 @@ pub enum Update {
     /// Click to first audio, in ms. The number the whole app is judged by.
     Timing { video_id: String, ms: u64, cached: bool },
     Error { message: String },
+    /// Auto quality stepped down (`low`) because the connection stalled, or back up.
+    AutoQuality { low: bool },
 }
 
 struct State {
@@ -63,10 +73,21 @@ struct Inner {
     state: Mutex<State>,
     streams: Mutex<HashMap<String, Stream>>,
     quality: AtomicU8,
+    auto: Mutex<AutoState>,
+    /// Downloaded bytes not yet written to the library.
+    data_pending: AtomicU64,
     updates: broadcast::Sender<Update>,
     /// The runtime `start` ran in. Callers may be on threads without one (sync Tauri commands).
     rt: tokio::runtime::Handle,
     library: Option<Library>,
+}
+
+/// What Auto quality has learned about the connection this session.
+#[derive(Default)]
+struct AutoState {
+    /// When Auto stepped down to data-saver streams, if it has.
+    low_since: Option<Instant>,
+    stalls: Vec<Instant>,
 }
 
 #[derive(Clone)]
@@ -110,6 +131,8 @@ impl Engine {
             }),
             streams: Mutex::new(HashMap::new()),
             quality: AtomicU8::new(3),
+            auto: Mutex::new(AutoState::default()),
+            data_pending: AtomicU64::new(0),
             updates,
             rt: tokio::runtime::Handle::current(),
             library,
@@ -127,6 +150,7 @@ impl Engine {
 
     /// Record the play in progress, if any.
     fn finish_play(&self) {
+        self.flush_data(0);
         let rec = self.0.state.lock().unwrap().playing.take();
         let (Some(rec), Some(lib)) = (rec, self.0.library.clone()) else { return };
         if rec.position < 1.0 {
@@ -158,6 +182,20 @@ impl Engine {
         quality_from(self.0.quality.load(Ordering::Relaxed))
     }
 
+    /// The quality streams are resolved at: Auto is High until the connection stalls.
+    fn effective_quality(&self) -> Quality {
+        match self.quality() {
+            Quality::Auto if self.0.auto.lock().unwrap().low_since.is_some() => Quality::DataSaver,
+            Quality::Auto | Quality::Normal => Quality::High,
+            q => q,
+        }
+    }
+
+    /// Whether Auto is currently on data-saver streams because of stalls.
+    pub fn auto_low(&self) -> bool {
+        self.0.auto.lock().unwrap().low_since.is_some()
+    }
+
     pub fn set_quality(&self, q: Quality) {
         let v = match q {
             Quality::DataSaver => 0,
@@ -181,7 +219,7 @@ impl Engine {
                 return Ok((s.clone(), true));
             }
         }
-        let s = self.0.source.resolve(id, self.quality()).await?;
+        let s = self.0.source.resolve(id, self.effective_quality()).await?;
         self.0
             .streams
             .lock()
@@ -245,6 +283,7 @@ impl Engine {
 
     /// Background work once a track is (about to be) playing: radio top-up and prefetch.
     fn after_track_change(&self) {
+        self.maybe_step_up();
         let e = self.clone();
         self.0.rt.spawn(async move {
             e.top_up_radio().await;
@@ -382,6 +421,13 @@ impl Engine {
                     self.emit(Update::Duration { secs });
                 }
                 PlayerEvent::Paused(paused) => self.emit(Update::Paused { paused }),
+                PlayerEvent::Stalled => self.on_stall().await,
+                PlayerEvent::Downloaded(bytes) => {
+                    let pending = self.0.data_pending.fetch_add(bytes, Ordering::Relaxed) + bytes;
+                    if pending >= DATA_FLUSH_BYTES {
+                        self.flush_data(DATA_FLUSH_BYTES);
+                    }
+                }
                 PlayerEvent::Idle => {
                     self.finish_play();
                     // Reached the end with nothing prefetched: try the next item.
@@ -456,6 +502,72 @@ impl Engine {
         if let Some((track, index)) = advanced {
             self.emit(Update::NowPlaying { track, index });
             self.after_track_change();
+        }
+    }
+
+    /// Write downloaded bytes to the library once at least `min` are pending.
+    fn flush_data(&self, min: u64) {
+        let Some(lib) = self.0.library.clone() else { return };
+        if self.0.data_pending.load(Ordering::Relaxed) < min.max(1) {
+            return;
+        }
+        let bytes = self.0.data_pending.swap(0, Ordering::Relaxed);
+        self.0.rt.spawn(async move {
+            if let Err(e) = lib.run(move |l| l.add_data_used(bytes)).await {
+                log::warn!("recording data used: {e:#}");
+            }
+        });
+    }
+
+    /// Playback waited for the network. On Auto, the second stall in a short while switches to
+    /// data-saver streams, starting with the current song at the same spot.
+    async fn on_stall(&self) {
+        let step_down = {
+            let mut auto = self.0.auto.lock().unwrap();
+            let now = Instant::now();
+            auto.stalls.retain(|t| now.duration_since(*t) < STALL_WINDOW);
+            auto.stalls.push(now);
+            log::info!("stalled for cache ({} recently)", auto.stalls.len());
+            let step = self.quality() == Quality::Auto
+                && auto.low_since.is_none()
+                && auto.stalls.len() >= STALLS_TO_STEP_DOWN;
+            if step {
+                auto.low_since = Some(now);
+            }
+            step
+        };
+        if !step_down {
+            return;
+        }
+        log::info!("auto quality: stepping down to data saver");
+        self.0.streams.lock().unwrap().clear();
+        self.emit(Update::AutoQuality { low: true });
+        let (track, at) = {
+            let mut st = self.0.state.lock().unwrap();
+            st.next_loaded = None;
+            (st.queue.get(st.index).cloned(), st.position)
+        };
+        if let Some(track) = track {
+            match self.stream(&track.id).await {
+                Ok((s, _)) => self.0.player.send(Command::Reload(s, at)),
+                Err(e) => log::warn!("reloading {} at lower quality: {e:#}", track.id),
+            }
+        }
+        self.after_track_change();
+    }
+
+    /// After a long enough calm on data-saver streams, Auto tries the best quality again.
+    fn maybe_step_up(&self) {
+        let mut auto = self.0.auto.lock().unwrap();
+        let calm = |t: &Instant| t.elapsed() >= STEP_UP_AFTER;
+        let ready = auto.low_since.as_ref().is_some_and(calm) && auto.stalls.iter().all(calm);
+        if ready {
+            auto.low_since = None;
+            auto.stalls.clear();
+            drop(auto);
+            log::info!("auto quality: trying the best quality again");
+            self.0.streams.lock().unwrap().clear();
+            self.emit(Update::AutoQuality { low: false });
         }
     }
 

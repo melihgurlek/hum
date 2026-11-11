@@ -33,6 +33,13 @@ async fn radio(app: State<'_, App>, id: String) -> Res<Vec<Track>> {
     app.engine.source().radio(&id).await.map_err(err)
 }
 
+/// Audio downloaded this month and in all, plus whether Auto has stepped down.
+#[tauri::command]
+async fn data_used(app: State<'_, App>) -> Res<serde_json::Value> {
+    let used = lib(&app)?.run(|l| l.data_used()).await.map_err(err)?;
+    Ok(serde_json::json!({ "month": used.month, "total": used.total, "auto_low": app.engine.auto_low() }))
+}
+
 #[tauri::command]
 async fn artist(app: State<'_, App>, id: String) -> Res<hum_core::source::ArtistPage> {
     app.engine.source().artist(&id).await.map_err(err)
@@ -422,6 +429,7 @@ pub fn run() {
             radio,
             artist,
             album,
+            data_used,
             play_artist_radio,
             play,
             play_radio,
