@@ -15,6 +15,11 @@
 
   $effect(() => {
     const id = ui.playlistId
+    if (id != null) api.syncPlaylist(id).catch(() => {})
+  })
+  $effect(() => {
+    const id = ui.playlistId
+    void ui.synced
     if (id == null) return
     confirmDelete = false
     api.playlist(id).then((p) => {
@@ -115,7 +120,7 @@
           </button>
           {#if confirmDelete}
             <span class="confirm">
-              Delete “{pl.name}”?
+              Delete “{pl.name}”{pl.synced ? ' here and from YouTube Music' : ''}?
               <button class="danger" onclick={del}><span class="trim">Delete</span></button>
               <button class="secondary" onclick={() => (confirmDelete = false)}><span class="trim">Keep</span></button>
             </span>

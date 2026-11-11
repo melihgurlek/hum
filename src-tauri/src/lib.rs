@@ -3,6 +3,7 @@
 use hum_core::color::{self, Palette};
 use hum_core::library::{HistoryEntry, Playlist, PlaylistSummary, TrackNote};
 use hum_core::account::Profile;
+use hum_core::sync::Sync;
 use hum_core::{Account, Engine, Library, Quality, Source, Track};
 mod media;
 
@@ -17,6 +18,18 @@ struct App {
     engine: Engine,
     http: reqwest::Client,
     account: Arc<Account>,
+    sync: Option<Sync>,
+}
+
+struct SyncEvents(tauri::AppHandle);
+
+impl hum_core::sync::Events for SyncEvents {
+    fn changed(&self) {
+        let _ = self.0.emit("hum://library", ());
+    }
+    fn failed(&self, what: &str, error: &anyhow::Error) {
+        let _ = self.0.emit("hum://sync-error", format!("Failed {what}: {error:#}"));
+    }
 }
 
 type Res<T> = Result<T, String>;
@@ -90,9 +103,32 @@ fn lib(app: &App) -> Res<Library> {
     app.engine.library().cloned().ok_or_else(|| "library unavailable".to_string())
 }
 
+/// A library change the account should hear about, run off the async runtime.
+async fn synced<T: Send + 'static>(
+    app: &App,
+    f: impl FnOnce(&Sync) -> anyhow::Result<T> + Send + 'static,
+) -> Res<T> {
+    let sync = app.sync.clone().ok_or_else(|| "library unavailable".to_string())?;
+    tokio::task::spawn_blocking(move || f(&sync)).await.map_err(err)?.map_err(err)
+}
+
+#[tauri::command]
+fn sync_likes(app: State<'_, App>) {
+    if let Some(s) = &app.sync {
+        s.pull_likes();
+    }
+}
+
+#[tauri::command]
+fn sync_playlist(app: State<'_, App>, id: i64) {
+    if let Some(s) = &app.sync {
+        s.refresh_playlist(id);
+    }
+}
+
 #[tauri::command]
 async fn set_liked(app: State<'_, App>, track: Track, liked: bool) -> Res<()> {
-    lib(&app)?.run(move |l| l.set_liked(&track, liked)).await.map_err(err)
+    synced(&app, move |s| s.set_liked(&track, liked)).await
 }
 
 #[tauri::command]
@@ -201,40 +237,33 @@ async fn playlist(app: State<'_, App>, id: i64) -> Res<Option<Playlist>> {
 /// Create a playlist, optionally with songs already in it. Returns its id.
 #[tauri::command]
 async fn create_playlist(app: State<'_, App>, name: String, tracks: Vec<Track>) -> Res<i64> {
-    lib(&app)?
-        .run(move |l| {
-            let id = l.create_playlist(&name)?;
-            l.add_to_playlist(id, &tracks)?;
-            Ok(id)
-        })
-        .await
-        .map_err(err)
+    synced(&app, move |s| s.create_playlist(&name, &tracks)).await
 }
 
 #[tauri::command]
 async fn rename_playlist(app: State<'_, App>, id: i64, name: String) -> Res<()> {
-    lib(&app)?.run(move |l| l.rename_playlist(id, &name)).await.map_err(err)
+    synced(&app, move |s| s.rename_playlist(id, &name)).await
 }
 
 #[tauri::command]
 async fn delete_playlist(app: State<'_, App>, id: i64) -> Res<()> {
-    lib(&app)?.run(move |l| l.delete_playlist(id)).await.map_err(err)
+    synced(&app, move |s| s.delete_playlist(id)).await
 }
 
 /// Returns how many songs were new to the playlist.
 #[tauri::command]
 async fn add_to_playlist(app: State<'_, App>, id: i64, tracks: Vec<Track>) -> Res<usize> {
-    lib(&app)?.run(move |l| l.add_to_playlist(id, &tracks)).await.map_err(err)
+    synced(&app, move |s| s.add_to_playlist(id, &tracks)).await
 }
 
 #[tauri::command]
 async fn remove_from_playlist(app: State<'_, App>, id: i64, index: usize) -> Res<()> {
-    lib(&app)?.run(move |l| l.remove_from_playlist(id, index)).await.map_err(err)
+    synced(&app, move |s| s.remove_from_playlist(id, index)).await
 }
 
 #[tauri::command]
 async fn move_in_playlist(app: State<'_, App>, id: i64, from: usize, to: usize) -> Res<()> {
-    lib(&app)?.run(move |l| l.move_in_playlist(id, from, to)).await.map_err(err)
+    synced(&app, move |s| s.move_in_playlist(id, from, to)).await
 }
 
 #[tauri::command]
@@ -343,6 +372,9 @@ async fn sign_in(handle: tauri::AppHandle) -> Res<()> {
                 tauri::async_runtime::block_on(async move {
                     match account.sign_in(&header).await {
                         Ok(profile) => {
+                            if let Some(s) = &handle.state::<App>().sync {
+                                s.pull();
+                            }
                             let _ = handle.emit("hum://account", Some(profile));
                             let _ = window.close();
                         }
@@ -505,10 +537,18 @@ pub fn run() {
                     tokio::time::sleep(std::time::Duration::from_secs(10 * 60)).await;
                 }
             });
+            let events = Arc::new(SyncEvents(app.handle().clone()));
+            let sync = engine.library().cloned().map(|lib| {
+                tauri::async_runtime::block_on(async { Sync::start(lib, account.clone(), events) })
+            });
+            if let Some(s) = &sync {
+                s.pull();
+            }
             app.manage(App {
                 engine,
                 http: reqwest::Client::new(),
                 account,
+                sync,
             });
             Ok(())
         })
@@ -551,6 +591,8 @@ pub fn run() {
             remove_from_playlist,
             move_in_playlist,
             account,
+            sync_likes,
+            sync_playlist,
             sign_in,
             sign_out,
             ui_log

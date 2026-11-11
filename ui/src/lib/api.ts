@@ -20,7 +20,7 @@ export interface LyricLine { at: number; text: string }
 export interface Lyrics { lines: LyricLine[] | null; plain: string | null; source: string }
 
 export interface PlaylistSummary { id: number; name: string; count: number; covers: string[] }
-export interface Playlist { id: number; name: string; tracks: Track[] }
+export interface Playlist { id: number; name: string; tracks: Track[]; synced: boolean }
 
 export interface ArtistLink { name: string; id: string | null }
 export interface AlbumCard { id: string; title: string; kind: string; year: number | null; artists: ArtistLink[]; thumb: string | null }
@@ -87,6 +87,13 @@ export const api = {
   account: () => invoke<Profile | null>('account'),
   signIn: () => invoke<void>('sign_in'),
   signOut: () => invoke<void>('sign_out'),
+  syncLikes: () => invoke<void>('sync_likes'),
+  syncPlaylist: (id: number) => invoke<void>('sync_playlist', { id }),
+}
+
+/** The account changed likes or playlists here; or a sync failed. */
+export function onSync(changed: () => void, failed: (msg: string) => void): Promise<UnlistenFn[]> {
+  return Promise.all([listen('hum://library', () => changed()), listen<string>('hum://sync-error', (e) => failed(e.payload))])
 }
 
 export interface Profile { name: string; email: string | null; photo: string | null }

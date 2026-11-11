@@ -8,6 +8,7 @@ pub mod library;
 pub mod lyrics;
 pub mod player;
 pub mod source;
+pub mod sync;
 
 pub use account::Account;
 pub use engine::{Engine, Update};

@@ -151,7 +151,7 @@ pub struct AlbumPage {
 }
 
 impl Track {
-    fn from_ytm(t: ytmusic::Track) -> Option<Track> {
+    pub(crate) fn from_ytm(t: ytmusic::Track) -> Option<Track> {
         let id = t.video_id?;
         let best = t
             .thumbnails
