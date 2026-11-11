@@ -1,9 +1,8 @@
 <script lang="ts">
   import { api, type HistoryEntry, type Track } from '../api'
-  import { playList, player } from '../state.svelte'
+  import { playList, player, ui } from '../state.svelte'
   import TrackRow from '../components/TrackRow.svelte'
 
-  let tab = $state<'liked' | 'history'>('liked')
   let liked = $state<Track[]>([])
   let history = $state<HistoryEntry[]>([])
   let loaded = $state(false)
@@ -37,15 +36,15 @@
 <div class="page scroll">
   <h1>Library</h1>
   <div class="tabs" role="tablist">
-    <button role="tab" aria-selected={tab === 'liked'} class:sel={tab === 'liked'} onclick={() => (tab = 'liked')}>
+    <button role="tab" aria-selected={ui.libraryTab === 'liked'} class:sel={ui.libraryTab === 'liked'} onclick={() => (ui.libraryTab = 'liked')}>
       <span class="trim">Liked songs{liked.length ? ` (${liked.length})` : ''}</span>
     </button>
-    <button role="tab" aria-selected={tab === 'history'} class:sel={tab === 'history'} onclick={() => (tab = 'history')}>
+    <button role="tab" aria-selected={ui.libraryTab === 'history'} class:sel={ui.libraryTab === 'history'} onclick={() => (ui.libraryTab = 'history')}>
       <span class="trim">History</span>
     </button>
   </div>
 
-  {#if tab === 'liked'}
+  {#if ui.libraryTab === 'liked'}
     {#if liked.length}
       <div class="list">
         {#each liked as t, i (t.id)}

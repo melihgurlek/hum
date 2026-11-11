@@ -85,6 +85,22 @@ pub struct HistoryEntry {
     pub outcome: Outcome,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct PlaylistSummary {
+    pub id: i64,
+    pub name: String,
+    pub count: u32,
+    /// Up to four distinct covers, for the mosaic.
+    pub covers: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct Playlist {
+    pub id: i64,
+    pub name: String,
+    pub tracks: Vec<Track>,
+}
+
 #[derive(Clone)]
 pub struct Library {
     db: Arc<Mutex<Connection>>,
@@ -120,6 +136,19 @@ impl Library {
                  track_id TEXT PRIMARY KEY,
                  json TEXT,
                  fetched_at INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS playlists (
+                 id INTEGER PRIMARY KEY,
+                 name TEXT NOT NULL,
+                 created_at INTEGER NOT NULL,
+                 updated_at INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS playlist_tracks (
+                 playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+                 pos INTEGER NOT NULL,
+                 track_id TEXT NOT NULL REFERENCES tracks(id),
+                 added_at INTEGER NOT NULL,
+                 PRIMARY KEY (playlist_id, pos)
              );
              CREATE TABLE IF NOT EXISTS likes (
                  track_id TEXT PRIMARY KEY REFERENCES tracks(id),
@@ -203,6 +232,165 @@ impl Library {
             "INSERT OR REPLACE INTO lyrics (track_id, json, fetched_at) VALUES (?1, ?2, ?3)",
             params![id, json, now()],
         )?;
+        Ok(())
+    }
+
+    // ---- playlists -----------------------------------------------------------------------
+
+    pub fn create_playlist(&self, name: &str) -> Result<i64> {
+        let db = self.db.lock().unwrap();
+        let t = now();
+        db.execute(
+            "INSERT INTO playlists (name, created_at, updated_at) VALUES (?1, ?2, ?2)",
+            params![clean_name(name), t],
+        )?;
+        Ok(db.last_insert_rowid())
+    }
+
+    pub fn rename_playlist(&self, id: i64, name: &str) -> Result<()> {
+        self.db.lock().unwrap().execute(
+            "UPDATE playlists SET name = ?2, updated_at = ?3 WHERE id = ?1",
+            params![id, clean_name(name), now()],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_playlist(&self, id: i64) -> Result<()> {
+        let db = self.db.lock().unwrap();
+        db.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?1", params![id])?;
+        db.execute("DELETE FROM playlists WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    /// Playlists, most recently changed first.
+    pub fn playlists(&self) -> Result<Vec<PlaylistSummary>> {
+        let db = self.db.lock().unwrap();
+        let mut st = db.prepare(
+            "SELECT p.id, p.name, (SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id = p.id)
+             FROM playlists p ORDER BY p.updated_at DESC",
+        )?;
+        let rows: Vec<(i64, String, u32)> = st
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .flatten()
+            .collect();
+        let mut covers = db.prepare(
+            "SELECT t.json FROM playlist_tracks pt JOIN tracks t ON t.id = pt.track_id
+             WHERE pt.playlist_id = ?1 ORDER BY pt.pos LIMIT 24",
+        )?;
+        let mut out = Vec::new();
+        for (id, name, count) in rows {
+            let mut seen = Vec::<String>::new();
+            for j in covers.query_map(params![id], |r| r.get::<_, String>(0))?.flatten() {
+                if let Ok(t) = serde_json::from_str::<Track>(&j) {
+                    if let Some(c) = t.thumb.or(t.cover) {
+                        if !seen.contains(&c) {
+                            seen.push(c);
+                        }
+                    }
+                }
+                if seen.len() == 4 {
+                    break;
+                }
+            }
+            out.push(PlaylistSummary { id, name, count, covers: seen });
+        }
+        Ok(out)
+    }
+
+    pub fn playlist(&self, id: i64) -> Result<Option<Playlist>> {
+        let db = self.db.lock().unwrap();
+        let Some(name) = db
+            .query_row("SELECT name FROM playlists WHERE id = ?1", params![id], |r| r.get::<_, String>(0))
+            .optional()?
+        else {
+            return Ok(None);
+        };
+        let mut st = db.prepare(
+            "SELECT t.json FROM playlist_tracks pt JOIN tracks t ON t.id = pt.track_id
+             WHERE pt.playlist_id = ?1 ORDER BY pt.pos",
+        )?;
+        let tracks = st
+            .query_map(params![id], |r| r.get::<_, String>(0))?
+            .filter_map(|j| j.ok().and_then(|j| serde_json::from_str(&j).ok()))
+            .collect();
+        Ok(Some(Playlist { id, name, tracks }))
+    }
+
+    /// Append tracks, skipping ones already in the playlist. Returns how many were added.
+    pub fn add_to_playlist(&self, id: i64, tracks: &[Track]) -> Result<usize> {
+        let mut db = self.db.lock().unwrap();
+        let tx = db.transaction()?;
+        let mut next: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(pos) + 1, 0) FROM playlist_tracks WHERE playlist_id = ?1",
+            params![id],
+            |r| r.get(0),
+        )?;
+        let mut added = 0;
+        for t in tracks {
+            let exists: bool = tx
+                .prepare_cached("SELECT 1 FROM playlist_tracks WHERE playlist_id = ?1 AND track_id = ?2")?
+                .exists(params![id, t.id])?;
+            if exists {
+                continue;
+            }
+            Self::upsert_track(&tx, t)?;
+            tx.execute(
+                "INSERT INTO playlist_tracks (playlist_id, pos, track_id, added_at) VALUES (?1, ?2, ?3, ?4)",
+                params![id, next, t.id, now()],
+            )?;
+            next += 1;
+            added += 1;
+        }
+        tx.execute("UPDATE playlists SET updated_at = ?2 WHERE id = ?1", params![id, now()])?;
+        tx.commit()?;
+        Ok(added)
+    }
+
+    /// Remove the song at `index` (0-based, in playlist order).
+    pub fn remove_from_playlist(&self, id: i64, index: usize) -> Result<()> {
+        let mut ids = self.track_ids(id)?;
+        if index < ids.len() {
+            ids.remove(index);
+            self.rewrite_order(id, &ids)?;
+        }
+        Ok(())
+    }
+
+    /// Move the song at `from` to `to` (0-based, in playlist order).
+    pub fn move_in_playlist(&self, id: i64, from: usize, to: usize) -> Result<()> {
+        let mut ids = self.track_ids(id)?;
+        if from < ids.len() && to < ids.len() && from != to {
+            let t = ids.remove(from);
+            ids.insert(to, t);
+            self.rewrite_order(id, &ids)?;
+        }
+        Ok(())
+    }
+
+    fn track_ids(&self, id: i64) -> Result<Vec<(String, i64)>> {
+        let db = self.db.lock().unwrap();
+        let mut st = db.prepare(
+            "SELECT track_id, added_at FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY pos",
+        )?;
+        let v = st
+            .query_map(params![id], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .flatten()
+            .collect();
+        Ok(v)
+    }
+
+    fn rewrite_order(&self, id: i64, ids: &[(String, i64)]) -> Result<()> {
+        let mut db = self.db.lock().unwrap();
+        let tx = db.transaction()?;
+        tx.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?1", params![id])?;
+        for (pos, (track, added)) in ids.iter().enumerate() {
+            tx.execute(
+                "INSERT INTO playlist_tracks (playlist_id, pos, track_id, added_at) VALUES (?1, ?2, ?3, ?4)",
+                params![id, pos as i64, track, added],
+            )?;
+        }
+        tx.execute("UPDATE playlists SET updated_at = ?2 WHERE id = ?1", params![id, now()])?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -420,6 +608,11 @@ impl Library {
     }
 }
 
+fn clean_name(name: &str) -> String {
+    let n = name.trim();
+    if n.is_empty() { "New playlist".to_string() } else { n.chars().take(100).collect() }
+}
+
 fn artist_key(t: &Track) -> String {
     t.artist_id
         .clone()
@@ -502,6 +695,29 @@ mod tests {
         let ff = lib.forgotten_favorites(30, 10).unwrap();
         assert_eq!(ff.len(), 1);
         assert_eq!(ff[0].0.id, "f");
+    }
+
+    #[test]
+    fn playlists_add_dedupe_move_remove() {
+        let lib = Library::memory().unwrap();
+        let id = lib.create_playlist("  Night drive ").unwrap();
+        let (a, b, c) = (track("a", "x"), track("b", "y"), track("c", "z"));
+        assert_eq!(lib.add_to_playlist(id, &[a.clone(), b.clone()]).unwrap(), 2);
+        assert_eq!(lib.add_to_playlist(id, &[b.clone(), c.clone()]).unwrap(), 1);
+        let ids = |l: &Library| -> Vec<String> {
+            l.playlist(id).unwrap().unwrap().tracks.into_iter().map(|t| t.id).collect()
+        };
+        assert_eq!(ids(&lib), ["a", "b", "c"]);
+        lib.move_in_playlist(id, 2, 0).unwrap();
+        assert_eq!(ids(&lib), ["c", "a", "b"]);
+        lib.remove_from_playlist(id, 1).unwrap();
+        assert_eq!(ids(&lib), ["c", "b"]);
+        let list = lib.playlists().unwrap();
+        assert_eq!((list[0].name.as_str(), list[0].count), ("Night drive", 2));
+        lib.rename_playlist(id, "").unwrap();
+        assert_eq!(lib.playlist(id).unwrap().unwrap().name, "New playlist");
+        lib.delete_playlist(id).unwrap();
+        assert!(lib.playlist(id).unwrap().is_none());
     }
 
     #[test]

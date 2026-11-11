@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, artistLine, fmtTime, img, type TrackNote } from '../api'
-  import { player, ui, setAutoplay, toggleLike, reason } from '../state.svelte'
+  import { player, ui, setAutoplay, toggleLike, reason, openAddMenu } from '../state.svelte'
   import Icon from '../components/Icon.svelte'
   import Progress from '../components/Progress.svelte'
   import Lyrics from '../components/Lyrics.svelte'
@@ -56,6 +56,9 @@
           <button class="heart" class:on={player.liked} aria-pressed={player.liked}
             aria-label={player.liked ? 'Remove from Liked songs' : 'Add to Liked songs'} onclick={toggleLike}>
             <Icon name={player.liked ? 'heart' : 'heartOutline'} size={24} />
+          </button>
+          <button class="heart" aria-label="Add to playlist" title="Add to playlist" onclick={(e) => openAddMenu([t], e)}>
+            <Icon name="plus" size={24} />
           </button>
         </div>
         <div class="progress">

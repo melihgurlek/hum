@@ -1,6 +1,6 @@
-import { api, onUpdate, type Palette, type Quality, type Track } from './api'
+import { api, onUpdate, type Palette, type PlaylistSummary, type Quality, type Track } from './api'
 
-export type View = 'home' | 'search' | 'library' | 'settings'
+export type View = 'home' | 'search' | 'library' | 'settings' | 'playlist'
 export type ThemePref = 'system' | 'dark' | 'light'
 
 function load<T>(key: string, fallback: T): T {
@@ -44,6 +44,13 @@ class Ui {
   quality = $state<Quality>(load<Quality>('hum.quality', 'auto'))
   autoplay = $state(load('hum.autoplay', true))
   toast = $state<string | null>(null)
+  playlistId = $state<number | null>(load<number | null>('hum.playlistId', null))
+  playlists = $state<PlaylistSummary[]>([])
+  libraryTab = $state<'liked' | 'history'>('liked')
+  /** The "Add to playlist" menu: which songs, and where to show it. */
+  addMenu = $state<{ tracks: Track[]; x: number; y: number } | null>(null)
+  /** Set right after creating a playlist from the sidebar, so its page focuses the name. */
+  renameNext = $state(false)
   /** Recently played, newest first, from the library (plus the current song, optimistically). */
   recent = $state<Track[]>([])
 }
@@ -139,6 +146,7 @@ export async function startListening() {
   api.setQuality(ui.quality)
   api.setAutoplay(ui.autoplay)
   refreshRecent()
+  refreshPlaylists()
   await onUpdate((u) => {
     switch (u.type) {
       case 'now_playing': {
@@ -265,4 +273,65 @@ export function reason(n: import('./api').TrackNote | undefined): string {
   if (days > 30 && n.last_played) return `Not since ${MONTHS[new Date(n.last_played * 1000).getMonth()]}`
   if (n.plays >= 3) return `Played ${n.plays} times`
   return 'Played before'
+}
+
+// ---- playlists ------------------------------------------------------------
+
+export async function refreshPlaylists() {
+  try {
+    ui.playlists = await api.playlists()
+  } catch {
+    /* library unavailable */
+  }
+}
+
+export function openPlaylist(id: number) {
+  ui.playlistId = id
+  save('hum.playlistId', id)
+  go('playlist')
+}
+
+export function openLiked() {
+  ui.libraryTab = 'liked'
+  go('library')
+}
+
+export async function newPlaylistFromSidebar() {
+  const id = await api.createPlaylist('New playlist')
+  await refreshPlaylists()
+  ui.renameNext = true
+  openPlaylist(id)
+}
+
+export function openAddMenu(tracks: Track[], e: MouseEvent) {
+  e.preventDefault()
+  e.stopPropagation()
+  const r = (e.currentTarget as HTMLElement | null)?.getBoundingClientRect()
+  // Right-click opens at the pointer; the + button opens under itself.
+  const x = e.type === 'contextmenu' || !r ? e.clientX : r.right
+  const y = e.type === 'contextmenu' || !r ? e.clientY : r.bottom + 4
+  ui.addMenu = { tracks, x, y }
+}
+
+export async function addToPlaylist(id: number, tracks: Track[]) {
+  ui.addMenu = null
+  const name = ui.playlists.find((p) => p.id === id)?.name ?? 'playlist'
+  try {
+    const added = await api.addToPlaylist(id, tracks)
+    showToast(added ? `Added to ${name}` : `Already in ${name}`)
+    refreshPlaylists()
+  } catch (e) {
+    showToast(String(e))
+  }
+}
+
+export async function addToNewPlaylist(name: string, tracks: Track[]) {
+  ui.addMenu = null
+  try {
+    await api.createPlaylist(name, tracks)
+    showToast(`Created ${name.trim() || 'New playlist'}`)
+    refreshPlaylists()
+  } catch (e) {
+    showToast(String(e))
+  }
 }
