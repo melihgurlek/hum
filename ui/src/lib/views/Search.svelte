@@ -142,6 +142,9 @@
     font-size: 16px;
     color: var(--text);
     user-select: text;
+    /* Plus Jakarta Sans has a tall ascent, so centered text sits ~2px low next to the icon.
+       Uneven padding lifts it by 1.5px, centering it between its cap height and x-height. */
+    padding: 0 0 3px;
   }
   .clear {
     width: 32px;

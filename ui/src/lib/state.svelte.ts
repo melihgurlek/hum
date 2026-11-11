@@ -239,6 +239,9 @@ export async function startListening() {
         player.positionAt = performance.now()
         player.duration = u.track.duration ?? 0
         player.loading = true
+        // Loading a song always unpauses mpv, and mpv only reports pause when it changes, so
+        // the first song after startup would otherwise keep showing the play triangle.
+        player.paused = false
         ui.recent = [u.track, ...ui.recent.filter((t) => t.id !== u.track.id)].slice(0, 30)
         player.liked = false
         setTimeout(refreshRecent, 1500)
