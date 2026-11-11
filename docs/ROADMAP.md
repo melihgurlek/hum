@@ -6,6 +6,7 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #24 | Performance: idle player sleeps until needed (was 50 wakeups/s), search and quick-picks caches survive navigation, 20 s read-ahead, stripped release binary |
 | #22 | A song played from search continues with its own radio, not the other search results |
 | #21 | Now Playing fits the window: lyrics panel no longer runs under the player bar, cover shrinks in short windows |
 | #20 | Player bar takes the cover tint while Now Playing is open; sidebar stays neutral |
