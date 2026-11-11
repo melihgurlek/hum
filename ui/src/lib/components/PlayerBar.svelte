@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { api, artistLine, fmtTime, img } from '../api'
+  import { api, artistLinks, fmtTime, img } from '../api'
   import { player, ui, setQuality, toggleLike } from '../state.svelte'
   import Icon from './Icon.svelte'
+  import ArtistLinks from './ArtistLinks.svelte'
   import Progress from './Progress.svelte'
 
   let volume = $state(100)
@@ -10,17 +11,17 @@
 <footer class="bar" aria-label="Player">
   <div class="left">
     {#if player.current}
-      <button class="np" onclick={() => (ui.nowPlayingOpen = true)} aria-label="Open now playing">
+      <div class="np">
         {#if player.current.thumb}
           <img class="cover art" src={img(player.current.thumb)} alt="" width="56" height="56" />
         {:else}
           <div class="cover art"></div>
         {/if}
         <span class="text">
-          <span class="title ellipsis">{player.current.title}</span>
-          <span class="sub ellipsis">{artistLine(player.current)}</span>
+          <button class="open title ellipsis" onclick={() => (ui.nowPlayingOpen = true)} aria-label={`Open now playing: ${player.current.title}`}>{player.current.title}</button>
+          <span class="sub ellipsis"><ArtistLinks artists={artistLinks(player.current)} /></span>
         </span>
-      </button>
+      </div>
       <button class="icon-btn" class:on={player.liked} aria-pressed={player.liked}
         aria-label={player.liked ? 'Remove from Liked songs' : 'Add to Liked songs'} onclick={toggleLike}>
         <Icon name={player.liked ? 'heart' : 'heartOutline'} size={20} />
@@ -102,12 +103,33 @@
     color: var(--muted);
   }
   .np {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 12px;
     min-width: 0;
-    text-align: left;
     border-radius: 8px;
+  }
+  /* The title button covers the whole cover-and-text block; artist links sit above it. */
+  .open {
+    display: block;
+    max-width: 100%;
+    padding: 0;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+  }
+  .open::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 8px;
+  }
+  .open:focus-visible {
+    outline: none;
+  }
+  .open:focus-visible::after {
+    outline: 2px solid var(--accent, var(--accent-default));
   }
   .art {
     width: 56px;

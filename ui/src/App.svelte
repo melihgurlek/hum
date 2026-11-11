@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { startListening, ui } from './lib/state.svelte'
+  import { back, go, startListening, ui } from './lib/state.svelte'
   import Sidebar from './lib/components/Sidebar.svelte'
   import PlayerBar from './lib/components/PlayerBar.svelte'
   import Home from './lib/views/Home.svelte'
@@ -9,6 +9,8 @@
   import Settings from './lib/views/Settings.svelte'
   import NowPlaying from './lib/views/NowPlaying.svelte'
   import PlaylistView from './lib/views/PlaylistView.svelte'
+  import ArtistView from './lib/views/ArtistView.svelte'
+  import AlbumView from './lib/views/AlbumView.svelte'
   import AddMenu from './lib/components/AddMenu.svelte'
 
   onMount(() => {
@@ -18,13 +20,23 @@
   function keys(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault()
-      ui.nowPlayingOpen = false
-      ui.view = 'search'
+      go('search')
+    }
+    if (e.altKey && e.key === 'ArrowLeft') {
+      e.preventDefault()
+      back()
+    }
+  }
+  // Mouse "back" side button.
+  function mouse(e: MouseEvent) {
+    if (e.button === 3) {
+      e.preventDefault()
+      back()
     }
   }
 </script>
 
-<svelte:window onkeydown={keys} />
+<svelte:window onkeydown={keys} onmouseup={mouse} />
 
 <div class="app">
   <Sidebar />
@@ -33,6 +45,8 @@
     {:else if ui.view === 'search'}<Search />
     {:else if ui.view === 'library'}<Library />
     {:else if ui.view === 'playlist'}<PlaylistView />
+    {:else if ui.view === 'artist'}{#key ui.artistId}<ArtistView />{/key}
+    {:else if ui.view === 'album'}{#key ui.albumId}<AlbumView />{/key}
     {:else}<Settings />{/if}
     {#if ui.nowPlayingOpen}<NowPlaying />{/if}
   </main>

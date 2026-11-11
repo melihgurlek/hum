@@ -1,19 +1,27 @@
 <script lang="ts">
-  import { artistLine, fmtTime, img, type Track } from '../api'
+  import { artistLine, artistLinks, fmtTime, img, type Track } from '../api'
   import { hoverCancel, hoverPrefetch, openAddMenu, player } from '../state.svelte'
   import Icon from './Icon.svelte'
+  import ArtistLinks from './ArtistLinks.svelte'
   import type { Snippet } from 'svelte'
 
   let {
     track,
     onplay,
     detail,
+    suffix,
+    number,
     showDuration = true,
     actions,
   }: {
     track: Track
     onplay: () => void
+    /** Replaces the artist line. */
     detail?: string
+    /** Shown after the (linked) artist names, e.g. ", 2 days ago". */
+    suffix?: string
+    /** Show this track number instead of the cover (album pages). */
+    number?: number
     showDuration?: boolean
     /** Extra buttons shown on hover, after "Add to playlist" (e.g. Remove). */
     actions?: Snippet
@@ -31,17 +39,18 @@
   onmouseleave={hoverCancel}
   oncontextmenu={(e) => openAddMenu([track], e)}
 >
-  <button class="main" onclick={onplay} aria-label={`Play ${track.title} by ${artistLine(track)}`}>
-    {#if track.thumb}
-      <img class="cover art" src={img(track.thumb)} alt="" loading="lazy" width="44" height="44" />
-    {:else}
-      <div class="cover art"></div>
-    {/if}
-    <span class="text">
-      <span class="title ellipsis">{track.title}</span>
-      <span class="sub ellipsis">{detail ?? artistLine(track)}</span>
-    </span>
-  </button>
+  <!-- The play button stretches over the whole row (see .main::after); artist links sit above it. -->
+  {#if number != null}
+    <span class="num" aria-hidden="true">{number}</span>
+  {:else if track.thumb}
+    <img class="cover art" src={img(track.thumb)} alt="" loading="lazy" width="44" height="44" />
+  {:else}
+    <div class="cover art"></div>
+  {/if}
+  <span class="text">
+    <button class="main title ellipsis" onclick={onplay} aria-label={`Play ${track.title} by ${artistLine(track)}`}>{track.title}</button>
+    {#if detail !== ''}<span class="sub ellipsis">{#if detail != null}{detail}{:else}<ArtistLinks artists={artistLinks(track)} />{suffix ?? ''}{/if}</span>{/if}
+  </span>
   <span class="tools">
     <button class="tool" aria-label={`Add ${track.title} to a playlist`} title="Add to playlist" onclick={(e) => openAddMenu([track], e)}>
       <Icon name="plus" size={18} />
@@ -53,10 +62,11 @@
 
 <style>
   .row {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding-right: 8px;
+    gap: 12px;
+    padding: 6px 8px;
     border-radius: 10px;
     min-height: 56px;
   }
@@ -65,14 +75,36 @@
     background: var(--raised);
   }
   .main {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 6px 8px;
+    display: block;
+    max-width: 100%;
+    padding: 0;
     text-align: left;
+    font: inherit;
+    color: inherit;
+  }
+  .main::after {
+    content: '';
+    position: absolute;
+    inset: 0;
     border-radius: 10px;
+  }
+  .main:focus-visible {
+    outline: none;
+  }
+  .main:focus-visible::after {
+    outline: 2px solid var(--accent, var(--accent-default));
+    outline-offset: -2px;
+  }
+  .num {
+    width: 44px;
+    flex: none;
+    text-align: center;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .playing .num {
+    color: var(--accent, var(--accent-default));
+    font-weight: 700;
   }
   .art {
     width: 44px;
@@ -105,6 +137,8 @@
   .tools {
     display: flex;
     opacity: 0;
+    position: relative;
+    z-index: 1;
   }
   .row:hover .tools,
   .row:focus-within .tools {

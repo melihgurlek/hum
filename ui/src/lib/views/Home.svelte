@@ -81,7 +81,7 @@
         </div>
         <div class="picks">
           {#each forgotten as f, i (f.track.id)}
-            <TrackRow track={f.track} detail={`${artistLine(f.track)}, last played ${monthYear(f.last_played)}`}
+            <TrackRow track={f.track} suffix={`, last played ${monthYear(f.last_played)}`}
               onplay={() => playList(forgotten.map((x) => x.track), i)} />
           {/each}
         </div>

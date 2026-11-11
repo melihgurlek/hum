@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { api, artistLine, type Track, img } from '../api'
-  import { playList, playRadio, ui, hoverPrefetch, hoverCancel } from '../state.svelte'
+  import { api, artistLinks, type Track, img } from '../api'
+  import { openAlbum, openArtist, playList, playRadio, ui, hoverPrefetch, hoverCancel } from '../state.svelte'
+  import ArtistLinks from '../components/ArtistLinks.svelte'
   import Icon from '../components/Icon.svelte'
   import TrackRow from '../components/TrackRow.svelte'
 
@@ -85,11 +86,12 @@
           {#if top.cover}<img class="cover topart" src={img(top.cover)} alt="" />{:else}<div class="cover topart"></div>{/if}
           <div>
             <div class="toptitle">{top.title}</div>
-            <div class="muted">{artistLine(top)}{top.album ? ` — ${top.album}` : ''}</div>
+            <div class="muted"><ArtistLinks artists={artistLinks(top)} />{#if top.album} — {#if top.album_id}<button class="inline-link" onclick={() => openAlbum(top.album_id)}>{top.album}</button>{:else}{top.album}{/if}{/if}</div>
           </div>
           <div class="actions">
             <button class="primary" onclick={() => playList(results, 0)}><Icon name="play" size={16} /><span class="trim">Play</span></button>
             <button class="secondary" onclick={() => playRadio(top)}><Icon name="radio" size={16} /><span class="trim">Radio</span></button>
+            {#if top.artist_id}<button class="secondary" onclick={() => openArtist(top.artist_id)}><span class="trim">{top.artists[0]}</span></button>{/if}
           </div>
         </div>
       </section>
@@ -207,6 +209,16 @@
   }
   .secondary {
     background: var(--raised);
+  }
+  .inline-link {
+    display: inline;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+  }
+  .inline-link:hover,
+  .inline-link:focus-visible {
+    text-decoration: underline;
   }
   .songs {
     flex: 999 1 420px;

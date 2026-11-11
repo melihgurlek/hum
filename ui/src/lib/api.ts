@@ -22,6 +22,11 @@ export interface Lyrics { lines: LyricLine[] | null; plain: string | null; sourc
 export interface PlaylistSummary { id: number; name: string; count: number; covers: string[] }
 export interface Playlist { id: number; name: string; tracks: Track[] }
 
+export interface ArtistLink { name: string; id: string | null }
+export interface AlbumCard { id: string; title: string; kind: string; year: number | null; artists: ArtistLink[]; thumb: string | null }
+export interface ArtistPage { id: string; name: string; subscribers: string | null; banner: string | null; top: Track[]; albums: AlbumCard[]; singles: AlbumCard[] }
+export interface AlbumPage { card: AlbumCard; cover: string | null; tracks: Track[] }
+
 export type Quality = 'auto' | 'data_saver' | 'normal' | 'high'
 
 export interface Rgb { r: number; g: number; b: number }
@@ -39,6 +44,9 @@ export type Update =
 export const api = {
   search: (query: string) => invoke<Track[]>('search', { query }),
   radio: (id: string) => invoke<Track[]>('radio', { id }),
+  artist: (id: string) => invoke<ArtistPage>('artist', { id }),
+  album: (id: string) => invoke<AlbumPage>('album', { id }),
+  playArtistRadio: (id: string) => invoke<void>('play_artist_radio', { id }),
   play: (tracks: Track[], index: number) => invoke<void>('play', { tracks, index }),
   playRadio: (track: Track) => invoke<void>('play_radio', { track }),
   next: () => invoke<void>('next'),
@@ -90,3 +98,6 @@ const imgBase = /Windows|Android/.test(navigator.userAgent) ? 'http://img.localh
 export function img(url: string | null | undefined): string | undefined {
   return url ? imgBase + encodeURIComponent(url) : undefined
 }
+
+/** A track's artists as links. Only the first artist's id is known for a track. */
+export const artistLinks = (t: Track): ArtistLink[] => t.artists.map((name, i) => ({ name, id: i === 0 ? t.artist_id : null }))
