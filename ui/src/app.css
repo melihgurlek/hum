@@ -1,0 +1,118 @@
+@import '@fontsource-variable/plus-jakarta-sans';
+
+:root,
+:root[data-theme='dark'] {
+  --bg: #121214;
+  --surface: #1b1b1f;
+  --raised: #1f1f24;
+  --raised-2: #2a2a31;
+  --line: #2e2e35;
+  --text: #f2f2f3;
+  --muted: #a1a1aa;
+  --bar: #0c0c0e;
+  --accent-default: #ff8a4c;
+  --on-accent: #121214;
+  --np-bg-default: #2a1610;
+  --np-bg-2-default: #160b08;
+  --np-text: #fbf2ee;
+  --np-muted: rgba(251, 242, 238, 0.68);
+  color-scheme: dark;
+}
+:root[data-theme='light'] {
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --raised: #ecebe6;
+  --raised-2: #e2e1db;
+  --line: #dcdbd5;
+  --text: #17171a;
+  --muted: #5f5f68;
+  --bar: #ffffff;
+  --accent-default: #2f5bea;
+  --on-accent: #ffffff;
+  --np-bg-default: #e9e4dc;
+  --np-bg-2-default: #ddd6cb;
+  --np-text: #17171a;
+  --np-muted: rgba(23, 23, 26, 0.66);
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Plus Jakarta Sans Variable', system-ui, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+input {
+  font: inherit;
+  color: inherit;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+:focus-visible {
+  outline: 2px solid var(--accent, var(--accent-default));
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+h1,
+h2,
+h3 {
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+.muted {
+  color: var(--muted);
+}
+.ellipsis {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cover {
+  background: var(--raised);
+  object-fit: cover;
+  display: block;
+}
+.icon-btn {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--muted);
+}
+.icon-btn:hover {
+  color: var(--text);
+}
+.icon-btn.on {
+  color: var(--accent, var(--accent-default));
+}
+.scroll {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--raised-2) transparent;
+}
