@@ -6,6 +6,7 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #27 | Playing no longer costs a fifth of a CPU core: the progress bar steps once a second instead of gliding (a CSS transition restarted every second kept the webview drawing 60 fps), and the playing mark in lists is static. Linux webview 19 % → 1.8 % of a core while playing. Windows installer tested on a real machine: sound, covers, media keys work ([PERFORMANCE.md](PERFORMANCE.md)) |
 | #25 | Windows build in GitHub Actions: NSIS installer (38 MB) with shinchiro's libmpv (version and SHA-256 recorded per build), smoke test on every relevant PR; first run green |
 | #24 | Performance: idle player sleeps until needed (was 50 wakeups/s), search and quick-picks caches survive navigation, 20 s read-ahead, stripped release binary |
 | #22 | A song played from search continues with its own radio, not the other search results |
@@ -31,23 +32,11 @@ Updated in every PR. Newest done items at the top of each section.
 
 ## Next
 
-1. **Test the Windows installer on a real Windows machine** (CI can't hear audio). Get it from the
-   latest main or "Run workflow" run of *Windows build*, artifact `hum-windows-x64`. Unsigned, so
-   SmartScreen asks: More info → Run anyway. Check:
-   - a song plays **with sound**;
-   - **cover images** load (Windows serves them from `http://img.localhost/`, the likeliest break);
-   - **media keys** and the Windows media overlay (title, play/pause);
-   - Now Playing colors, lyrics, search, an artist page;
-   - startup feels as quick as on Linux.
-   Problems: screenshot + `%LOCALAPPDATA%\com.melihgurlek.hum\logs\hum.log`; fixes are made from Linux.
-   Measured on Windows ([PERFORMANCE.md](PERFORMANCE.md)): engine ready ~1.0 s after launch,
-   search ~0.6 s, click→sound 0.5–2.4 s cold and ~0.3 s prefetched, 226 MB private memory idle,
-   133 MB installed. Playing uses ~28 % of a core in the webview (to profile).
-2. **Faster stream resolution** ([YTMUSIC-RS.md](YTMUSIC-RS.md)): ytmusic-rs probes every URL
+1. **Faster stream resolution** ([YTMUSIC-RS.md](YTMUSIC-RS.md)): ytmusic-rs probes every URL
    before mpv opens it (an extra round trip per song), and Data saver opens a stream only to pick
    its bitrate. Fork, fix both, send upstream. Don't replace the stream half; the metadata half
    could become hum's own later.
-3. **Google sign-in** (webview cookie login) to sync likes and playlists with the YouTube Music
+2. **Google sign-in** (webview cookie login) to sync likes and playlists with the YouTube Music
    account, so hum (desktop) and MetroList (phone) share one library. Few days; Android would need
    it anyway.
 
@@ -78,8 +67,6 @@ Updated in every PR. Newest done items at the top of each section.
 
 ## Known issues
 
-- While a song plays the webview uses ~28 % of a CPU core on Windows (hum.exe ~2 %); idle and
-  paused are ~0 %. Likely progress-bar or playing-indicator redraws; profile before fixing.
 - libmpv-2.dll is 116 of the 133 MB installed (shinchiro's build has every codec, video too).
 
 - Artist top songs have no durations until played (YouTube Music doesn't list them there).
