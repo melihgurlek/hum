@@ -1,7 +1,8 @@
 //! Thin Tauri shell over hum-core: invoke commands in, `hum://update` events out.
 
 use hum_core::color::{self, Palette};
-use hum_core::{Engine, Quality, Source, Track};
+use hum_core::library::{HistoryEntry, TrackNote};
+use hum_core::{Engine, Library, Quality, Source, Track};
 mod media;
 
 use std::hash::{Hash, Hasher};
@@ -56,6 +57,92 @@ async fn previous(app: State<'_, App>) -> Res<()> {
 #[tauri::command]
 async fn jump(app: State<'_, App>, index: usize) -> Res<()> {
     app.engine.jump(index).await.map_err(err)
+}
+
+fn lib(app: &App) -> Res<Library> {
+    app.engine.library().cloned().ok_or_else(|| "library unavailable".to_string())
+}
+
+#[tauri::command]
+async fn set_liked(app: State<'_, App>, track: Track, liked: bool) -> Res<()> {
+    lib(&app)?.run(move |l| l.set_liked(&track, liked)).await.map_err(err)
+}
+
+#[tauri::command]
+async fn is_liked(app: State<'_, App>, id: String) -> Res<bool> {
+    lib(&app)?.run(move |l| l.is_liked(&id)).await.map_err(err)
+}
+
+#[tauri::command]
+async fn liked(app: State<'_, App>) -> Res<Vec<Track>> {
+    lib(&app)?.run(|l| l.liked()).await.map_err(err)
+}
+
+#[tauri::command]
+async fn history(app: State<'_, App>, limit: usize) -> Res<Vec<HistoryEntry>> {
+    lib(&app)?.run(move |l| l.history(limit)).await.map_err(err)
+}
+
+#[tauri::command]
+async fn recent(app: State<'_, App>, limit: usize) -> Res<Vec<Track>> {
+    lib(&app)?.run(move |l| l.recent_tracks(limit)).await.map_err(err)
+}
+
+#[tauri::command]
+async fn track_notes(
+    app: State<'_, App>,
+    ids: Vec<String>,
+) -> Res<std::collections::HashMap<String, TrackNote>> {
+    lib(&app)?.run(move |l| l.notes(&ids)).await.map_err(err)
+}
+
+#[derive(serde::Serialize)]
+struct Forgotten {
+    track: Track,
+    last_played: i64,
+}
+
+#[tauri::command]
+async fn forgotten(app: State<'_, App>, limit: usize) -> Res<Vec<Forgotten>> {
+    let v = lib(&app)?.run(move |l| l.forgotten_favorites(30, limit)).await.map_err(err)?;
+    Ok(v.into_iter().map(|(track, last_played)| Forgotten { track, last_played }).collect())
+}
+
+/// Home's quick picks: the seed's radio ranked by your taste, with a few of your own favorites
+/// mixed in so it isn't all new music.
+#[tauri::command]
+async fn quick_picks(app: State<'_, App>, seed: String) -> Res<Vec<Track>> {
+    let radio = app.engine.source().radio(&seed).await.map_err(err)?;
+    let l = lib(&app)?;
+    l.run(move |l| {
+        let mut ranked = l.rank_radio(radio)?;
+        ranked.retain(|t| t.id != seed);
+        let mut favs = l.top_tracks(12)?;
+        favs.retain(|f| f.id != seed && !ranked.iter().any(|t| t.id == f.id));
+        let mut out = Vec::new();
+        let (mut r, mut f) = (ranked.into_iter(), favs.into_iter());
+        // Three new for every one you know.
+        while out.len() < 12 {
+            let mut took = false;
+            for _ in 0..3 {
+                if let Some(t) = r.next() {
+                    out.push(t);
+                    took = true;
+                }
+            }
+            if let Some(t) = f.next() {
+                out.push(t);
+                took = true;
+            }
+            if !took {
+                break;
+            }
+        }
+        out.truncate(12);
+        Ok(out)
+    })
+    .await
+    .map_err(err)
 }
 
 #[tauri::command]
@@ -211,8 +298,16 @@ pub fn run() {
         .setup(|app| {
             let dir = app.path().app_cache_dir()?.join("ytmusic");
             let source = Source::new(dir)?;
+            let db = app.path().app_data_dir()?.join("hum.db");
+            let library = match Library::open(&db) {
+                Ok(l) => Some(l),
+                Err(e) => {
+                    log::error!("library at {}: {e:#}", db.display());
+                    None
+                }
+            };
             // Engine::start spawns tokio tasks, so it must run inside the runtime.
-            let engine = tauri::async_runtime::block_on(async { Engine::start(source) })?;
+            let engine = tauri::async_runtime::block_on(async { Engine::start(source, library) })?;
             let mut updates = engine.subscribe();
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -257,6 +352,14 @@ pub fn run() {
             set_autoplay,
             queue,
             cover_palette,
+            set_liked,
+            is_liked,
+            liked,
+            history,
+            recent,
+            track_notes,
+            forgotten,
+            quick_picks,
             ui_log
         ])
         .run(tauri::generate_context!())

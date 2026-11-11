@@ -12,6 +12,7 @@
     chevronDown: '<path d="M6 9l6 6 6-6"/>',
     leaf: '<path d="M5 19c0-8 6-14 15-14 0 9-6 15-14 15"/><path d="M5 19l7-7"/>',
     x: '<path d="M6 6l12 12M18 6L6 18"/>',
+    heartOutline: '<path d="M12 20s-7-4.4-9.3-9C1.4 8.3 3 4.5 6.6 4.5c2 0 3.4 1.2 4.4 2.6 1-1.4 2.4-2.6 4.4-2.6 3.6 0 5.2 3.8 3.9 6.5C19 15.6 12 20 12 20z"/>',
   }
   const filled: Record<string, string> = {
     play: '<path d="M7 4v16l13-8z"/>',

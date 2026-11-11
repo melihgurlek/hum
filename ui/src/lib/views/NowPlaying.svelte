@@ -1,15 +1,19 @@
 <script lang="ts">
-  import { api, artistLine, fmtTime, img } from '../api'
-  import { player, ui, setAutoplay } from '../state.svelte'
+  import { api, artistLine, fmtTime, img, type TrackNote } from '../api'
+  import { player, ui, setAutoplay, toggleLike, reason } from '../state.svelte'
   import Icon from '../components/Icon.svelte'
   import Progress from '../components/Progress.svelte'
 
   let tab = $state<'next' | 'lyrics'>('next')
 
-  // Why a song is in Up next. Until the listening history lands (SQLite), this only knows
-  // whether you've played it recently.
-  const recentIds = $derived(new Set(ui.recent.map((t) => t.id)))
-  const why = (id: string) => (recentIds.has(id) ? 'You played this' : 'New to you')
+  // Why each song is in Up next, from your listening history.
+  let notes = $state<Record<string, TrackNote>>({})
+  $effect(() => {
+    const ids = player.upNext.slice(0, 50).map((t) => t.id)
+    if (!ids.length) return
+    api.trackNotes(ids).then((n) => (notes = n)).catch(() => {})
+  })
+  const why = (id: string) => reason(notes[id])
 
   function close() {
     ui.nowPlayingOpen = false
@@ -42,6 +46,10 @@
             <div class="artist">{artistLine(t)}</div>
             {#if t.album}<div class="album">{t.album}</div>{/if}
           </div>
+          <button class="heart" class:on={player.liked} aria-pressed={player.liked}
+            aria-label={player.liked ? 'Remove from Liked songs' : 'Add to Liked songs'} onclick={toggleLike}>
+            <Icon name={player.liked ? 'heart' : 'heartOutline'} size={24} />
+          </button>
         </div>
         <div class="progress">
           <Progress tone="np" />
@@ -153,6 +161,28 @@
     object-fit: cover;
     background: color-mix(in srgb, black 25%, transparent);
     box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
+  }
+  .meta {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .titles {
+    flex: 1;
+    min-width: 0;
+  }
+  .heart {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--np-muted);
+    flex: none;
+  }
+  .heart.on {
+    color: var(--np-text);
   }
   h1 {
     font-size: 30px;

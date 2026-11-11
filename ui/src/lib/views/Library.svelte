@@ -1,23 +1,70 @@
 <script lang="ts">
-  import { playList, ui } from '../state.svelte'
+  import { api, type HistoryEntry, type Track } from '../api'
+  import { playList, player } from '../state.svelte'
   import TrackRow from '../components/TrackRow.svelte'
+
+  let tab = $state<'liked' | 'history'>('liked')
+  let liked = $state<Track[]>([])
+  let history = $state<HistoryEntry[]>([])
+  let loaded = $state(false)
+
+  // Reload when the song changes, so a new like or play shows up without leaving the page.
+  $effect(() => {
+    void player.current?.id
+    void player.liked
+    Promise.all([api.liked(), api.history(200)])
+      .then(([l, h]) => {
+        liked = l
+        history = h
+      })
+      .catch(() => {})
+      .finally(() => (loaded = true))
+  })
+
+  const historyTracks = $derived(history.map((h) => h.track))
+  function when(ts: number): string {
+    const d = new Date(ts * 1000)
+    const today = new Date()
+    const days = Math.floor((today.setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 86400000)
+    const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    if (days === 0) return `Today ${time}`
+    if (days === 1) return `Yesterday ${time}`
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  }
+  const outcomeText = { completed: '', skipped_early: ', skipped', skipped_late: ', stopped early' }
 </script>
 
 <div class="page scroll">
   <h1>Library</h1>
-  <p class="muted">Liked songs and playlists arrive with the next version. For now, here's what you've played.</p>
-  <section>
-    <h2>History</h2>
-    {#if ui.recent.length}
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected={tab === 'liked'} class:sel={tab === 'liked'} onclick={() => (tab = 'liked')}>
+      <span class="trim">Liked songs{liked.length ? ` (${liked.length})` : ''}</span>
+    </button>
+    <button role="tab" aria-selected={tab === 'history'} class:sel={tab === 'history'} onclick={() => (tab = 'history')}>
+      <span class="trim">History</span>
+    </button>
+  </div>
+
+  {#if tab === 'liked'}
+    {#if liked.length}
       <div class="list">
-        {#each ui.recent as t, i (t.id)}
-          <TrackRow track={t} onplay={() => playList(ui.recent, i)} />
+        {#each liked as t, i (t.id)}
+          <TrackRow track={t} onplay={() => playList(liked, i)} />
         {/each}
       </div>
-    {:else}
-      <p class="muted">Songs you play show up here.</p>
+    {:else if loaded}
+      <p class="muted">Tap the heart on a song you love and it lands here.</p>
     {/if}
-  </section>
+  {:else if history.length}
+    <div class="list">
+      {#each history as h, i (h.played_at + h.track.id)}
+        <TrackRow track={h.track} detail={`${h.track.artists.join(', ')}, ${when(h.played_at)}${outcomeText[h.outcome]}`}
+          onplay={() => playList(historyTracks, i)} />
+      {/each}
+    </div>
+  {:else if loaded}
+    <p class="muted">Songs you play show up here.</p>
+  {/if}
 </div>
 
 <style>
@@ -32,13 +79,23 @@
     font-size: 30px;
     font-weight: 800;
   }
-  h2 {
-    font-size: 18px;
-    font-weight: 700;
-    margin: 12px 0;
-  }
   p {
     margin: 0;
+  }
+  .tabs {
+    display: flex;
+    gap: 6px;
+  }
+  .tabs button {
+    height: 40px;
+    padding: 0 18px;
+    border-radius: 999px;
+    font-weight: 600;
+    background: var(--raised);
+  }
+  .tabs button.sel {
+    background: var(--text);
+    color: var(--bg);
   }
   .list {
     display: flex;

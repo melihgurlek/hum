@@ -10,7 +10,7 @@ async fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let q = std::env::args().nth(1).unwrap_or_else(|| "duman bu akşam".into());
     let dir = std::env::temp_dir().join("hum-example");
-    let engine = Engine::start(Source::new(dir)?)?;
+    let engine = Engine::start(Source::new(dir.clone())?, Some(hum_core::Library::open(&dir.join("example.db"))?))?;
     let mut rx = engine.subscribe();
     tokio::spawn(async move {
         while let Ok(u) = rx.recv().await {

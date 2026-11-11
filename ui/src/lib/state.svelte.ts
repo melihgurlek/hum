@@ -30,6 +30,7 @@ class Player {
   positionAt = $state(0)
   lastTiming = $state<{ ms: number; cached: boolean } | null>(null)
   palette = $state<Palette | null>(null)
+  liked = $state(false)
   loading = $state(false)
 
   upNext = $derived(this.queue.slice(this.index + 1))
@@ -43,8 +44,8 @@ class Ui {
   quality = $state<Quality>(load<Quality>('hum.quality', 'auto'))
   autoplay = $state(load('hum.autoplay', true))
   toast = $state<string | null>(null)
-  /** Last songs played, newest first, for Home. Real history arrives with the SQLite library. */
-  recent = $state<Track[]>(load<Track[]>('hum.recent', []))
+  /** Recently played, newest first, from the library (plus the current song, optimistically). */
+  recent = $state<Track[]>([])
 }
 
 export const player = new Player()
@@ -135,6 +136,7 @@ export async function startListening() {
   applyTheme()
   api.setQuality(ui.quality)
   api.setAutoplay(ui.autoplay)
+  refreshRecent()
   await onUpdate((u) => {
     switch (u.type) {
       case 'now_playing': {
@@ -145,7 +147,11 @@ export async function startListening() {
         player.duration = u.track.duration ?? 0
         player.loading = true
         ui.recent = [u.track, ...ui.recent.filter((t) => t.id !== u.track.id)].slice(0, 30)
-        save('hum.recent', ui.recent)
+        player.liked = false
+        setTimeout(refreshRecent, 1500)
+        api.isLiked(u.track.id).then((l) => {
+          if (player.current?.id === u.track.id) player.liked = l
+        }).catch(() => {})
         const art = u.track.thumb
         if (art) {
           api
@@ -221,4 +227,40 @@ export function hoverPrefetch(id: string) {
 }
 export function hoverCancel() {
   clearTimeout(hoverTimer)
+}
+
+export async function refreshRecent() {
+  try {
+    const fromDb = await api.recent(30)
+    const cur = player.current
+    ui.recent = cur ? [cur, ...fromDb.filter((t) => t.id !== cur.id)] : fromDb
+  } catch {
+    /* library unavailable: keep what we have */
+  }
+}
+
+export async function toggleLike() {
+  const t = player.current
+  if (!t) return
+  const next = !player.liked
+  player.liked = next
+  try {
+    await api.setLiked(t, next)
+    showToast(next ? 'Added to Liked songs' : 'Removed from Liked songs')
+  } catch (e) {
+    player.liked = !next
+    showToast(String(e))
+  }
+}
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+/** Why a song is in Up next, in plain words. */
+export function reason(n: import('./api').TrackNote | undefined): string {
+  if (!n || n.plays === 0) return n?.liked ? 'You like this' : 'New to you'
+  if (n.liked) return 'You like this'
+  const days = n.last_played ? (Date.now() / 1000 - n.last_played) / 86400 : 0
+  if (days > 30 && n.last_played) return `Not since ${MONTHS[new Date(n.last_played * 1000).getMonth()]}`
+  if (n.plays >= 3) return `Played ${n.plays} times`
+  return 'Played before'
 }

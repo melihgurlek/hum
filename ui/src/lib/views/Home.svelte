@@ -8,7 +8,7 @@
   let picks = $state<Track[]>([])
   let loading = $state(false)
 
-  // Quick picks: the radio of the last song you played, minus songs you just heard.
+  // Quick picks: the last song's radio ranked by your taste, with a few favorites mixed in.
   // Cached for the session so returning to Home is instant.
   const cache = new Map<string, Track[]>()
   $effect(() => {
@@ -20,16 +20,21 @@
     }
     loading = true
     api
-      .radio(s.id)
+      .quickPicks(s.id)
       .then((r) => {
-        const heard = new Set(ui.recent.slice(0, 10).map((t) => t.id))
-        const fresh = r.filter((t) => !heard.has(t.id)).slice(0, 12)
-        cache.set(s.id, fresh)
-        if (seed?.id === s.id) picks = fresh
+        cache.set(s.id, r)
+        if (seed?.id === s.id) picks = r
       })
       .catch(() => {})
       .finally(() => (loading = false))
   })
+
+  let forgotten = $state<{ track: Track; last_played: number }[]>([])
+  $effect(() => {
+    api.forgotten(8).then((f) => (forgotten = f)).catch(() => {})
+  })
+  const monthYear = (ts: number) =>
+    new Date(ts * 1000).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
 
   const moods = ['Türkçe rock', 'Chill', 'Focus', 'Workout', 'Late night', '2000s alternative']
   function mood(m: string) {
@@ -67,6 +72,21 @@
         </div>
       {/if}
     </section>
+
+    {#if forgotten.length}
+      <section>
+        <div class="head">
+          <h2>Haven't played these in a while</h2>
+          <button class="link" onclick={() => playList(forgotten.map((f) => f.track), 0)}>Play all</button>
+        </div>
+        <div class="picks">
+          {#each forgotten as f, i (f.track.id)}
+            <TrackRow track={f.track} detail={`${artistLine(f.track)}, last played ${monthYear(f.last_played)}`}
+              onplay={() => playList(forgotten.map((x) => x.track), i)} />
+          {/each}
+        </div>
+      </section>
+    {/if}
 
     <section>
       <h2>Recently played</h2>

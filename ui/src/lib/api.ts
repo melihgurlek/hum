@@ -13,6 +13,9 @@ export interface Track {
   cover: string | null
 }
 
+export interface TrackNote { liked: boolean; plays: number; last_played: number | null; skipped_recently: boolean }
+export interface HistoryEntry { track: Track; played_at: number; outcome: 'completed' | 'skipped_early' | 'skipped_late' }
+
 export type Quality = 'auto' | 'data_saver' | 'normal' | 'high'
 
 export interface Rgb { r: number; g: number; b: number }
@@ -43,6 +46,14 @@ export const api = {
   getQuality: () => invoke<Quality>('get_quality'),
   setAutoplay: (on: boolean) => invoke<void>('set_autoplay', { on }),
   queue: () => invoke<{ tracks: Track[]; index: number }>('queue'),
+  setLiked: (track: Track, liked: boolean) => invoke<void>('set_liked', { track, liked }),
+  isLiked: (id: string) => invoke<boolean>('is_liked', { id }),
+  liked: () => invoke<Track[]>('liked'),
+  history: (limit: number) => invoke<HistoryEntry[]>('history', { limit }),
+  recent: (limit: number) => invoke<Track[]>('recent', { limit }),
+  trackNotes: (ids: string[]) => invoke<Record<string, TrackNote>>('track_notes', { ids }),
+  forgotten: (limit: number) => invoke<{ track: Track; last_played: number }[]>('forgotten', { limit }),
+  quickPicks: (seed: string) => invoke<Track[]>('quick_picks', { seed }),
   coverPalette: (url: string) => invoke<Palette>('cover_palette', { url }),
 }
 

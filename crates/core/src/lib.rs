@@ -3,8 +3,10 @@
 
 pub mod color;
 pub mod engine;
+pub mod library;
 pub mod player;
 pub mod source;
 
 pub use engine::{Engine, Update};
+pub use library::Library;
 pub use source::{Quality, Source, Stream, Track};
