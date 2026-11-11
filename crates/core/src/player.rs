@@ -40,8 +40,9 @@ pub enum PlayerEvent {
     Paused(bool),
     /// Playback stopped to wait for the network, partway through a track.
     Stalled,
-    /// Bytes downloaded since the last report.
-    Downloaded(u64),
+    /// Bytes downloaded since the last report, and the download speed right now in bytes per
+    /// second (mpv's `cache-speed`).
+    Downloaded { bytes: u64, rate: f64 },
     /// The last item in mpv's playlist ended and nothing follows.
     Idle,
     Error { video_id: Option<String>, message: String },
@@ -202,10 +203,11 @@ fn run(
         let since = speed_at.elapsed().as_secs_f64();
         if since >= 1.0 {
             speed_at = std::time::Instant::now();
-            let speed: i64 = mpv.get_property("cache-speed").unwrap_or(0);
-            downloaded += speed.max(0) as f64 * since;
+            let speed = mpv.get_property::<i64>("cache-speed").unwrap_or(0).max(0) as f64;
+            downloaded += speed * since;
             if downloaded >= 1.0 {
-                let _ = events.send(PlayerEvent::Downloaded(downloaded as u64));
+                let bytes = downloaded as u64;
+                let _ = events.send(PlayerEvent::Downloaded { bytes, rate: speed });
                 downloaded = downloaded.fract();
             }
         }
