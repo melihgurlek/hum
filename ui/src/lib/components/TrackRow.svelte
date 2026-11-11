@@ -3,6 +3,7 @@
   import { hoverCancel, hoverPrefetch, openAddMenu, player } from '../state.svelte'
   import Icon from './Icon.svelte'
   import ArtistLinks from './ArtistLinks.svelte'
+  import Playing from './Playing.svelte'
   import type { Snippet } from 'svelte'
 
   let {
@@ -41,11 +42,16 @@
 >
   <!-- The play button stretches over the whole row (see .main::after); artist links sit above it. -->
   {#if number != null}
-    <span class="num" aria-hidden="true">{number}</span>
-  {:else if track.thumb}
-    <img class="cover art" src={img(track.thumb)} alt="" loading="lazy" width="44" height="44" />
+    <span class="num">{#if playing}<Playing />{:else}<span aria-hidden="true">{number}</span>{/if}</span>
   {:else}
-    <div class="cover art"></div>
+    <span class="artwrap">
+      {#if track.thumb}
+        <img class="cover art" src={img(track.thumb)} alt="" loading="lazy" width="44" height="44" />
+      {:else}
+        <div class="cover art"></div>
+      {/if}
+      {#if playing}<span class="eqover"><Playing /></span>{/if}
+    </span>
   {/if}
   <span class="text">
     <button class="main title ellipsis" onclick={onplay} aria-label={`Play ${track.title} by ${artistLine(track)}`}>{track.title}</button>
@@ -67,7 +73,7 @@
     align-items: center;
     gap: 12px;
     padding: 6px 16px 6px 8px;
-    border-radius: 10px;
+    border-radius: var(--r-md);
     min-height: 56px;
   }
   .row:hover,
@@ -86,7 +92,7 @@
     content: '';
     position: absolute;
     inset: 0;
-    border-radius: 10px;
+    border-radius: var(--r-md);
   }
   .main:focus-visible {
     outline: none;
@@ -95,10 +101,28 @@
     outline: 2px solid var(--accent, var(--accent-default));
     outline-offset: -2px;
   }
+  .artwrap {
+    position: relative;
+    flex: none;
+  }
+  .eqover {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-sm);
+    background: rgb(0 0 0 / 0.55);
+  }
+  /* On the dark scrim the bars read best in white, whatever the accent. */
+  .eqover :global(.eq) {
+    color: #fff;
+  }
   .num {
     width: 44px;
     flex: none;
-    text-align: center;
+    display: flex;
+    justify-content: center;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
@@ -109,7 +133,7 @@
   .art {
     width: 44px;
     height: 44px;
-    border-radius: 6px;
+    border-radius: var(--r-sm);
     flex: none;
   }
   .text {

@@ -91,7 +91,7 @@
   .art {
     width: 220px;
     height: 220px;
-    border-radius: 14px;
+    border-radius: var(--r-lg);
     flex: none;
     box-shadow: 0 12px 40px rgb(0 0 0 / 0.3);
   }
@@ -146,7 +146,14 @@
     background: var(--accent, var(--accent-default));
     color: var(--on-accent);
   }
+  /* One filled button per screen (Play); the rest stay quiet until hovered. */
   .secondary {
+    background: transparent;
+    color: var(--muted);
+    padding: 0 14px;
+  }
+  .secondary:hover:not(:disabled) {
+    color: var(--text);
     background: var(--raised);
   }
   .retry {
@@ -165,7 +172,7 @@
   }
   .ghost {
     background: var(--raised);
-    border-radius: 10px;
+    border-radius: var(--r-md);
   }
   .t1 {
     width: min(320px, 80%);

@@ -31,7 +31,7 @@
     min-width: 0;
     padding: 8px;
     margin: -8px;
-    border-radius: 14px;
+    border-radius: var(--r-lg);
   }
   .card:hover {
     background: var(--raised);
@@ -43,7 +43,7 @@
   .art {
     width: 100%;
     aspect-ratio: 1;
-    border-radius: 10px;
+    border-radius: var(--r-md);
     display: block;
   }
   /* The title button covers the whole card; the play button sits above it. */
@@ -58,7 +58,7 @@
     content: '';
     position: absolute;
     inset: 0;
-    border-radius: 14px;
+    border-radius: var(--r-lg);
   }
   .open:focus-visible {
     outline: none;

@@ -158,7 +158,14 @@
     background: var(--accent, var(--accent-default));
     color: var(--on-accent);
   }
+  /* One filled button per screen (Play); the rest stay quiet until hovered. */
   .secondary {
+    background: transparent;
+    color: var(--muted);
+    padding: 0 14px;
+  }
+  .secondary:hover:not(:disabled) {
+    color: var(--text);
     background: var(--raised);
   }
   .fit {
@@ -169,7 +176,7 @@
     cursor: default;
   }
   h2 {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 700;
     margin-bottom: 12px;
   }
@@ -184,7 +191,7 @@
   }
   .ghost {
     background: var(--raised);
-    border-radius: 10px;
+    border-radius: var(--r-md);
   }
   .ghost.name {
     width: min(360px, 70%);
