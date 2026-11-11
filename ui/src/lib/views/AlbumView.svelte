@@ -162,7 +162,6 @@
   .list {
     display: flex;
     flex-direction: column;
-    max-width: 900px;
   }
   .ghost {
     background: var(--raised);
