@@ -3,6 +3,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
+use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result, bail};
 use serde::Serialize;
@@ -13,6 +14,14 @@ pub struct Profile {
     pub name: String,
     pub email: Option<String>,
     pub photo: Option<String>,
+}
+
+/// How often the session's cookies are rotated.
+pub const ROTATE_EVERY: Duration = Duration::from_secs(10 * 60);
+
+/// Due when never rotated, when the interval has passed, or when the clock went backwards.
+fn rotation_due(last: Option<SystemTime>, now: SystemTime) -> bool {
+    last.is_none_or(|t| now.duration_since(t).map_or(true, |age| age >= ROTATE_EVERY))
 }
 
 pub struct Account {
@@ -66,6 +75,7 @@ impl Account {
         if let Err(e) = ytm.rotate_cookies().await {
             log::debug!("account: rotation right after sign-in: {e:#}");
         }
+        let _ = write_private(&self.dir.join("rotated"), b"");
         *self.signed_in.write().unwrap() = Some(Signed { ytm, profile: Some(profile.clone()) });
         log::info!("account: signed in");
         Ok(profile)
@@ -93,9 +103,18 @@ impl Account {
         Ok(Some(p))
     }
 
-    /// Google stops accepting a session nobody rotates, as an open tab would.
+    /// Google stops accepting a session nobody rotates, as an open tab would. At most once per
+    /// [`ROTATE_EVERY`], across restarts too: rotating on every launch got 429s from Google when
+    /// the app restarted every minute. A failed attempt waits the same interval.
     pub async fn rotate(&self) {
         let Some(ytm) = self.client() else { return };
+        let marker = self.dir.join("rotated");
+        let last = std::fs::metadata(&marker).and_then(|m| m.modified()).ok();
+        if !rotation_due(last, SystemTime::now()) {
+            log::debug!("account: rotated recently, skipping");
+            return;
+        }
+        let _ = write_private(&marker, b"");
         match ytm.rotate_cookies().await {
             Ok(()) => log::debug!("account: cookies rotated"),
             Err(e) => log::warn!("account: cookie rotation: {e:#}"),
@@ -136,6 +155,15 @@ mod tests {
         assert!(has_session("__Secure-3PAPISID=x"));
         assert!(!has_session("VISITOR_INFO1_LIVE=abc; YSC=def"));
         assert!(!has_session(""));
+    }
+
+    #[test]
+    fn rotation_waits_its_interval() {
+        let now = SystemTime::now();
+        assert!(rotation_due(None, now));
+        assert!(!rotation_due(Some(now - Duration::from_secs(60)), now));
+        assert!(rotation_due(Some(now - ROTATE_EVERY), now));
+        assert!(rotation_due(Some(now + Duration::from_secs(60)), now), "clock went backwards");
     }
 
     #[test]
