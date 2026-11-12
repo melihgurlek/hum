@@ -6,6 +6,7 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #40 | ytmusic-rs now comes from the fork (`melihgurlek/ytmusic-rs`). A stream link is checked at a byte past 1.2 MB as well as the first, side by side, so a link served at the start and refused later (as iOS links without a token are) falls through to the next client. Resolve time unchanged (median ~115 ms) |
 | #39 | Radio: your taste now counts against your favorite artist, not the sum of all of them (it used to be ~5 % of the score); songs heard in the last 2 hours dropped, earlier ones pushed down by how recently (a lot for yesterday, half for a week ago) instead of dropping the last 6 hours; "Don't play this artist" in a song's right-click menu, undone in Settings. Radio continuations dropped: radio already re-seeds from the playing song |
 | #38 | Home on a first launch: YouTube Music's own home page (the account's when signed in) until something is played; quick picks fuse up to four seeds' radios (latest plays, favorites, then account likes), so likes from the account fill Home at once |
 | #33 | Song cache: a song played to the end without a seek is kept on disk (mpv records it as it plays, no extra data), up to 1 GB, oldest first. Replays start in ~20 ms instead of ~900 ms and use no data. Settings shows saved songs, with Clear |
@@ -42,21 +43,17 @@ Status 2026-11-12 (Linux): sign-in, account sync and the song cache (#33) work a
 account. Order below comes from [COMPETITORS.md](COMPETITORS.md): every dead client died of
 playback breaking, so reliability comes first.
 
-1. **Check deeper than the first byte**: ytmusic-rs already falls back VisionOS → embedded →
-   signed-in, and hum re-resolves once on a mid-song error, but a link is only checked at byte
-   0. Metrolist found clients that serve the start and 403 later; check a later range too (in
-   the fork, `melihgurlek/ytmusic-rs`). No playback errors in the logs so far.
-2. **Cipher configs from the community registries** (`MetrolistGroup/faraday`,
+1. **Cipher configs from the community registries** (`MetrolistGroup/faraday`,
    `ZemerTeam/zemer-cipher`), refreshed when an unknown player hash appears, so YouTube
    changes are fixed without a hum release.
-3. **Errors that say what broke** (network, link expired, client blocked, bot check), with a
+2. **Errors that say what broke** (network, link expired, client blocked, bot check), with a
    "Copy playback report" button (client, itag, error).
-4. **Cheap desktop wins**: restore queue and position on launch, loudness normalization from
+3. **Cheap desktop wins**: restore queue and position on launch, loudness normalization from
    `loudness_db`, sleep timer with fade.
-5. **Test on Windows** (WebView2): sign-in, account sync, the song cache, account radio.
-6. **Test the song cache by hand**: seeking or skipping mid-song must discard the recording; a
+4. **Test on Windows** (WebView2): sign-in, account sync, the song cache, account radio.
+5. **Test the song cache by hand**: seeking or skipping mid-song must discard the recording; a
    song played to the end shows up under Settings → Saved songs.
-7. **Android spike** ([MOBILE.md](MOBILE.md)): the Rust engine playing from a Media3 foreground
+6. **Android spike** ([MOBILE.md](MOBILE.md)): the Rust engine playing from a Media3 foreground
    service after the WebView is gone.
 
 ## Later
