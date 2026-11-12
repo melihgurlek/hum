@@ -102,17 +102,4 @@
     opacity: 1;
     transform: none;
   }
-  @media (hover: none) {
-    .open:active {
-      transform: none;
-      opacity: 1;
-    }
-    .open::after {
-      transition: background-color 0.12s ease-out;
-    }
-    .open:active::after {
-      background: color-mix(in srgb, var(--text) 6%, transparent);
-      transition: none;
-    }
-  }
 </style>

@@ -201,17 +201,4 @@
       opacity: 1;
     }
   }
-  @media (hover: none) {
-    .main:active {
-      transform: none;
-      opacity: 1;
-    }
-    .main::after {
-      transition: background-color 0.12s ease-out;
-    }
-    .main:active::after {
-      background: color-mix(in srgb, var(--text) 6%, transparent);
-      transition: none;
-    }
-  }
 </style>
