@@ -1,83 +1,66 @@
-# Would a phone version of hum help?
+# A phone version of hum
 
-First pass 2026-11-11, too brief to decide on. Feature lists come from project pages and listings, not from
-using each app, so treat the "they don't" column as unverified.
+Updated 2026-11-12 after reading Metrolist, SimpMusic, ArchiveTune, Harmony Music and limusic on
+GitHub (details in [COMPETITORS.md](COMPETITORS.md)).
 
-## The field on Android
+## Verdict: worth building, after desktop reliability, starting with one spike
 
-Open-source YouTube Music clients are crowded and mature:
-- **MetroList**: account sync (likes, playlists, albums, artists), offline caching, live lyrics,
-  background play. The most-mentioned one, now in maintenance mode.
-- **SimpMusic**: MIT, downloads for offline, actively maintained.
-- **OuterTune, ArchiveTune**: InnerTune forks, Material 3.
-- **InnerTune, RiMusic**: discontinued.
+Why it's worth it:
+- That's where people listen. 86 % of SimpMusic's downloads are Android. limusic's top-voted
+  issue (#214) asks for Android.
+- hum's differences matter *more* on a phone. Auto quality on a shaky mobile connection, Data
+  used on a metered plan, a cache that costs no extra data, radio that learns from skips. No
+  Android client has any of these. Metrolist's "Auto" is just Low on metered connections.
+- The field is weak where it counts. Every Android client's top complaint is playback breaking.
+  InnerTune and RiMusic died of it. Metrolist ships a playback megathread per release.
+- hum's structure suits it. Stream extraction, queue, prefetch, radio and Auto quality are
+  already Rust in `crates/core`, and Rust runs on Android. That means one stream layer to keep
+  working on both platforms.
 
-All of them already do what a hum port would start with: background play, lock-screen controls,
-offline, lyrics, account sync.
+What it costs:
+- A Media3 player, a foreground service, a media session (lock screen, notification, Bluetooth),
+  phone layouts, and keeping background playback alive. Weeks of work.
 
-## What hum does that they (as far as listed) don't
+What not to copy from SimpMusic: it wrote the player logic twice. There are two ~3,000-line
+handlers for queue, prefetch, crossfade and sleep timer, one per platform, and bugs get fixed
+twice. hum should keep all of that in Rust and make Media3 a thin backend behind the same trait
+as mpv: load, play, pause, seek, and report position and errors.
 
-- Radio ranked by *your* listening: skips in the last 14 days dropped, songs heard in the last
-  6 hours dropped, no more than 2 by one artist in any 10. Plays count, likes are a fading bonus.
-- "Haven't played these in a while", and the reason each song is in Up next.
-- Auto quality that learns from stalls (step down after 2 in 2 minutes; step up only when
-  measured fast), and a Data used count.
-- A cache that costs no extra data: the first play records itself.
-- A design tinted by the cover.
+## The spike that decides it
 
-None of that needs a phone to be useful, and all of it could be built into any of those apps.
+Before any UI work: **can the Rust engine keep playing and prefetching after the WebView is
+gone?**
+- Run a Media3 foreground service that drives `crates/core` through the player trait.
+- Kill the activity, turn the screen off for 30 minutes, and switch networks. It must keep
+  playing and moving to the next song.
+- Check what Tauri does when Android kills the WebView renderer (`onRenderProcessGone`), and how
+  long the WebView takes to start on a 3–4 GB phone.
 
-## Undecided: the first pass was too thin
+If that fails, the port means a native Android shell around `crates/core` instead of Tauri's
+WebView, and it costs more.
 
-The first draft concluded "don't port" from one search, and asked the wrong question: what the
-phone would add to the desktop. The real question is whether hum would be the better app where
-people actually listen, which is mostly the phone. Several of hum's features matter *more* there:
-auto quality on a shaky mobile connection, Data used on a metered plan, a cache that costs no
-extra data. MetroList being in maintenance mode is an opening.
+## Must work on day one
 
-## What their users fight with (second pass, from release notes and reviews)
+Taken from what breaks in the other apps:
+- **Background playback that survives.** SimpMusic #2233: Media3 drops the foreground service 10
+  minutes after a track change. Handle dismissing the notification and clearing the task
+  correctly. Tell users how to turn off battery optimization.
+- **Queue and position saved**, so playback resumes after the system kills the process.
+- **Recovery on each kind of error**: retry on network errors, refresh the link on a 403, try
+  another client, retry at most 3 times. SimpMusic #2239: a failed prefetch leaves a dead player
+  that stops playback at the next song.
+- **Prefetch on visible search results.** Hovering doesn't exist on touch.
+- **Auto quality and Data used**, plus an "only on Wi-Fi" setting for prefetch.
+- **A screen-off battery budget.** Metrolist #3949: battery drain and garbage-collection storms.
+- **Long lists loaded in pages.** Metrolist crashes out of memory at 900+ liked songs.
+- **A log export** for bug reports.
+- Android Auto can come second.
 
-- **MetroList** went into maintenance mode (v13.4.0), followed by a "future of Metrolist"
-  release (v13.6.1). Recent releases keep fixing the same kinds of thing: playback freezing,
-  recovering from YouTube player failures, YouTube changes that broke playback (official apps
-  too), the app lingering in the background after closing, memory and background work in large
-  libraries, startup crashes. A listing showed ~623 open issues. Its data control is a manual
-  "Low" quality; its docs ask you to turn off battery optimization for reliable playback.
-- **SimpMusic** gets praised for its UI. A review summary says the complaints are reliability
-  (buffering, crashes, cache) and discovery (odd recommendations).
-- **OuterTune** lists personalized quick picks too, so hum's Home isn't unique on that.
+## Before the spike
 
-What that suggests:
-- **Openings for hum:** quality that adapts on its own instead of a manual Low, radio ranked by
-  your plays and skips against "odd recommendations", and a maintained app where the
-  most-used one is in maintenance mode.
-- **The shared risk:** their top pain, streams breaking when YouTube changes, would be hum's
-  too. On Android it's a different player and possibly different client tricks. Whoever keeps
-  streams working wins; hum would depend on ytmusic-rs keeping up on Android as well.
+The desktop reliability work in [ROADMAP.md](ROADMAP.md) comes first: per-song client recovery,
+cipher configs from the registries, clear error messages. A phone on mobile data hits every one
+of those failures more often than a desktop on Wi-Fi.
 
-## Research to do before deciding
-
-1. Use MetroList and SimpMusic for a few days on the phone. Note what's annoying: start time,
-   data use, battery, how good radio is, design.
-2. Read their open issues and reviews for recurring complaints (playback dying in the
-   background, data use, sync bugs, broken streams after YouTube changes).
-3. Measure on the phone: click to sound, data per hour at each quality, battery per hour.
-4. Price the port: Media3 player plugin, phone layouts, background service, lock screen, and
-   keeping streams working on Android.
-5. Then decide, from what those apps do badly and hum could do well.
-
-Phone as a remote stays a cheap idea on its own, whatever the decision.
-
-Sources for the second pass: [MetroList v13.4.0, maintenance mode](https://newreleases.io/project/github/MetrolistGroup/Metrolist/release/v13.4.0),
-[v13.6.1](https://newreleases.io/project/github/MetrolistGroup/Metrolist/release/v13.6.1),
-[v13.6.2](https://newreleases.io/project/github/MetrolistGroup/Metrolist/release/v13.6.2),
-[v13.7.0](https://newreleases.io/project/github/MetrolistGroup/Metrolist/release/v13.7.0),
-[MetroList playback guide](https://mintlify.wiki/MetrolistGroup/Metrolist/guide/playback),
-[SimpMusic reviews](https://www.producthunt.com/products/simpmusic/reviews),
-[OuterTune](https://alternativeto.net/software/outertune/).
-
-Sources: [alternativeto: Metrolist](https://alternativeto.net/software/metrolist/),
-[alternativeto: RiMusic](https://alternativeto.net/software/rimusic/),
-[SimpMusic](https://www.simpmusic.org/blogs/open-source-youtube-music-client),
-[ArchiveTune](https://awesome.ecosyste.ms/projects/github.com%2Fkoiverse%2FArchiveTune),
-[r/fossdroid, March 2025](https://redlib.hackliberty.org/r/fossdroid/comments/1jbwfan/other_youtube_music_apps).
+The phone-as-remote idea is dropped. Taking the phone out to scan a QR code is more hassle than
+reaching for the laptop.
