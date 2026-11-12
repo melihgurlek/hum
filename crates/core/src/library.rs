@@ -870,6 +870,25 @@ impl Library {
     }
 }
 
+/// Several seeds' radios as one list. A song scores by where it sits in each radio, weighted
+/// by its seed (the first seed counts most), summed over radios, so songs that several of your
+/// songs lead to come first. Order within one radio is YouTube's "sounds like this".
+pub fn fuse_radios(radios: Vec<Vec<Track>>) -> Vec<Track> {
+    let mut scored: Vec<(f64, Track)> = Vec::new();
+    for (seed, radio) in radios.into_iter().enumerate() {
+        let weight = 1.0 / (1.0 + seed as f64 * 0.25);
+        for (pos, t) in radio.into_iter().enumerate() {
+            let s = weight / (1.0 + pos as f64 / 5.0);
+            match scored.iter_mut().find(|(_, u)| u.id == t.id) {
+                Some(e) => e.0 += s,
+                None => scored.push((s, t)),
+            }
+        }
+    }
+    scored.sort_by(|a, b| b.0.total_cmp(&a.0));
+    scored.into_iter().map(|(_, t)| t).collect()
+}
+
 fn clean_name(name: &str) -> String {
     let n = name.trim();
     if n.is_empty() { "New playlist".to_string() } else { n.chars().take(100).collect() }
@@ -980,6 +999,16 @@ mod tests {
         assert!(ranked.iter().all(|t| t.id != "s"));
         let first_three: Vec<_> = ranked.iter().take(3).map(|t| artist_key(t)).collect();
         assert!(first_three.contains(&"b".to_string()), "{first_three:?}");
+    }
+
+    #[test]
+    fn fused_radios_favor_songs_several_seeds_share() {
+        let r = |ids: &[&str]| ids.iter().map(|i| track(i, i)).collect::<Vec<_>>();
+        let fused = fuse_radios(vec![r(&["a", "b", "c", "shared"]), r(&["d", "shared", "e"])]);
+        let ids: Vec<_> = fused.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(ids[0], "shared", "{ids:?}");
+        assert_eq!(ids.len(), 6, "no duplicates");
+        assert!(ids.iter().position(|&i| i == "a") < ids.iter().position(|&i| i == "d"), "first seed counts more");
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import { api, onSync, onUpdate, type AlbumPage, type ArtistPage, type SearchResults, type Palette, type PlaylistSummary, type Quality, type Track } from './api'
+import { api, onSync, onUpdate, type AlbumPage, type ArtistPage, type HomeShelf, type QuickPicks, type SearchResults, type Palette, type PlaylistSummary, type Quality, type Track } from './api'
 
 export type View = 'home' | 'search' | 'library' | 'settings' | 'playlist' | 'artist' | 'album'
 export type ThemePref = 'system' | 'dark' | 'light'
@@ -119,7 +119,9 @@ export function capSet<K, V>(map: Map<K, V>, key: K, value: V, cap: number) {
 // Session caches, so Back and revisits are instant. They live here, not in the views, because
 // a view's own variables are thrown away whenever you navigate off it.
 export const searchCache = new Map<string, SearchResults>()
-export const quickPicksCache = new Map<string, Track[]>()
+export const quickPicksCache = new Map<string, QuickPicks>()
+/** YouTube Music's home page, once per session. */
+export const homeFeed = $state<{ shelves: HomeShelf[] | null }>({ shelves: null })
 const artistCache = new Map<string, Promise<ArtistPage>>()
 const albumCache = new Map<string, Promise<AlbumPage>>()
 function cached<T>(cache: Map<string, Promise<T>>, id: string, fetch: (id: string) => Promise<T>): Promise<T> {
@@ -146,6 +148,19 @@ export async function playAlbum(id: string, shuffle = false) {
     const a = await loadAlbum(id)
     if (a.tracks.length) playList(shuffle ? shuffled(a.tracks) : a.tracks, 0)
   } catch (e) {
+    showToast(String(e))
+  }
+}
+
+/** Play a YouTube Music playlist (Home cards have no page of their own). */
+export async function playYtPlaylist(id: string) {
+  player.loading = true
+  try {
+    const tracks = await api.ytPlaylist(id)
+    if (tracks.length) playList(tracks, 0)
+    else player.loading = false
+  } catch (e) {
+    player.loading = false
     showToast(String(e))
   }
 }
