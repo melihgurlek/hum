@@ -7,6 +7,11 @@ pub mod color;
 pub mod engine;
 pub mod library;
 pub mod lyrics;
+pub mod playback;
+#[cfg(not(target_os = "android"))]
+pub mod player;
+#[cfg(target_os = "android")]
+#[path = "player_android.rs"]
 pub mod player;
 pub mod source;
 pub mod sync;

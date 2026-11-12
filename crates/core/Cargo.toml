@@ -11,14 +11,17 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 # Fork of sonorahq/ytmusic-rs: upstream plus our fixes, offered back as PRs.
-ytmusic = { git = "https://github.com/melihgurlek/ytmusic-rs", rev = "453365d" }
-libmpv2 = "7"
-# Only for mpv_wakeup, which libmpv2 doesn't wrap. Same version libmpv2 7 uses.
-libmpv2-sys = "4"
+ytmusic = { git = "https://github.com/melihgurlek/ytmusic-rs", rev = "89b9ea9" }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 rusqlite = { version = "0.42", features = ["bundled"] }
 serde_json = "1"
+
+# No mpv on Android: playback goes to the app's Media3 player (player_android.rs).
+[target.'cfg(not(target_os = "android"))'.dependencies]
+libmpv2 = "7"
+# Only for mpv_wakeup, which libmpv2 doesn't wrap. Same version libmpv2 7 uses.
+libmpv2-sys = "4"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
