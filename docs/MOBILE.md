@@ -101,8 +101,11 @@ PLAYING). Same phone, Wi-Fi, an app already running:
   after a stall). At 130 kbps that's ~8 KB instead of ~40 KB, and the connection set-up left.
 - Rows resolve their song on touch-down (a tap holds ~100 ms), and the engine shares a lookup
   in progress, so the play that follows waits for it rather than asking YouTube again.
-- Still slow: the first tap after launch (the player's first start, ~700 ms) and YouTube's own
-  odd slow lookup (~700 ms).
+- Still slow: YouTube's own stream lookup, 143-961 ms on any tap whose URL isn't resolved yet.
+  The first tap after launch is not slower (re-measured 2026-11-12, five cold starts driven over
+  adb: first songs 623-1170 ms, median 726; second songs 619-1499, median 1053; songs with the
+  URL already resolved 457-485). ExoPlayer takes 400-580 ms either way, about 300 of it waiting
+  for the first bytes; starting its service at launch saved nothing (it cost ~80 ms).
 - The Activity and WebView stay in memory after a swipe-away (Samsung keeps them); fine at
   131 MB, but the renderer could be released when the UI is gone.
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api, artistLine, type HomeCard, type QuickPicks, type Track, img } from '../api'
   import { untrack } from 'svelte'
-  import { capSet, go, homeFeed, layout, player, savedPicks, playList, playRadio, playYtPlaylist, prefetchOnHover, quickPicksCache as cache, ui } from '../state.svelte'
+  import { capSet, go, homeFeed, layout, savedPicks, playList, playRadio, playYtPlaylist, prefetchOnHover, quickPicksCache as cache, ui } from '../state.svelte'
   import AlbumCard from '../components/AlbumCard.svelte'
   import Icon from '../components/Icon.svelte'
   import TrackRow from '../components/TrackRow.svelte'
@@ -44,13 +44,8 @@
       .catch(() => {})
       .finally(() => (loading = false))
   })
-  // The radio button follows the same snapshot, so it doesn't jump either.
+  // What Quick picks are built from, for the loading line (from the same snapshot).
   const seed = $derived(untrack(() => ui.recent.find((t) => t.id === key)) ?? qp?.seeds[0] ?? null)
-  // Already playing it: keep it playing and line up its radio after it, rather than restart.
-  function keepGoing(t: Track) {
-    if (player.current?.id === t.id) api.radioFromCurrent().catch(() => {})
-    else playRadio(t)
-  }
   const picks = $derived(qp?.picks ?? [])
   // Desktop shows the first 12 (about four rows) so the sections below stay in sight; phones
   // swipe through all of them four rows at a time.
@@ -82,17 +77,9 @@
 
 <div class="page scroll">
   {#if seed}
-    <div class="cta-row">
-      <button class="cta" use:prefetchOnHover={seed.id} onclick={() => keepGoing(seed)}>
-        <span class="play"><Icon name="play" size={16} /></span>
-        <span class="trim">Keep going with {seed.artists[0] ?? seed.title} radio</span>
-      </button>
-    </div>
-
     <section onpointerdown={() => (touched = true)}>
       <div class="head">
         <h2>{fresh ? 'From your liked songs' : 'Quick picks'}</h2>
-        {#if picks.length}<button class="link" use:prefetchOnHover={picks[0]?.id} onclick={() => playList(picks, 0)}>Play all</button>{/if}
       </div>
       {#if loading && !picks.length}
         <p class="muted">Finding songs like {seed.title}…</p>
@@ -112,7 +99,6 @@
       <section>
         <div class="head">
           <h2>Haven't played these in a while</h2>
-          <button class="link" use:prefetchOnHover={forgotten[0]?.track.id} onclick={() => playList(forgotten.map((f) => f.track), 0)}>Play all</button>
         </div>
         <div class="picks">
           {#each forgotten as f, i (f.track.id)}
@@ -150,7 +136,6 @@
       <section>
         <div class="head">
           <h2>{shelf.title}</h2>
-          {#if shelf.songs.length}<button class="link" use:prefetchOnHover={shelf.songs[0]?.id} onclick={() => playList(shelf.songs, 0)}>Play all</button>{/if}
         </div>
         {#if shelf.songs.length}
           <div class="picks">
@@ -199,19 +184,6 @@
   }
   section > h2 {
     margin-bottom: 12px;
-  }
-  .link {
-    color: var(--muted);
-    font-weight: 600;
-    min-height: 44px;
-  }
-  .link:hover {
-    color: var(--text);
-  }
-  .cta-row {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
   }
   .cta {
     display: inline-flex;
