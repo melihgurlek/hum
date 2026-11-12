@@ -447,7 +447,13 @@
     font: inherit;
     font-size: 14px;
   }
-  .album-link:hover,
+  /* Hover only where there's a pointer: after a tap a touchscreen keeps :hover, which left
+     the underline stuck. */
+  @media (hover: hover) {
+    .album-link:hover {
+      text-decoration: underline;
+    }
+  }
   .album-link:focus-visible {
     text-decoration: underline;
   }

@@ -22,7 +22,13 @@
     position: relative;
     z-index: 1;
   }
-  .artist-link:hover,
+  /* Hover only where there's a pointer: after a tap a touchscreen keeps :hover, which left
+     the underline stuck. */
+  @media (hover: hover) {
+    .artist-link:hover {
+      text-decoration: underline;
+    }
+  }
   .artist-link:focus-visible {
     text-decoration: underline;
   }
