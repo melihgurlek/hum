@@ -6,6 +6,7 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #38 | Home on a first launch: YouTube Music's own home page (the account's when signed in) until something is played; quick picks fuse up to four seeds' radios (latest plays, favorites, then account likes), so likes from the account fill Home at once |
 | #33 | Song cache: a song played to the end without a seek is kept on disk (mpv records it as it plays, no extra data), up to 1 GB, oldest first. Replays start in ~20 ms instead of ~900 ms and use no data. Settings shows saved songs, with Clear |
 | #32 | Settings → Playback: "Radio from my YouTube Music account" (off by default, shown when signed in). Measured: it replaces about half of each radio (13–30 of 50 shared with the anonymous one, which repeats itself 48–50 of 50) |
 | #29 | Google sign-in (Settings), and likes and playlists synced both ways with the YouTube Music account: changes go up at once, the account's come down at startup and when Liked songs or a playlist opens. Search and playback stay anonymous |
@@ -48,10 +49,8 @@ playback breaking, so reliability comes first.
    changes are fixed without a hum release.
 3. **Errors that say what broke** (network, link expired, client blocked, bot check), with a
    "Copy playback report" button (client, itag, error).
-4. **Recommendations**: quick picks from several seeds, fused by how many point at a song (as
-   ArchiveTune does); demote songs heard in the last 30 days instead of dropping the last 6
-   hours; follow radio continuations; block an artist; cold start from account likes or
-   history.
+4. **Recommendations**: demote songs heard in the last 30 days instead of dropping the last 6
+   hours; follow radio continuations; block an artist.
 5. **Cheap desktop wins**: restore queue and position on launch, loudness normalization from
    `loudness_db`, sleep timer with fade.
 6. **Test on Windows** (WebView2): sign-in, account sync, the song cache, account radio.
@@ -107,7 +106,6 @@ playback breaking, so reliability comes first.
 
 - Artist top songs have no durations until played (YouTube Music doesn't list them there).
 - Only a song's first artist links to a page; YouTube Music's song lists carry one artist id.
-- Home starts nearly empty (one search button); it fills in as history builds up.
 - Skipping a song early costs up to ~0.3 MB at High: mpv reads 20 s ahead.
 - Only two stream sizes are used (~130 and ~50 kbps AAC); YouTube's ~65 kbps Opus stream would
   need ytmusic-rs to stop preferring AAC.

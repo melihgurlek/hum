@@ -30,6 +30,11 @@ export type TopResult =
   | { kind: 'album'; id: string; title: string; detail: string | null; thumb: string | null }
 export interface SearchResults { top: TopResult | null; songs: Track[] }
 export interface AlbumPage { card: AlbumCard; cover: string | null; tracks: Track[] }
+export type HomeCard =
+  | ({ type: 'album' } & AlbumCard)
+  | { type: 'playlist'; id: string; title: string; subtitle: string | null; thumb: string | null }
+export interface HomeShelf { title: string; songs: Track[]; cards: HomeCard[] }
+export interface QuickPicks { seeds: Track[]; picks: Track[] }
 
 export type Quality = 'auto' | 'data_saver' | 'normal' | 'high'
 
@@ -73,7 +78,9 @@ export const api = {
   recent: (limit: number) => invoke<Track[]>('recent', { limit }),
   trackNotes: (ids: string[]) => invoke<Record<string, TrackNote>>('track_notes', { ids }),
   forgotten: (limit: number) => invoke<{ track: Track; last_played: number }[]>('forgotten', { limit }),
-  quickPicks: (seed: string) => invoke<Track[]>('quick_picks', { seed }),
+  quickPicks: () => invoke<QuickPicks>('quick_picks'),
+  homeFeed: () => invoke<HomeShelf[]>('home_feed'),
+  ytPlaylist: (id: string) => invoke<Track[]>('yt_playlist', { id }),
   lyrics: (track: Track) => invoke<Lyrics | null>('lyrics', { track }),
   playlists: () => invoke<PlaylistSummary[]>('playlists'),
   playlist: (id: number) => invoke<Playlist | null>('playlist', { id }),

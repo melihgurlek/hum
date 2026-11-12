@@ -142,6 +142,43 @@ pub struct SearchResults {
     pub songs: Vec<Track>,
 }
 
+/// A shelf of YouTube Music's home page: songs, or cards that open or play something.
+#[derive(Clone, Debug, Serialize)]
+pub struct HomeShelf {
+    pub title: String,
+    pub songs: Vec<Track>,
+    pub cards: Vec<HomeCard>,
+}
+
+/// Tagged by `type`, since an album card has its own `kind` ("Single", "EP").
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum HomeCard {
+    Album(AlbumCard),
+    Playlist { id: String, title: String, subtitle: Option<String>, thumb: Option<String> },
+}
+
+fn home_shelf(shelf: &serde_json::Value) -> Option<HomeShelf> {
+    let title = ytmusic::parse::runs_text(shelf.pointer("/header/musicCarouselShelfBasicHeaderRenderer/title")?)?;
+    let (mut songs, mut cards) = (Vec::new(), Vec::new());
+    for item in shelf.get("contents")?.as_array()? {
+        if item.get("musicResponsiveListItemRenderer").is_some() {
+            songs.extend(ytmusic::parse::list_item_track(item).and_then(Track::from_ytm));
+        } else if let Some(p) = ytmusic::parse::two_row_playlist(item) {
+            let subtitle = item.pointer("/musicTwoRowItemRenderer/subtitle").and_then(ytmusic::parse::runs_text);
+            cards.push(HomeCard::Playlist {
+                thumb: best_thumb(&p.thumbnails).map(|u| sized(u, 352)),
+                id: p.id,
+                title: p.title,
+                subtitle,
+            });
+        } else if let Some(a) = ytmusic::parse::two_row_album(item) {
+            cards.push(HomeCard::Album(AlbumCard::from_ytm(a)));
+        }
+    }
+    (!songs.is_empty() || !cards.is_empty()).then_some(HomeShelf { title, songs, cards })
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct AlbumPage {
     pub card: AlbumCard,
@@ -283,6 +320,57 @@ impl Source {
         let ytm = self.radio_ytm.read().unwrap().clone().unwrap_or_else(|| self.ytm.clone());
         let res = ytm.track_radio(video_id).await?;
         Ok(res.into_iter().filter_map(Track::from_ytm).collect())
+    }
+
+    /// YouTube Music's home page: the first page and a few more, about a second in all. The
+    /// account's when `ytm` is signed in (personal), the anonymous one's otherwise (charts, new
+    /// releases and moods for the region).
+    pub async fn home(&self, ytm: Option<Arc<YtMusic>>) -> Result<Vec<HomeShelf>> {
+        use ytmusic::Client;
+        let ytm = ytm.unwrap_or_else(|| self.ytm.clone());
+        let mut page = ytm
+            .execute("browse", Client::Music, serde_json::json!({ "browseId": "FEmusic_home" }))
+            .await?;
+        let mut shelves = Vec::new();
+        for _ in 0..4 {
+            shelves.extend(
+                ytmusic::parse::find_renderers(&page, "musicCarouselShelfRenderer").into_iter().filter_map(home_shelf),
+            );
+            let token = ["sectionListRenderer", "sectionListContinuation"]
+                .iter()
+                .find_map(|k| ytmusic::parse::find_renderer(&page, k).and_then(ytmusic::parse::shelf_continuation));
+            let Some(token) = token else { break };
+            match ytm.execute("browse", Client::Music, serde_json::json!({ "continuation": token })).await {
+                Ok(next) => page = next,
+                Err(e) => {
+                    log::debug!("home: next page: {e:#}");
+                    break;
+                }
+            }
+        }
+        anyhow::ensure!(!shelves.is_empty(), "YouTube Music's home page came back empty");
+        // Song shelves first: one click plays. Otherwise YouTube's order.
+        shelves.sort_by_key(|s| s.songs.is_empty());
+        Ok(shelves)
+    }
+
+    /// A YouTube Music playlist's songs, to play it from a Home card.
+    pub async fn playlist_tracks(&self, id: &str) -> Result<Vec<Track>> {
+        let d = self.ytm.playlist(id).await?;
+        Ok(d.tracks.into_iter().filter_map(Track::from_ytm).collect())
+    }
+
+    /// The radios of up to four songs, fetched side by side. A failed one comes back empty.
+    pub async fn radios(&self, ids: &[String]) -> Vec<Vec<Track>> {
+        let one = |i: usize| async move {
+            let Some(id) = ids.get(i) else { return Vec::new() };
+            self.radio(id).await.unwrap_or_else(|e| {
+                log::debug!("radio for {id}: {e:#}");
+                Vec::new()
+            })
+        };
+        let (a, b, c, d) = tokio::join!(one(0), one(1), one(2), one(3));
+        [a, b, c, d].into_iter().take(ids.len()).collect()
     }
 
     pub async fn artist(&self, id: &str) -> Result<ArtistPage> {

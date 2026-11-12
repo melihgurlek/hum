@@ -3,22 +3,31 @@
   import { openAlbum, playAlbum } from '../state.svelte'
   import Icon from './Icon.svelte'
 
-  let { album, showArtist = false }: { album: AlbumCard; showArtist?: boolean } = $props()
+  // A playlist card passes its own `subtitle` and actions, since it has no page in hum.
+  let {
+    album,
+    showArtist = false,
+    subtitle,
+    onplay,
+    onopen,
+  }: { album: AlbumCard; showArtist?: boolean; subtitle?: string | null; onplay?: () => void; onopen?: () => void } = $props()
   const meta = $derived(
-    [album.year, album.kind === 'Album' && !showArtist ? null : album.kind, showArtist ? album.artists.map((a) => a.name).join(', ') : null]
-      .filter(Boolean)
-      .join(' · '),
+    subtitle !== undefined
+      ? subtitle
+      : [album.year, album.kind === 'Album' && !showArtist ? null : album.kind, showArtist ? album.artists.map((a) => a.name).join(', ') : null]
+          .filter(Boolean)
+          .join(' · '),
   )
 </script>
 
 <div class="card">
   <div class="artwrap">
     {#if album.thumb}<img class="cover art" src={img(album.thumb)} alt="" loading="lazy" />{:else}<div class="cover art"></div>{/if}
-    <button class="play" aria-label={`Play ${album.title}`} title="Play" onclick={() => playAlbum(album.id)}>
+    <button class="play" aria-label={`Play ${album.title}`} title="Play" onclick={() => (onplay ? onplay() : playAlbum(album.id))}>
       <Icon name="play" size={18} />
     </button>
   </div>
-  <button class="open ellipsis" onclick={() => openAlbum(album.id)}>{album.title}</button>
+  <button class="open ellipsis" onclick={() => (onopen ? onopen() : openAlbum(album.id))}>{album.title}</button>
   {#if meta}<span class="meta ellipsis">{meta}</span>{/if}
 </div>
 

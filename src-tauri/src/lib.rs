@@ -198,44 +198,84 @@ async fn forgotten(app: State<'_, App>, limit: usize) -> Res<Vec<Forgotten>> {
     Ok(v.into_iter().map(|(track, last_played)| Forgotten { track, last_played }).collect())
 }
 
-/// Home's quick picks: the seed's radio ranked by your taste, with a few of your own favorites
-/// mixed in so it isn't all new music.
+#[derive(serde::Serialize)]
+struct QuickPicks {
+    /// The songs the picks start from: your latest plays and favorites, or your likes when
+    /// nothing has been played here yet.
+    seeds: Vec<Track>,
+    picks: Vec<Track>,
+}
+
+/// Home's quick picks: up to four seeds' radios fused (songs several seeds lead to first),
+/// ranked by your taste, with a few of your own favorites mixed in so it isn't all new music.
 #[tauri::command]
-async fn quick_picks(app: State<'_, App>, seed: String) -> Res<Vec<Track>> {
-    let radio = app.engine.source().radio(&seed).await.map_err(err)?;
+async fn quick_picks(app: State<'_, App>) -> Res<QuickPicks> {
     let l = lib(&app)?;
-    l.run(move |l| {
-        let mut ranked = l.rank_radio(radio)?;
-        ranked.retain(|t| t.id != seed);
-        let mut favs = l.top_tracks(12)?;
-        favs.retain(|f| f.id != seed && !ranked.iter().any(|t| t.id == f.id));
-        let mut out = Vec::new();
-        let (mut r, mut f) = (ranked.into_iter(), favs.into_iter());
-        // Three new for every one you know.
-        while out.len() < 12 {
-            let mut took = false;
-            for _ in 0..3 {
-                if let Some(t) = r.next() {
+    let seeds = l
+        .run(|l| {
+            let mut seeds = l.recent_tracks(2)?;
+            for t in l.top_tracks(4)?.into_iter().chain(l.liked()?) {
+                if seeds.len() >= 4 {
+                    break;
+                }
+                if !seeds.iter().any(|s| s.id == t.id) {
+                    seeds.push(t);
+                }
+            }
+            Ok(seeds)
+        })
+        .await
+        .map_err(err)?;
+    if seeds.is_empty() {
+        return Ok(QuickPicks { seeds, picks: Vec::new() });
+    }
+    let ids: Vec<String> = seeds.iter().map(|t| t.id.clone()).collect();
+    let radios = app.engine.source().radios(&ids).await;
+    let picks = l
+        .run(move |l| {
+            let mut ranked = l.rank_radio(hum_core::library::fuse_radios(radios))?;
+            ranked.retain(|t| !ids.contains(&t.id));
+            let mut favs = l.top_tracks(12)?;
+            favs.retain(|f| !ids.contains(&f.id) && !ranked.iter().any(|t| t.id == f.id));
+            let mut out = Vec::new();
+            let (mut r, mut f) = (ranked.into_iter(), favs.into_iter());
+            // Three new for every one you know.
+            while out.len() < 12 {
+                let mut took = false;
+                for _ in 0..3 {
+                    if let Some(t) = r.next() {
+                        out.push(t);
+                        took = true;
+                    }
+                }
+                if let Some(t) = f.next() {
                     out.push(t);
                     took = true;
                 }
+                if !took {
+                    break;
+                }
             }
-            if let Some(t) = f.next() {
-                out.push(t);
-                took = true;
-            }
-            if !took {
-                break;
-            }
-        }
-        out.truncate(12);
-        Ok(out)
-    })
-    .await
-    .map_err(err)
+            out.truncate(12);
+            Ok(out)
+        })
+        .await
+        .map_err(err)?;
+    Ok(QuickPicks { seeds, picks })
 }
 
-/// Lyrics for a track: from the library cache, else LRCLIB, else YouTube Music.
+/// YouTube Music's home page, from the account when signed in.
+#[tauri::command]
+async fn home_feed(app: State<'_, App>) -> Res<Vec<hum_core::source::HomeShelf>> {
+    app.engine.source().home(app.account.client()).await.map_err(err)
+}
+
+/// A YouTube Music playlist's songs (Home cards).
+#[tauri::command]
+async fn yt_playlist(app: State<'_, App>, id: String) -> Res<Vec<Track>> {
+    app.engine.source().playlist_tracks(&id).await.map_err(err)
+}
+
 #[tauri::command]
 async fn lyrics(app: State<'_, App>, track: Track) -> Res<Option<hum_core::lyrics::Lyrics>> {
     let l = lib(&app)?;
@@ -650,6 +690,8 @@ pub fn run() {
             track_notes,
             forgotten,
             quick_picks,
+            home_feed,
+            yt_playlist,
             lyrics,
             playlists,
             playlist,

@@ -1,32 +1,34 @@
 <script lang="ts">
-  import { api, artistLine, type Track, img } from '../api'
-  import { capSet, go, playList, playRadio, prefetchOnHover, quickPicksCache as cache, ui } from '../state.svelte'
+  import { api, artistLine, type HomeCard, type QuickPicks, type Track, img } from '../api'
+  import { capSet, go, homeFeed, playList, playRadio, playYtPlaylist, prefetchOnHover, quickPicksCache as cache, ui } from '../state.svelte'
+  import AlbumCard from '../components/AlbumCard.svelte'
   import Icon from '../components/Icon.svelte'
   import TrackRow from '../components/TrackRow.svelte'
 
-  const seed = $derived(ui.recent[0] ?? null)
-  let picks = $state<Track[]>([])
+  // Quick picks: up to four seeds' radios (your latest plays and favorites, or your likes on a
+  // fresh install) fused and ranked by your taste. Cached for the session, keyed by the latest
+  // play, so returning to Home is instant.
+  const key = $derived(ui.recent[0]?.id ?? '')
+  let qp = $state<QuickPicks | null>(null)
   let loading = $state(false)
-
-  // Quick picks: the last song's radio ranked by your taste, with a few favorites mixed in.
-  // Cached for the session (in state) so returning to Home is instant.
   $effect(() => {
-    const s = seed
-    if (!s) return
-    if (cache.has(s.id)) {
-      picks = cache.get(s.id)!
+    const k = key
+    if (cache.has(k)) {
+      qp = cache.get(k)!
       return
     }
     loading = true
     api
-      .quickPicks(s.id)
+      .quickPicks()
       .then((r) => {
-        capSet(cache, s.id, r, 10)
-        if (seed?.id === s.id) picks = r
+        capSet(cache, k, r, 10)
+        if (key === k) qp = r
       })
       .catch(() => {})
       .finally(() => (loading = false))
   })
+  const seed = $derived(ui.recent[0] ?? qp?.seeds[0] ?? null)
+  const picks = $derived(qp?.picks ?? [])
 
   let forgotten = $state<{ track: Track; last_played: number }[]>([])
   $effect(() => {
@@ -35,6 +37,18 @@
   const monthYear = (ts: number) =>
     new Date(ts * 1000).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
 
+  // Until something has been played here, Home shows YouTube Music's own home page (the
+  // account's when signed in), so a first launch isn't empty.
+  const fresh = $derived(ui.recent.length === 0)
+  $effect(() => {
+    if (!fresh || homeFeed.shelves) return
+    api.homeFeed().then((s) => (homeFeed.shelves = s)).catch(() => {})
+  })
+  // One row of cards per shelf, as many as fit at 150px or wider with 20px gaps.
+  let rowWidth = $state(0)
+  const cols = $derived(Math.max(2, Math.floor((rowWidth + 20) / 170)))
+  const asCard = (c: Extract<HomeCard, { type: 'playlist' }>) =>
+    ({ id: c.id, title: c.title, kind: 'Playlist', year: null, artists: [], thumb: c.thumb })
 </script>
 
 <div class="page scroll">
@@ -48,7 +62,7 @@
 
     <section>
       <div class="head">
-        <h2>Quick picks</h2>
+        <h2>{fresh ? 'From your liked songs' : 'Quick picks'}</h2>
         {#if picks.length}<button class="link" use:prefetchOnHover={picks[0]?.id} onclick={() => playList(picks, 0)}>Play all</button>{/if}
       </div>
       {#if loading && !picks.length}
@@ -77,24 +91,55 @@
       </section>
     {/if}
 
-    <section>
-      <h2>Recently played</h2>
-      <div class="tiles">
-        {#each ui.recent.slice(0, 12) as t (t.id)}
-          <button class="tile" use:prefetchOnHover={t.id} onclick={() => playRadio(t)} title={`Radio from ${t.title}`}>
-            {#if t.cover}<img class="cover art" src={img(t.cover)} alt="" loading="lazy" />{:else}<div class="cover art"></div>{/if}
-            <span class="ellipsis tt">{t.title}</span>
-            <span class="ellipsis muted ts">{artistLine(t)}</span>
-          </button>
-        {/each}
-      </div>
-    </section>
-  {:else}
+    {#if ui.recent.length}
+      <section>
+        <h2>Recently played</h2>
+        <div class="tiles">
+          {#each ui.recent.slice(0, 12) as t (t.id)}
+            <button class="tile" use:prefetchOnHover={t.id} onclick={() => playRadio(t)} title={`Radio from ${t.title}`}>
+              {#if t.cover}<img class="cover art" src={img(t.cover)} alt="" loading="lazy" />{:else}<div class="cover art"></div>{/if}
+              <span class="ellipsis tt">{t.title}</span>
+              <span class="ellipsis muted ts">{artistLine(t)}</span>
+            </button>
+          {/each}
+        </div>
+      </section>
+    {/if}
+  {:else if !loading}
     <section class="empty">
       <h1>Start with a song you like</h1>
       <p class="muted">hum keeps going with songs like it.</p>
       <button class="cta" onclick={() => go('search')}><span class="play"><Icon name="search" size={16} /></span><span class="trim">Search for a song</span></button>
     </section>
+  {/if}
+
+  {#if fresh && homeFeed.shelves}
+    {#each homeFeed.shelves as shelf (shelf.title)}
+      <section>
+        <div class="head">
+          <h2>{shelf.title}</h2>
+          {#if shelf.songs.length}<button class="link" use:prefetchOnHover={shelf.songs[0]?.id} onclick={() => playList(shelf.songs, 0)}>Play all</button>{/if}
+        </div>
+        {#if shelf.songs.length}
+          <div class="picks">
+            {#each shelf.songs.slice(0, 8) as t, i (t.id)}
+              <TrackRow track={t} onplay={() => playList(shelf.songs, i)} />
+            {/each}
+          </div>
+        {/if}
+        {#if shelf.cards.length}
+          <div class="row" style:--cols={cols} bind:clientWidth={rowWidth}>
+            {#each shelf.cards.slice(0, cols) as c (c.id)}
+              {#if c.type === 'album'}
+                <AlbumCard album={c} showArtist />
+              {:else}
+                <AlbumCard album={asCard(c)} subtitle={c.subtitle} onplay={() => playYtPlaylist(c.id)} onopen={() => playYtPlaylist(c.id)} />
+              {/if}
+            {/each}
+          </div>
+        {/if}
+      </section>
+    {/each}
   {/if}
 </div>
 
@@ -162,6 +207,12 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 2px 16px;
+  }
+  /* One row of cards: as many as fit at 150px or wider (see `cols`). */
+  .row {
+    display: grid;
+    grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+    column-gap: 20px;
   }
   .tiles {
     display: grid;
