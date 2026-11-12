@@ -473,6 +473,15 @@ impl Library {
         Ok(v)
     }
 
+    /// A song as last saved, by id.
+    pub fn track(&self, id: &str) -> Result<Option<Track>> {
+        let db = self.db.lock().unwrap();
+        let json: Option<String> = db
+            .query_row("SELECT json FROM tracks WHERE id = ?1", params![id], |r| r.get(0))
+            .optional()?;
+        Ok(json.and_then(|j| serde_json::from_str(&j).ok()))
+    }
+
     /// Remove the song at `index` (0-based, in playlist order).
     pub fn remove_from_playlist(&self, id: i64, index: usize) -> Result<()> {
         let mut ids = self.track_ids(id)?;

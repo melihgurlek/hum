@@ -295,6 +295,24 @@ pub mod images {
         let p = path_in(DIR.get()?, url);
         p.is_file().then_some(p)
     }
+
+    /// Fetch `url` into the cache unless it's there (a downloaded song's covers, so they show
+    /// offline even if the app never displayed them).
+    pub async fn fetch(url: &str) {
+        let Some(dir) = DIR.get() else { return };
+        let p = path_in(dir, url);
+        if p.is_file() || !url.starts_with("https://") {
+            return;
+        }
+        static HTTP: OnceLock<reqwest::Client> = OnceLock::new();
+        let http = HTTP.get_or_init(reqwest::Client::new);
+        if let Ok(r) = http.get(url).send().await.and_then(|r| r.error_for_status()) {
+            if let Ok(bytes) = r.bytes().await {
+                let _ = tokio::fs::create_dir_all(dir).await;
+                let _ = tokio::fs::write(&p, &bytes).await;
+            }
+        }
+    }
 }
 
 pub struct Source {

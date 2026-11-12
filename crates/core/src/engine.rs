@@ -461,7 +461,19 @@ impl Engine {
                 return true;
             }
             match self.download_song(&dl, id).await {
-                Ok(()) => {}
+                Ok(()) => {
+                    // Its covers too, so Now Playing and the lock screen show them offline.
+                    if let Ok(Some(t)) = lib.run({
+                        let id = id.clone();
+                        move |l| l.track(&id)
+                    })
+                    .await
+                    {
+                        for url in [&t.cover, &t.thumb].into_iter().flatten() {
+                            crate::source::images::fetch(url).await;
+                        }
+                    }
+                }
                 Err(e) if is_network_error(&e) => {
                     log::warn!("downloads: {id}: {e:#}; trying again in a minute");
                     return true;
