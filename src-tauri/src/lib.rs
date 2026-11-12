@@ -10,7 +10,6 @@ mod android;
 #[cfg(not(target_os = "android"))]
 mod media;
 
-use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -575,6 +574,14 @@ fn ui_log(message: String) {
 /// Cover art goes through Rust: cached on disk (no data spent twice, works offline) and fetched
 /// by reqwest, since WebKitGTK's own network stack failed to load googleusercontent images.
 /// The page asks for `img://localhost/<percent-encoded original URL>`.
+/// Where cover art is cached, shared with the system media controls (`images::cached`).
+fn image_dir(app: &tauri::AppHandle) -> PathBuf {
+    app.path()
+        .app_cache_dir()
+        .map(|d| d.join("images"))
+        .unwrap_or_else(|_| std::env::temp_dir().join("hum-images"))
+}
+
 async fn serve_image(http: reqwest::Client, dir: PathBuf, path: String) -> Response<Vec<u8>> {
     let not_found = || {
         Response::builder()
@@ -587,9 +594,7 @@ async fn serve_image(http: reqwest::Client, dir: PathBuf, path: String) -> Respo
     if !url.starts_with("https://") {
         return not_found();
     }
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    url.hash(&mut h);
-    let file = dir.join(format!("{:016x}", h.finish()));
+    let file = hum_core::source::images::path_in(&dir, &url);
     let ok = |bytes: Vec<u8>| {
         Response::builder()
             .header("Content-Type", sniff(&bytes))
@@ -654,11 +659,7 @@ pub fn run() {
         .register_asynchronous_uri_scheme_protocol("img", |ctx, request, responder| {
             let app = ctx.app_handle();
             let http = app.state::<App>().http.clone();
-            let dir = app
-                .path()
-                .app_cache_dir()
-                .map(|d| d.join("images"))
-                .unwrap_or_else(|_| std::env::temp_dir().join("hum-images"));
+            let dir = image_dir(app);
             let path = request.uri().path().to_string();
             tauri::async_runtime::spawn(async move {
                 responder.respond(serve_image(http, dir, path).await);
@@ -677,6 +678,7 @@ pub fn run() {
             };
             // Engine::start spawns tokio tasks, so it must run inside the runtime.
             let engine = tauri::async_runtime::block_on(async { Engine::start(source, library) })?;
+            hum_core::source::images::set_dir(image_dir(app.handle()));
             // About 250 songs at High.
             engine.set_song_cache(hum_core::cache::SongCache::new(app.path().app_cache_dir()?.join("songs"), 1 << 30));
             let mut updates = engine.subscribe();

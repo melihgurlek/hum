@@ -27,7 +27,8 @@ pub fn set_backend(backend: Backend) {
 
 /// An event from the app's player, as JSON: `{"ev":"started","id":"..."}`, `{"ev":"position",
 /// "secs":1.5}`, `{"ev":"duration","secs":200}`, `{"ev":"paused","paused":true}`,
-/// `{"ev":"stalled"}`, `{"ev":"idle"}`, `{"ev":"error","id":"...","message":"..."}`.
+/// `{"ev":"stalled"}`, `{"ev":"idle"}`, `{"ev":"error","id":"...","message":"..."}`,
+/// `{"ev":"downloaded","bytes":65536,"rate":120000}`, `{"ev":"recorded","path":"...","expected":3900000}`.
 pub fn event(json: &str) {
     let Ok(v) = serde_json::from_str::<Value>(json) else {
         log::warn!("player event is not json: {json}");
@@ -42,6 +43,14 @@ pub fn event(json: &str) {
         "paused" => PlayerEvent::Paused(v["paused"].as_bool().unwrap_or(false)),
         "stalled" => PlayerEvent::Stalled,
         "idle" => PlayerEvent::Idle,
+        "downloaded" => PlayerEvent::Downloaded {
+            bytes: v["bytes"].as_u64().unwrap_or(0),
+            rate: v["rate"].as_f64().unwrap_or(0.0),
+        },
+        "recorded" => match v["path"].as_str() {
+            Some(p) => PlayerEvent::Recorded { path: p.into(), expected: v["expected"].as_u64() },
+            None => return,
+        },
         "error" => PlayerEvent::Error {
             video_id: id(),
             message: v["message"].as_str().unwrap_or("playback failed").to_string(),
@@ -64,11 +73,14 @@ fn stream_json(s: &Stream) -> Value {
         "local": s.local,
         // Media3 takes a linear volume for the item; the engine decides it in dB.
         "gain": s.gain_db.map_or(1.0, |db| 10f64.powf(db / 20.0)),
+        // The song cache's recording, copied from what ExoPlayer downloads (Recorder.kt).
+        "recordTo": s.record_to.as_ref().map(|p| p.to_string_lossy()),
         // For the notification and lock screen.
         "title": s.meta.as_ref().map(|m| m.title.as_str()),
         "artist": s.meta.as_ref().map(|m| m.artist.as_str()),
         "album": s.meta.as_ref().and_then(|m| m.album.as_deref()),
         "artwork": s.meta.as_ref().and_then(|m| m.artwork.as_deref()),
+        "artworkFile": s.meta.as_ref().and_then(|m| m.artwork_file.as_deref()),
     })
 }
 

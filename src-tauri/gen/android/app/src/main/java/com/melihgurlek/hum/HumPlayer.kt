@@ -55,6 +55,9 @@ object HumPlayer {
     }
 
     private fun send(ev: JSONObject) = nativeEvent(ev.toString())
+
+    /** An event for the engine, from any thread (the recorder's and the download counter's). */
+    fun event(ev: JSONObject) = nativeEvent(ev.toString())
     private fun ev(name: String) = JSONObject().put("ev", name)
 
     // Binding a controller is what starts the service and lets it go foreground while playing.
@@ -81,6 +84,7 @@ object HumPlayer {
         val url = s.getString("url")
         val id = s.getString("id")
         if (s.optString("userAgent").isNotEmpty()) userAgents[url] = s.getString("userAgent")
+        if (s.optString("recordTo").isNotEmpty()) Recorder.expect(url, s.getString("recordTo"))
         gains[id] = s.optDouble("gain", 1.0).toFloat()
         val uri = if (s.optBoolean("local")) Uri.fromFile(File(url)) else Uri.parse(url)
         // What the notification and lock screen show; Media3 loads the cover from its URL.
@@ -88,7 +92,11 @@ object HumPlayer {
             .setTitle(s.optString("title").ifEmpty { null })
             .setArtist(s.optString("artist").ifEmpty { null })
             .setAlbumTitle(s.optString("album").ifEmpty { null })
-            .setArtworkUri(s.optString("artwork").ifEmpty { null }?.let(Uri::parse))
+            // The cached copy when there is one (it shows offline), else the URL.
+            .setArtworkUri(
+                s.optString("artworkFile").ifEmpty { null }?.let { Uri.fromFile(File(it)) }
+                    ?: s.optString("artwork").ifEmpty { null }?.let(Uri::parse),
+            )
             .build()
         return MediaItem.Builder().setUri(uri).setMediaId(id).setMediaMetadata(meta).build()
     }
