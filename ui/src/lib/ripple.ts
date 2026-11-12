@@ -52,7 +52,10 @@ function down(e: PointerEvent) {
   const box = el.getBoundingClientRect()
   if (!box.width || !box.height) return
   const style = getComputedStyle(el)
-  const radius = el === hit ? style.borderRadius : getComputedStyle(hit, '::after').borderRadius
+  let radius = el === hit ? style.borderRadius : getComputedStyle(hit, '::after').borderRadius
+  // A square-cornered control (a text link, a tab) gets soft corners: a hard-edged box looked
+  // like a selection, not a press.
+  if (parseFloat(radius) === 0) radius = '10px'
 
   if (!layer) {
     layer = document.createElement('div')

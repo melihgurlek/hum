@@ -80,7 +80,6 @@
     <section onpointerdown={() => (touched = true)}>
       <div class="head">
         <h2>{fresh ? 'From your liked songs' : 'Quick picks'}</h2>
-        {#if picks.length}<button class="link" use:prefetchOnHover={picks[0]?.id} onclick={() => playList(picks, 0)}>Play all</button>{/if}
       </div>
       {#if loading && !picks.length}
         <p class="muted">Finding songs like {seed.title}…</p>
@@ -100,7 +99,6 @@
       <section>
         <div class="head">
           <h2>Haven't played these in a while</h2>
-          <button class="link" use:prefetchOnHover={forgotten[0]?.track.id} onclick={() => playList(forgotten.map((f) => f.track), 0)}>Play all</button>
         </div>
         <div class="picks">
           {#each forgotten as f, i (f.track.id)}
@@ -138,7 +136,6 @@
       <section>
         <div class="head">
           <h2>{shelf.title}</h2>
-          {#if shelf.songs.length}<button class="link" use:prefetchOnHover={shelf.songs[0]?.id} onclick={() => playList(shelf.songs, 0)}>Play all</button>{/if}
         </div>
         {#if shelf.songs.length}
           <div class="picks">
@@ -187,14 +184,6 @@
   }
   section > h2 {
     margin-bottom: 12px;
-  }
-  .link {
-    color: var(--muted);
-    font-weight: 600;
-    min-height: 44px;
-  }
-  .link:hover {
-    color: var(--text);
   }
   .cta {
     display: inline-flex;
