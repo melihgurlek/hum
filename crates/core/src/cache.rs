@@ -56,6 +56,8 @@ impl SongCache {
                 expires_at: i64::MAX,
                 record_to: None,
                 local: true,
+                loudness_db: None,
+                gain_db: None,
             })
         })
     }
@@ -145,6 +147,8 @@ mod tests {
             expires_at: 0,
             record_to: None,
             local: false,
+            loudness_db: None,
+            gain_db: None,
         }
     }
 

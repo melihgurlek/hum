@@ -426,6 +426,11 @@ fn set_autoplay(app: State<'_, App>, on: bool) {
     app.engine.set_autoplay(on);
 }
 
+#[tauri::command]
+fn set_normalize(app: State<'_, App>, on: bool) {
+    app.engine.set_normalize(on);
+}
+
 #[derive(serde::Serialize)]
 struct QueueView {
     tracks: Vec<Track>,
@@ -702,6 +707,7 @@ pub fn run() {
             set_quality,
             get_quality,
             set_autoplay,
+            set_normalize,
             saved_songs,
             clear_saved_songs,
             set_account_radio,

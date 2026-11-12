@@ -46,6 +46,7 @@ class Ui {
   // 'normal' was the same stream as 'high' and is gone from Settings.
   quality = $state<Quality>(load<Quality>('hum.quality', 'auto') === 'normal' ? 'high' : load<Quality>('hum.quality', 'auto'))
   autoplay = $state(load('hum.autoplay', true))
+  normalize = $state(load('hum.normalize', true))
   accountRadio = $state(load('hum.accountRadio', false))
   toast = $state<string | null>(null)
   /** A report the toast offers to copy (a song that wouldn't play). */
@@ -296,11 +297,18 @@ function applyPalette() {
 
 // ---- engine events --------------------------------------------------------
 
+export function setNormalize(on: boolean) {
+  ui.normalize = on
+  save('hum.normalize', on)
+  api.setNormalize(on)
+}
+
 export async function startListening() {
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme)
   applyTheme()
   api.setQuality(ui.quality)
   api.setAutoplay(ui.autoplay)
+  api.setNormalize(ui.normalize)
   api.setAccountRadio(ui.accountRadio)
   refreshRecent()
   refreshPlaylists()

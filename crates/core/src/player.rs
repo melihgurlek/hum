@@ -128,6 +128,9 @@ fn load(mpv: &Mpv, stream: &Stream, mode: &str, start: Option<f64>) -> Result<()
     if let Some(t) = start {
         opts.push_str(&format!(",start={t:.1}"));
     }
+    if let Some(g) = stream.gain_db {
+        opts.push_str(&format!(",volume-gain={g:.2}"));
+    }
     // Only a play from the start can record the whole song.
     if let (Some(path), None) = (&stream.record_to, start) {
         opts.push_str(&format!(",stream-record={}", escaped(&path.to_string_lossy())));

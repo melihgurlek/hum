@@ -206,9 +206,32 @@ impl Library {
                  PRAGMA user_version = 4;",
             )?;
         }
+        // v5: songs' loudness from YouTube, so a copy from the song cache plays at the same level.
+        if db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))? < 5 {
+            db.execute_batch(
+                "CREATE TABLE IF NOT EXISTS loudness (track_id TEXT PRIMARY KEY, db REAL NOT NULL);
+                 PRAGMA user_version = 5;",
+            )?;
+        }
         Ok(Library {
             db: Arc::new(Mutex::new(db)),
         })
+    }
+
+    pub fn set_loudness(&self, track_id: &str, db: f32) -> Result<()> {
+        self.db.lock().unwrap().execute(
+            "INSERT OR REPLACE INTO loudness (track_id, db) VALUES (?1, ?2)",
+            params![track_id, db as f64],
+        )?;
+        Ok(())
+    }
+
+    pub fn loudness(&self, track_id: &str) -> Result<Option<f32>> {
+        let db = self.db.lock().unwrap();
+        let v: Option<f64> = db
+            .query_row("SELECT db FROM loudness WHERE track_id = ?1", params![track_id], |r| r.get(0))
+            .optional()?;
+        Ok(v.map(|v| v as f32))
     }
 
     /// Add downloaded audio bytes to this month's total (local time).

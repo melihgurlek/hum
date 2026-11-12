@@ -92,6 +92,8 @@ struct Inner {
     rt: tokio::runtime::Handle,
     library: Option<Library>,
     songs: std::sync::RwLock<Option<Arc<crate::cache::SongCache>>>,
+    /// Loudness normalization (on unless turned off in Settings).
+    normalize: std::sync::atomic::AtomicBool,
 }
 
 /// What Auto quality has learned about the connection this session.
@@ -195,6 +197,7 @@ impl Engine {
             streams: Mutex::new(HashMap::new()),
             quality: AtomicU8::new(3),
             auto: Mutex::new(AutoState::default()),
+            normalize: std::sync::atomic::AtomicBool::new(true),
             data_pending: AtomicU64::new(0),
             updates,
             rt: tokio::runtime::Handle::current(),
@@ -321,12 +324,39 @@ impl Engine {
     /// stream records itself for the song cache.
     async fn stream(&self, id: &str) -> Result<(Stream, bool)> {
         let songs = self.song_cache();
-        if let Some(s) = songs.as_ref().and_then(|c| c.lookup(id, self.effective_quality())) {
-            return Ok((s, true));
+        let (mut s, cached) = match songs.as_ref().and_then(|c| c.lookup(id, self.effective_quality())) {
+            Some(s) => (s, true),
+            None => {
+                let (mut s, cached) = self.url(id).await?;
+                s.record_to = songs.and_then(|c| c.record_path(&s));
+                (s, cached)
+            }
+        };
+        if let Some(lib) = self.library() {
+            match s.loudness_db {
+                Some(db) if !s.local => {
+                    let _ = lib.set_loudness(id, db);
+                }
+                None => s.loudness_db = lib.loudness(id).ok().flatten(),
+                _ => {}
+            }
         }
-        let (mut s, cached) = self.url(id).await?;
-        s.record_to = songs.and_then(|c| c.record_path(&s));
+        s.gain_db = self.gain_for(s.loudness_db);
         Ok((s, cached))
+    }
+
+    /// Loudness normalization as YouTube does it: a song louder than the reference is turned
+    /// down by the difference; a quieter one is left alone (turning it up could clip).
+    fn gain_for(&self, loudness_db: Option<f32>) -> Option<f64> {
+        if !self.0.normalize.load(std::sync::atomic::Ordering::Relaxed) {
+            return None;
+        }
+        loudness_db.filter(|db| *db > 0.0).map(|db| -(db as f64))
+    }
+
+    /// Even out loudness between songs, from the next song on.
+    pub fn set_normalize(&self, on: bool) {
+        self.0.normalize.store(on, std::sync::atomic::Ordering::Relaxed);
     }
 
     async fn url(&self, id: &str) -> Result<(Stream, bool)> {
