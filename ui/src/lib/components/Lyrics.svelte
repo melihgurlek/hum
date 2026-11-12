@@ -6,7 +6,9 @@
   let status = $state<'loading' | 'ready' | 'none' | 'error'>('loading')
   let active = $state(-1)
   let box: HTMLDivElement | undefined = $state()
-  let followPausedUntil = 0
+  // Scrolling the lyrics yourself stops them following the song until you tap Back to now
+  // (or tap a line, or the song changes).
+  let following = $state(true)
 
   // Load when the song changes.
   $effect(() => {
@@ -14,6 +16,7 @@
     if (!t) return
     lyrics = null
     active = -1
+    following = true
     status = 'loading'
     api
       .lyrics(t)
@@ -64,10 +67,10 @@
     return ans
   }
 
-  // Keep the active line in the middle, unless you've just scrolled yourself.
+  // Keep the active line in the middle, unless you've scrolled away yourself.
   $effect(() => {
     const i = active
-    if (i < 0 || !box || performance.now() < followPausedUntil) return
+    if (i < 0 || !box || !following) return
     const el = box.querySelector<HTMLElement>(`[data-i="${i}"]`)
     if (!el) return
     // Scroll this box only. scrollIntoView also scrolls every scrollable parent, and phone Now
@@ -78,10 +81,11 @@
   })
 
   function userScrolled() {
-    followPausedUntil = performance.now() + 4000
+    if (lines) following = false
   }
 </script>
 
+<div class="wrap">
 <div class="lyrics scroll" role="region" aria-label="Lyrics" bind:this={box} onwheel={userScrolled} ontouchmove={userScrolled}>
   {#if status === 'loading'}
     <p class="note">Looking for lyrics…</p>
@@ -93,7 +97,7 @@
     <div class="pad"></div>
     {#each lines as line, i (i)}
       <button class="line" class:active={i === active} class:past={i < active} data-i={i}
-        onclick={() => api.seek(line.at)}>
+        onclick={() => ((following = true), api.seek(line.at))}>
         {line.text || '♪'}
       </button>
     {/each}
@@ -104,8 +108,40 @@
     <p class="credit">Lyrics from {lyrics.source}. These aren't synced to the song.</p>
   {/if}
 </div>
+  {#if !following && lines && active >= 0}
+    <button class="resync" onclick={() => (following = true)}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8" /><path d="M21 3v5h-5" /></svg>
+      <span class="trim">Back to now</span>
+    </button>
+  {/if}
+</div>
 
 <style>
+  .wrap {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  /* Floats over the lyrics' bottom edge while you're reading elsewhere. */
+  .resync {
+    position: absolute;
+    left: 50%;
+    bottom: 16px;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 16px;
+    border-radius: 999px;
+    background: var(--np-text);
+    color: var(--np-bg-2, var(--np-bg-2-default));
+    font-weight: 700;
+    font-size: 14px;
+    box-shadow: 0 6px 18px rgb(0 0 0 / 0.35);
+  }
   .lyrics {
     flex: 1;
     min-height: 0;

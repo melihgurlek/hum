@@ -75,6 +75,8 @@
     if (!layout.phone || e.pointerType === 'mouse') return
     const el = e.target as HTMLElement
     if (el.closest('.progress, .menu, .backdrop')) return
+    // The screen's edges belong to Android's back gesture.
+    if (e.clientX < 24 || e.clientX > innerWidth - 24) return
     const onSheetTop = !!el.closest('.grab, .panel .tabs')
     if (el.closest('.panel') && !onSheetTop) return
     g = { x: e.clientX, y: e.clientY, t: performance.now(), mode: onSheetTop ? 'sheet' : ui.npSheet ? 'sheet' : 'np' }
@@ -201,10 +203,14 @@
     if (ui.nowPlayingOpen) dragY = 0
     sheetDy = 0
   }
+  // Android's back gesture (or anything else) took the touch: put everything back, the
+  // cover too.
   function cancel() {
     g = null
     axis = null
     settle()
+    artSettling = true
+    artDx = 0
   }
   function click(e: MouseEvent) {
     if (dragged) {

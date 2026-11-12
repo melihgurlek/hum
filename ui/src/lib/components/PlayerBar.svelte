@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { api, artistLinks, fmtTime, img } from '../api'
+  import { api, artistLine, artistLinks, fmtTime, img } from '../api'
   import { layout, openNowPlaying, player, ui, setQuality, toggleLike } from '../state.svelte'
   import Icon from './Icon.svelte'
   import ArtistLinks from './ArtistLinks.svelte'
@@ -17,6 +17,8 @@
   let swiped = false
   function down(e: PointerEvent) {
     if (!layout.phone || e.pointerType === 'mouse' || !player.current) return
+    // The screen's edges belong to Android's back gesture.
+    if (e.clientX < 24 || e.clientX > innerWidth - 24) return
     start = { x: e.clientX, y: e.clientY, t: performance.now() }
     axis = null
     swiped = false
@@ -99,7 +101,9 @@
         {/if}
         <span class="text">
           <button class="open title ellipsis" onclick={openNowPlaying} aria-label={`Open now playing: ${player.current.title}`}>{player.current.title}</button>
-          <span class="sub ellipsis"><ArtistLinks artists={artistLinks(player.current)} /></span>
+          <!-- Phone: plain names. Links there were easy to hit by accident; the whole bar opens
+               Now Playing, where the artists are links. -->
+          <span class="sub ellipsis">{#if layout.phone}{artistLine(player.current)}{:else}<ArtistLinks artists={artistLinks(player.current)} />{/if}</span>
         </span>
       </div>
       <button class="icon-btn" class:on={player.liked} aria-pressed={player.liked}
