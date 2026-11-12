@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { addToNewPlaylist, addToPlaylist, ui } from '../state.svelte'
+  import { addToNewPlaylist, addToPlaylist, blockArtist, ui } from '../state.svelte'
   import Mosaic from './Mosaic.svelte'
 
   let name = $state('')
@@ -10,7 +10,7 @@
     const m = ui.addMenu
     if (!m) return { left: 0, top: 0 }
     const w = 280
-    const h = Math.min(420, 120 + ui.playlists.length * 52)
+    const h = Math.min(476, 176 + ui.playlists.length * 52)
     return {
       left: Math.max(8, Math.min(m.x - w, window.innerWidth - w - 8)),
       top: Math.max(8, Math.min(m.y, window.innerHeight - h - 8)),
@@ -31,6 +31,8 @@
     if (ui.addMenu) addToNewPlaylist(name || 'New playlist', ui.addMenu.tracks)
   }
   const count = $derived(ui.addMenu?.tracks.length ?? 0)
+  // One song: offer to keep its artist out of radio.
+  const single = $derived(ui.addMenu?.tracks.length === 1 ? ui.addMenu.tracks[0] : null)
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && close()} />
@@ -54,6 +56,11 @@
         <p class="muted empty">No playlists yet. Name one above.</p>
       {/each}
     </div>
+    {#if single?.artists[0]}
+      <button class="item block" onclick={() => single && blockArtist(single)}>
+        <span class="text"><span class="ellipsis">Don't play {single.artists[0]}</span><span class="muted n">in radio and quick picks</span></span>
+      </button>
+    {/if}
   </div>
 {/if}
 
@@ -140,6 +147,12 @@
   .n {
     font-size: 12px;
     font-weight: 500;
+  }
+  .block {
+    border-top: 1px solid var(--line, rgb(255 255 255 / 0.08));
+    border-radius: 0 0 var(--r-md) var(--r-md);
+    margin-top: 4px;
+    padding-left: 10px;
   }
   .empty {
     font-size: 13px;

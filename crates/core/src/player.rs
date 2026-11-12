@@ -28,6 +28,8 @@ pub enum Command {
     Reload(Stream, f64),
     /// Queue this stream to play after the current one (gapless).
     SetNext(Stream),
+    /// Forget the stream queued after the current one.
+    ClearNext,
     SetPaused(bool),
     TogglePause,
     /// Seconds from the start.
@@ -216,6 +218,11 @@ fn run(
                             ids.push(s.video_id.clone());
                             track(&s, None, &mut recordings, &mut local);
                             load(&mpv, &s, "append", None)
+                        }
+                        Command::ClearNext => {
+                            ids.retain(|id| Some(id) == current.as_ref());
+                            ids.truncate(1);
+                            mpv.command("playlist-clear", &[]).map_err(|e| anyhow!("{e}"))
                         }
                         Command::SetPaused(p) => mpv
                             .set_property("pause", p)

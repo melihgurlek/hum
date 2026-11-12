@@ -199,6 +199,13 @@ impl Library {
                  PRAGMA user_version = 3;",
             )?;
         }
+        // v4: artists kept out of radio and quick picks.
+        if db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))? < 4 {
+            db.execute_batch(
+                "CREATE TABLE IF NOT EXISTS blocked_artists (key TEXT PRIMARY KEY, name TEXT NOT NULL, blocked_at INTEGER NOT NULL);
+                 PRAGMA user_version = 4;",
+            )?;
+        }
         Ok(Library {
             db: Arc::new(Mutex::new(db)),
         })
@@ -842,31 +849,71 @@ impl Library {
     /// Reorder radio candidates by taste and drop what you clearly don't want right now.
     ///
     /// - Skipped within 30 s in the last 14 days: dropped.
-    /// - Played in the last 6 hours: dropped (you just heard it).
-    /// - Otherwise keep YouTube's order (it already encodes "sounds like this"), nudged by your
-    ///   artist affinity, and never more than 2 songs by one artist in any run of 10.
+    /// - By a blocked artist, or skipped early in the last 14 days: dropped.
+    /// - Played in the last 2 hours: dropped (you just heard it).
+    /// - Otherwise YouTube's order (it already encodes "sounds like this"), weighed against your
+    ///   taste for the artist (relative to your favorite artist) and pushed down when heard
+    ///   recently: a lot for yesterday, half for a week ago, barely for a month ago.
+    /// - Never more than 2 songs by one artist in any run of 10.
     pub fn rank_radio(&self, candidates: Vec<Track>) -> Result<Vec<Track>> {
         let db = self.db.lock().unwrap();
         let (_, artists) = Self::scores(&db)?;
-        let skip_cutoff = now() - 14 * DAY;
-        let recent_cutoff = now() - 6 * 3600;
+        let blocked = Self::blocked_keys(&db)?;
+        let t = now();
+        let skip_cutoff = t - 14 * DAY;
+        let just_heard = t - 2 * 3600;
         let mut skipped = db.prepare(
             "SELECT 1 FROM plays WHERE track_id = ?1 AND outcome = 'skipped_early' AND played_at > ?2",
         )?;
-        let mut recent = db.prepare("SELECT 1 FROM plays WHERE track_id = ?1 AND played_at > ?2")?;
-        let total: f64 = artists.values().map(|v| v.abs()).sum::<f64>().max(1.0);
+        let mut last = db.prepare("SELECT MAX(played_at) FROM plays WHERE track_id = ?1")?;
+        let top = artists.values().fold(0.0f64, |m, v| m.max(*v)).max(1.0);
 
         let mut scored = Vec::new();
-        for (rank, t) in candidates.into_iter().enumerate() {
-            if skipped.exists(params![t.id, skip_cutoff])? || recent.exists(params![t.id, recent_cutoff])? {
+        for (rank, c) in candidates.into_iter().enumerate() {
+            if blocked.contains(&artist_key(&c)) || skipped.exists(params![c.id, skip_cutoff])? {
+                continue;
+            }
+            let last_played: Option<i64> = last.query_row(params![c.id], |r| r.get(0))?;
+            if last_played.is_some_and(|l| l > just_heard) {
                 continue;
             }
             let rank_score = 1.0 / (1.0 + rank as f64 / 5.0);
-            let affinity = artists.get(&artist_key(&t)).copied().unwrap_or(0.0) / total;
-            scored.push((0.75 * rank_score + 0.25 * affinity.clamp(-1.0, 1.0), t));
+            let affinity = (artists.get(&artist_key(&c)).copied().unwrap_or(0.0) / top).clamp(-1.0, 1.0);
+            let heard = last_played.map_or(0.0, |l| 0.5f64.powf((t - l).max(0) as f64 / (7 * DAY) as f64));
+            scored.push((0.7 * rank_score + 0.3 * affinity - 0.6 * heard, c));
         }
         scored.sort_by(|a, b| b.0.total_cmp(&a.0));
         Ok(spread_artists(scored.into_iter().map(|(_, t)| t).collect(), 2, 10))
+    }
+
+    fn blocked_keys(db: &Connection) -> Result<std::collections::HashSet<String>> {
+        let mut st = db.prepare("SELECT key FROM blocked_artists")?;
+        let keys = st.query_map([], |r| r.get::<_, String>(0))?.flatten().collect();
+        Ok(keys)
+    }
+
+    /// Keep this track's artist out of radio and quick picks. Returns the artist's key.
+    pub fn block_artist(&self, track: &Track) -> Result<String> {
+        let key = artist_key(track);
+        let name = track.artists.first().cloned().unwrap_or_default();
+        self.db.lock().unwrap().execute(
+            "INSERT OR REPLACE INTO blocked_artists (key, name, blocked_at) VALUES (?1, ?2, ?3)",
+            params![key, name, now()],
+        )?;
+        Ok(key)
+    }
+
+    pub fn unblock_artist(&self, key: &str) -> Result<()> {
+        self.db.lock().unwrap().execute("DELETE FROM blocked_artists WHERE key = ?1", params![key])?;
+        Ok(())
+    }
+
+    /// Blocked artists as (key, name), most recent first.
+    pub fn blocked_artists(&self) -> Result<Vec<(String, String)>> {
+        let db = self.db.lock().unwrap();
+        let mut st = db.prepare("SELECT key, name FROM blocked_artists ORDER BY blocked_at DESC")?;
+        let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.flatten().collect();
+        Ok(rows)
     }
 }
 
@@ -894,7 +941,8 @@ fn clean_name(name: &str) -> String {
     if n.is_empty() { "New playlist".to_string() } else { n.chars().take(100).collect() }
 }
 
-fn artist_key(t: &Track) -> String {
+/// The key an artist is scored and blocked by: their channel id, or the lowercased name.
+pub fn artist_key(t: &Track) -> String {
     t.artist_id
         .clone()
         .unwrap_or_else(|| t.artists.first().cloned().unwrap_or_default().to_lowercase())
@@ -999,6 +1047,45 @@ mod tests {
         assert!(ranked.iter().all(|t| t.id != "s"));
         let first_three: Vec<_> = ranked.iter().take(3).map(|t| artist_key(t)).collect();
         assert!(first_three.contains(&"b".to_string()), "{first_three:?}");
+    }
+
+    #[test]
+    fn radio_drops_blocked_artists_and_just_heard_songs() {
+        let lib = Library::memory().unwrap();
+        let (a, b, c) = (track("a", "x"), track("b", "blocked"), track("c", "y"));
+        lib.block_artist(&b).unwrap();
+        lib.record_play(&c, now() - 3600, 200.0, 200.0).unwrap();
+        let ids: Vec<_> = lib.rank_radio(vec![a, b.clone(), c]).unwrap().into_iter().map(|t| t.id).collect();
+        assert_eq!(ids, ["a"]);
+        lib.unblock_artist(&artist_key(&b)).unwrap();
+        assert_eq!(lib.rank_radio(vec![b]).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn radio_pushes_down_recently_heard_songs() {
+        let lib = Library::memory().unwrap();
+        let (heard, fresh, old) = (track("heard", "x"), track("fresh", "y"), track("old", "z"));
+        lib.record_play(&heard, now() - DAY, 200.0, 200.0).unwrap();
+        lib.record_play(&old, now() - 60 * DAY, 200.0, 200.0).unwrap();
+        let ids: Vec<_> =
+            lib.rank_radio(vec![heard, old, fresh]).unwrap().into_iter().map(|t| t.id).collect();
+        assert_eq!(ids, ["old", "fresh", "heard"], "yesterday's song goes last; two months ago barely counts");
+    }
+
+    #[test]
+    fn your_favorite_artist_outranks_youtubes_order() {
+        let lib = Library::memory().unwrap();
+        for i in 0..5 {
+            lib.record_play(&track(&format!("fav{i}"), "fav"), now() - (10 + i) * DAY, 200.0, 200.0).unwrap();
+        }
+        // A long tail of artists heard once each, which used to dilute the favorite to nothing.
+        for i in 0..40 {
+            lib.record_play(&track(&format!("t{i}"), &format!("tail{i}")), now() - 20 * DAY, 200.0, 200.0).unwrap();
+        }
+        let mut cands: Vec<Track> = (0..3).map(|i| track(&format!("new{i}"), &format!("other{i}"))).collect();
+        cands.push(track("favnew", "fav"));
+        let ids: Vec<_> = lib.rank_radio(cands).unwrap().into_iter().map(|t| t.id).collect();
+        assert!(ids.iter().position(|i| i == "favnew") < Some(3), "{ids:?}");
     }
 
     #[test]

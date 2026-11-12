@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, img, onAccount, type AccountPlaylist, type Profile, type Quality } from '../api'
-  import { player, refreshPlaylists, setAccountRadio, setQuality, setTheme, setAutoplay, showToast, ui, type ThemePref } from '../state.svelte'
+  import { player, quickPicksCache, refreshPlaylists, setAccountRadio, setQuality, setTheme, setAutoplay, showToast, ui, type ThemePref } from '../state.svelte'
 
   let lists = $state<AccountPlaylist[] | null>(null)
   $effect(() => {
@@ -36,6 +36,16 @@
   $effect(() => {
     api.savedSongs().then((s) => (saved = s)).catch(() => {})
   })
+  let blocked = $state<{ key: string; name: string }[]>([])
+  $effect(() => {
+    api.blockedArtists().then((b) => (blocked = b)).catch(() => {})
+  })
+  async function unblock(key: string) {
+    await api.unblockArtist(key).catch((e) => showToast(String(e)))
+    blocked = blocked.filter((b) => b.key !== key)
+    quickPicksCache.clear()
+  }
+
   async function clearSaved() {
     await api.clearSavedSongs()
     saved = await api.savedSongs()
@@ -163,6 +173,17 @@
         </label>
       {/if}
     </div>
+    {#if blocked.length}
+      <div class="blocked">
+        <span class="od">Artists you blocked: not played in radio or quick picks</span>
+        {#each blocked as b (b.key)}
+          <div class="account lists">
+            <span class="who"><span class="ol">{b.name}</span></span>
+            <button class="quiet" onclick={() => unblock(b.key)}>Allow again</button>
+          </div>
+        {/each}
+      </div>
+    {/if}
   </section>
 </div>
 
@@ -302,6 +323,12 @@
     flex-direction: column;
   }
   .filled,
+  .blocked {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 16px;
+  }
   .quiet {
     flex: none;
     height: 40px;

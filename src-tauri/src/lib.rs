@@ -264,6 +264,31 @@ async fn quick_picks(app: State<'_, App>) -> Res<QuickPicks> {
     Ok(QuickPicks { seeds, picks })
 }
 
+/// Keep this track's artist out of radio and quick picks, and drop their upcoming songs.
+#[tauri::command]
+async fn block_artist(app: State<'_, App>, track: Track) -> Res<()> {
+    let key = lib(&app)?.run(move |l| l.block_artist(&track)).await.map_err(err)?;
+    app.engine.retain_upcoming(|t| hum_core::library::artist_key(t) != key);
+    Ok(())
+}
+
+#[tauri::command]
+async fn unblock_artist(app: State<'_, App>, key: String) -> Res<()> {
+    lib(&app)?.run(move |l| l.unblock_artist(&key)).await.map_err(err)
+}
+
+#[derive(serde::Serialize)]
+struct BlockedArtist {
+    key: String,
+    name: String,
+}
+
+#[tauri::command]
+async fn blocked_artists(app: State<'_, App>) -> Res<Vec<BlockedArtist>> {
+    let v = lib(&app)?.run(|l| l.blocked_artists()).await.map_err(err)?;
+    Ok(v.into_iter().map(|(key, name)| BlockedArtist { key, name }).collect())
+}
+
 /// YouTube Music's home page, from the account when signed in.
 #[tauri::command]
 async fn home_feed(app: State<'_, App>) -> Res<Vec<hum_core::source::HomeShelf>> {
@@ -691,6 +716,9 @@ pub fn run() {
             forgotten,
             quick_picks,
             home_feed,
+            block_artist,
+            unblock_artist,
+            blocked_artists,
             yt_playlist,
             lyrics,
             playlists,

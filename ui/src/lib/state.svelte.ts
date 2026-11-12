@@ -152,6 +152,22 @@ export async function playAlbum(id: string, shuffle = false) {
   }
 }
 
+/** Keep `track`'s artist out of radio and quick picks; skips the song playing if it's theirs. */
+export async function blockArtist(track: Track) {
+  const name = track.artists[0] ?? track.title
+  ui.addMenu = null
+  try {
+    await api.blockArtist(track)
+    quickPicksCache.clear()
+    const cur = player.current
+    const same = (t: Track) => (track.artist_id ? t.artist_id === track.artist_id : t.artists[0]?.toLowerCase() === name.toLowerCase())
+    if (cur && same(cur)) await api.next()
+    showToast(`You won't hear ${name} in radio. Undo in Settings.`)
+  } catch (e) {
+    showToast(String(e))
+  }
+}
+
 /** Play a YouTube Music playlist (Home cards have no page of their own). */
 export async function playYtPlaylist(id: string) {
   player.loading = true

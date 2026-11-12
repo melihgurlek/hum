@@ -458,6 +458,29 @@ impl Engine {
         }
     }
 
+    /// Drop the upcoming tracks `keep` rejects (a blocked artist's); what has played and what is
+    /// playing stay. Refills radio and the gapless next track if they changed.
+    pub fn retain_upcoming(&self, keep: impl Fn(&Track) -> bool) {
+        let (tracks, index) = {
+            let mut st = self.0.state.lock().unwrap();
+            let i = st.index;
+            let queue = std::mem::take(&mut st.queue);
+            st.queue = queue.into_iter().enumerate().filter(|(j, t)| *j <= i || keep(t)).map(|(_, t)| t).collect();
+            let next = st.queue.get(i + 1).map(|t| t.id.clone());
+            if st.next_loaded.is_some() && st.next_loaded != next {
+                st.next_loaded = None;
+                self.0.player.send(Command::ClearNext);
+            }
+            (st.queue.clone(), st.index)
+        };
+        self.emit(Update::Queue { tracks, index });
+        let e = self.clone();
+        self.0.rt.spawn(async move {
+            e.top_up_radio().await;
+            e.prefetch_next().await;
+        });
+    }
+
     pub async fn next(&self) -> Result<()> {
         let idx = {
             let st = self.0.state.lock().unwrap();

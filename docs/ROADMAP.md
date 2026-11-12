@@ -6,6 +6,7 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #39 | Radio: your taste now counts against your favorite artist, not the sum of all of them (it used to be ~5 % of the score); songs heard in the last 2 hours dropped, earlier ones pushed down by how recently (a lot for yesterday, half for a week ago) instead of dropping the last 6 hours; "Don't play this artist" in a song's right-click menu, undone in Settings. Radio continuations dropped: radio already re-seeds from the playing song |
 | #38 | Home on a first launch: YouTube Music's own home page (the account's when signed in) until something is played; quick picks fuse up to four seeds' radios (latest plays, favorites, then account likes), so likes from the account fill Home at once |
 | #33 | Song cache: a song played to the end without a seek is kept on disk (mpv records it as it plays, no extra data), up to 1 GB, oldest first. Replays start in ~20 ms instead of ~900 ms and use no data. Settings shows saved songs, with Clear |
 | #32 | Settings → Playback: "Radio from my YouTube Music account" (off by default, shown when signed in). Measured: it replaces about half of each radio (13–30 of 50 shared with the anonymous one, which repeats itself 48–50 of 50) |
@@ -41,22 +42,21 @@ Status 2026-11-12 (Linux): sign-in, account sync and the song cache (#33) work a
 account. Order below comes from [COMPETITORS.md](COMPETITORS.md): every dead client died of
 playback breaking, so reliability comes first.
 
-1. **Playback that recovers on its own**: on an error, drop that song's link and cache entry,
-   skip the failing client for that song for 5 minutes, retry (at most 3), and as a last resort
-   try every client at low quality. Needs ytmusic-rs to accept clients to skip.
+1. **Check deeper than the first byte**: ytmusic-rs already falls back VisionOS → embedded →
+   signed-in, and hum re-resolves once on a mid-song error, but a link is only checked at byte
+   0. Metrolist found clients that serve the start and 403 later; check a later range too (in
+   the fork, `melihgurlek/ytmusic-rs`). No playback errors in the logs so far.
 2. **Cipher configs from the community registries** (`MetrolistGroup/faraday`,
    `ZemerTeam/zemer-cipher`), refreshed when an unknown player hash appears, so YouTube
    changes are fixed without a hum release.
 3. **Errors that say what broke** (network, link expired, client blocked, bot check), with a
    "Copy playback report" button (client, itag, error).
-4. **Recommendations**: demote songs heard in the last 30 days instead of dropping the last 6
-   hours; follow radio continuations; block an artist.
-5. **Cheap desktop wins**: restore queue and position on launch, loudness normalization from
+4. **Cheap desktop wins**: restore queue and position on launch, loudness normalization from
    `loudness_db`, sleep timer with fade.
-6. **Test on Windows** (WebView2): sign-in, account sync, the song cache, account radio.
-7. **Test the song cache by hand**: seeking or skipping mid-song must discard the recording; a
+5. **Test on Windows** (WebView2): sign-in, account sync, the song cache, account radio.
+6. **Test the song cache by hand**: seeking or skipping mid-song must discard the recording; a
    song played to the end shows up under Settings → Saved songs.
-8. **Android spike** ([MOBILE.md](MOBILE.md)): the Rust engine playing from a Media3 foreground
+7. **Android spike** ([MOBILE.md](MOBILE.md)): the Rust engine playing from a Media3 foreground
    service after the WebView is gone.
 
 ## Later
