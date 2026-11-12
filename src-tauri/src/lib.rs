@@ -5,6 +5,9 @@ use hum_core::library::{HistoryEntry, Playlist, PlaylistSummary, TrackNote};
 use hum_core::account::Profile;
 use hum_core::sync::Sync;
 use hum_core::{Account, Engine, Library, Quality, Source, Track};
+#[cfg(target_os = "android")]
+mod android;
+#[cfg(not(target_os = "android"))]
 mod media;
 
 use std::hash::{Hash, Hasher};
@@ -672,8 +675,9 @@ pub fn run() {
                 .get_webview_window("main")
                 .and_then(|w| w.hwnd().ok())
                 .map(|h| h.0 as usize);
-            #[cfg(not(windows))]
+            #[cfg(not(any(windows, target_os = "android")))]
             let hwnd = None;
+            #[cfg(not(target_os = "android"))]
             media::spawn(app.handle().clone(), engine.clone(), hwnd);
             let account = Arc::new(Account::open(app.path().app_data_dir()?.join("account")));
             let rotating = account.clone();

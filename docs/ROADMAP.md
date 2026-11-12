@@ -6,6 +6,7 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #45 | Android spike, passed: hum runs on a Galaxy S23 FE with the Rust engine driving Media3 ExoPlayer in a foreground service; songs keep advancing with the app swiped away and the screen off. Against Metrolist and SimpMusic on the same phone: smallest APK (16 MB), fastest tap to sound (1.34 s vs 2.1 and 2.4), least memory and screen-off CPU (16.9 % vs 34.8 and 25.9) |
 | #44 | Sleep timer (moon in the player bar): pause after 15, 30, 45 or 60 minutes or at the end of this song, fading out over the last 30 s (10 s at a song's end), then the volume goes back for next time. The button shows the minutes left |
 | #43 | The queue and your place in it come back on launch, paused: the song, its cover color and the position. Nothing loads until you press play (no requests at launch); play resumes where you left off, and seeking first moves that spot |
 | #42 | Even out loudness (Settings → Playback, on by default): songs mastered louder than YouTube's reference are turned down by the difference, as YouTube does (measured 2–7 dB on four songs); quieter ones are left alone. Loudness is saved per song, so cached replays play at the same level |
@@ -53,8 +54,8 @@ playback breaking, so reliability comes first.
 2. **Test on Windows** (WebView2): sign-in, account sync, the song cache, account radio.
 3. **Test the song cache by hand**: seeking or skipping mid-song must discard the recording; a
    song played to the end shows up under Settings → Saved songs.
-4. **Android spike** ([MOBILE.md](MOBILE.md)): the Rust engine playing from a Media3 foreground
-   service after the WebView is gone.
+4. **Android port** ([MOBILE.md](MOBILE.md)): phone layouts, song info on the lock screen,
+   audio offload and a shorter start buffer, song cache and Data used on Android.
 
 ## Later
 
@@ -70,7 +71,6 @@ playback breaking, so reliability comes first.
 - Year in review from local history (SimpMusic's analytics are the template).
 - Flatpak / COPR packaging.
 - Code signing for the Windows installer (costs money; worth it once hum is public).
-- **Android port**: worth building once the spike passes; plan in [MOBILE.md](MOBILE.md).
 
 ## Decided against (and why)
 

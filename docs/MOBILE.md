@@ -3,7 +3,7 @@
 Updated 2026-11-12 after reading Metrolist, SimpMusic, ArchiveTune, Harmony Music and limusic on
 GitHub (details in [COMPETITORS.md](COMPETITORS.md)).
 
-## Verdict: worth building, after desktop reliability, starting with one spike
+## Verdict: worth building; the spike passed
 
 Why it's worth it:
 - That's where people listen. 86 % of SimpMusic's downloads are Android. limusic's top-voted
@@ -26,18 +26,57 @@ handlers for queue, prefetch, crossfade and sleep timer, one per platform, and b
 twice. hum should keep all of that in Rust and make Media3 a thin backend behind the same trait
 as mpv: load, play, pause, seek, and report position and errors.
 
-## The spike that decides it
+## The spike: passed (2026-11-12, Galaxy S23 FE, Android 16)
 
-Before any UI work: **can the Rust engine keep playing and prefetching after the WebView is
-gone?**
-- Run a Media3 foreground service that drives `crates/core` through the player trait.
-- Kill the activity, turn the screen off for 30 minutes, and switch networks. It must keep
-  playing and moving to the next song.
-- Check what Tauri does when Android kills the WebView renderer (`onRenderProcessGone`), and how
-  long the WebView takes to start on a 3–4 GB phone.
+**Question:** can the Rust engine keep playing and moving through the queue after the WebView
+is gone? **Yes.** Played a song with its radio, swiped hum away from Recents, locked the phone:
+the next song started on its own, then the engine queued and started the one after (ExoPlayer
+said "started", Rust moved its queue and handed over the next stream, no UI involved).
 
-If that fails, the port means a native Android shell around `crates/core` instead of Tauri's
-WebView, and it costs more.
+How it's built (branch `spike/android`):
+- `crates/core/src/player_android.rs`: on Android the player sends each command out as JSON and
+  takes events back. Queue, radio, prefetch, Auto quality and loudness stay in the engine, shared
+  with desktop. Desktop keeps mpv; its dependency tree is unchanged.
+- `src-tauri/src/android.rs`: the JNI bridge (~50 lines).
+- `gen/android/.../HumPlayer.kt` + `PlaybackService.kt`: Media3 ExoPlayer in a
+  `MediaSessionService` (foreground service, notification, lock screen, headset buttons), with
+  each YouTube client's User-Agent per stream url.
+
+Build notes: rquickjs needs `bindgen` on Android (`LIBCLANG_PATH` = the NDK's libclang, plus its
+clang include dir in `BINDGEN_EXTRA_CLANG_ARGS`); R8 strips `HumPlayer.command` unless kept
+(`proguard-rules.pro`), since only Rust calls it.
+
+### Measured against Metrolist and SimpMusic, same phone, same Wi-Fi, same scripts
+
+| | hum (release) | Metrolist 13.7.0 | SimpMusic 2.5.0 (FOSS) |
+|---|---|---|---|
+| APK | **16 MB** | 26 MB | 27 MB |
+| Cold start, first frame | **281–395 ms** | 301–372 ms | 479–627 ms |
+| Tap to sound, median of 3 | **1.34 s** | 2.1 s | 2.4 s |
+| Memory, idle after launch | **86 MB** | 188 MB | 132 MB |
+| Memory, screen off, playing | **131 MB** | 299 MB | 156 MB |
+| CPU, screen off, playing | **16.9 %** | 34.8 % | 25.9 % |
+
+Tap to sound is timed from the finger lifting (getevent) to the media session turning PLAYING,
+for all three; hum's own log agreed within 50 ms. All anonymous: SimpMusic warns that without
+sign-in it goes through Piped and may be slower. Data per hour wasn't measurable in 5-minute
+windows (ExoPlayer fetches a whole song ahead), so it's left out.
+
+What the numbers say:
+- hum is already the lightest and fastest of the three, before any phone-specific tuning.
+- Screen-off CPU is ExoPlayer's playback and decoder threads, not Rust (~0 %). Media3's audio
+  offload (decoding on the DSP while the screen is off) is the next thing to try for battery.
+- Tap to sound has room: ExoPlayer waits for 2.5 s of buffer by default before starting, and
+  touch has no hover to pre-resolve on.
+- The Activity and WebView stay in memory after a swipe-away (Samsung keeps them); fine at
+  131 MB, but the renderer could be released when the UI is gone.
+
+### Still to do for a real port
+- Phone layouts: today it's the desktop design squeezed onto a phone.
+- Track title, artist and cover in the notification and lock screen (the stream has none yet).
+- Audio offload, a shorter start buffer, prefetch on visible search results.
+- Song cache and Data used on Android (mpv's recording and byte counter have no ExoPlayer
+  equivalent yet), saved queue across process death, battery measured over an hour unplugged.
 
 ## Must work on day one
 
@@ -55,12 +94,3 @@ Taken from what breaks in the other apps:
 - **Long lists loaded in pages.** Metrolist crashes out of memory at 900+ liked songs.
 - **A log export** for bug reports.
 - Android Auto can come second.
-
-## Before the spike
-
-The desktop reliability work in [ROADMAP.md](ROADMAP.md) comes first: per-song client recovery,
-cipher configs from the registries, clear error messages. A phone on mobile data hits every one
-of those failures more often than a desktop on Wi-Fi.
-
-The phone-as-remote idea is dropped. Taking the phone out to scan a QR code is more hassle than
-reaching for the laptop.
