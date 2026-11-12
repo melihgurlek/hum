@@ -3,7 +3,7 @@
   import Icon from './Icon.svelte'
 
   // `size` is the moon's; `align` is which edge of the button the menu lines up with.
-  let { size = 18, align = 'right' }: { size?: number; align?: 'left' | 'right' } = $props()
+  let { size = 18, align = 'right', down = false }: { size?: number; align?: 'left' | 'right'; down?: boolean } = $props()
 
   let open = $state(false)
   // Re-read the clock twice a minute so the minutes left stay current.
@@ -30,7 +30,7 @@
   </button>
   {#if open}
     <button class="backdrop" aria-label="Close" onclick={() => (open = false)}></button>
-    <div class="menu" class:alignleft={align === 'left'} role="menu" aria-label="Sleep timer">
+    <div class="menu" class:alignleft={align === 'left'} class:down role="menu" aria-label="Sleep timer">
       <div class="mt">Pause after</div>
       {#each [15, 30, 45, 60] as m}<button role="menuitem" onclick={() => pick(m)}>{m} minutes</button>{/each}
       <button role="menuitem" onclick={() => pick('song')}>End of this song</button>
@@ -74,6 +74,10 @@
     display: flex;
     flex-direction: column;
     color: var(--text);
+  }
+  .menu.down {
+    bottom: auto;
+    top: calc(100% + 6px);
   }
   .menu.alignleft {
     right: auto;

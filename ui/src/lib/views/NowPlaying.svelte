@@ -7,6 +7,7 @@
   import Lyrics from '../components/Lyrics.svelte'
   import SleepTimer from '../components/SleepTimer.svelte'
   import RepeatButton from '../components/RepeatButton.svelte'
+  import ShuffleButton from '../components/ShuffleButton.svelte'
 
   // Remember which tab you left open.
   let tab = $state<'next' | 'lyrics'>((localStorage.getItem('hum.npTab') as 'next' | 'lyrics') ?? 'lyrics')
@@ -39,6 +40,8 @@
       {#if ui.autoplay}Playing with <strong>autoplay radio</strong>{:else}Playing your queue{/if}
     </div>
     <span class="spacer"></span>
+    <!-- Phone: the player bar is hidden here, so its sleep timer moves up here. -->
+    <span class="phone-only side-ctl right"><SleepTimer size={22} down /></span>
   </header>
 
   {#if player.current}
@@ -72,8 +75,8 @@
           <div class="times"><span>{fmtTime(player.position)}</span><span>{fmtTime(player.duration)}</span></div>
         </div>
         <div class="controls">
-          <!-- Phone: the player bar is hidden here, so its sleep timer and repeat move into this row. -->
-          <span class="phone-only side-ctl"><SleepTimer size={22} align="left" /></span>
+          <!-- Phone: the player bar is hidden here, so shuffle and repeat join this row. -->
+          <span class="phone-only side-ctl"><ShuffleButton size={22} /></span>
           <button class="ctl" aria-label="Previous" onclick={() => api.previous()}><Icon name="prev" size={28} /></button>
           <button class="big" aria-label={player.paused ? 'Play' : 'Pause'} onclick={() => api.togglePause()}>
             <Icon name={player.paused ? 'play' : 'pause'} size={30} />
@@ -366,7 +369,7 @@
       justify-content: flex-end;
     }
     .side-ctl:not(.right) :global(.icon-btn) {
-      margin-left: -8px;
+      margin-left: -11px;
     }
     .side-ctl.right :global(.icon-btn) {
       margin-right: -11px;

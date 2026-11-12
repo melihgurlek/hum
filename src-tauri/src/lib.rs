@@ -435,6 +435,11 @@ fn set_autoplay(app: State<'_, App>, on: bool) {
 }
 
 #[tauri::command]
+fn set_shuffle(app: State<'_, App>, on: bool) {
+    app.engine.set_shuffle(on);
+}
+
+#[tauri::command]
 fn set_repeat(app: State<'_, App>, repeat: hum_core::Repeat) {
     app.engine.set_repeat(repeat);
 }
@@ -729,6 +734,7 @@ pub fn run() {
             get_quality,
             set_autoplay,
             set_repeat,
+            set_shuffle,
             set_normalize,
             restore_queue,
             saved_songs,

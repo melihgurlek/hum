@@ -6,6 +6,7 @@
   import Progress from './Progress.svelte'
   import SleepTimer from './SleepTimer.svelte'
   import RepeatButton from './RepeatButton.svelte'
+  import ShuffleButton from './ShuffleButton.svelte'
 </script>
 
 <footer class="bar" class:tinted={ui.nowPlayingOpen} aria-label="Player">
@@ -35,6 +36,7 @@
 
   <div class="center">
     <div class="controls">
+      <ShuffleButton size={18} />
       <button class="icon-btn" aria-label="Previous" onclick={() => api.previous()} disabled={!player.current}>
         <Icon name="prev" />
       </button>
@@ -179,11 +181,6 @@
   .controls .icon-btn {
     color: var(--text);
   }
-  /* Repeat sits right of Next; an equal space on the left keeps Play centered over the bar. */
-  .controls::before {
-    content: '';
-    width: 44px;
-  }
   .play {
     width: 48px;
     height: 48px;
@@ -266,8 +263,7 @@
       width: 44px;
       height: 44px;
     }
-    .controls :global(.icon-btn),
-    .controls::before {
+    .controls :global(.icon-btn) {
       display: none;
     }
     .play {

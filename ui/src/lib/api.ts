@@ -74,6 +74,7 @@ export const api = {
   getQuality: () => invoke<Quality>('get_quality'),
   setAutoplay: (on: boolean) => invoke<void>('set_autoplay', { on }),
   setRepeat: (repeat: Repeat) => invoke<void>('set_repeat', { repeat }),
+  setShuffle: (on: boolean) => invoke<void>('set_shuffle', { on }),
   setNormalize: (on: boolean) => invoke<void>('set_normalize', { on }),
   setAccountRadio: (on: boolean) => invoke<void>('set_account_radio', { on }),
   queue: () => invoke<{ tracks: Track[]; index: number }>('queue'),

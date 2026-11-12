@@ -49,6 +49,7 @@ class Ui {
   quality = $state<Quality>(load<Quality>('hum.quality', 'auto') === 'normal' ? 'high' : load<Quality>('hum.quality', 'auto'))
   autoplay = $state(load('hum.autoplay', true))
   repeat = $state<Repeat>(load<Repeat>('hum.repeat', 'off'))
+  shuffle = $state(load('hum.shuffle', false))
   normalize = $state(load('hum.normalize', true))
   accountRadio = $state(load('hum.accountRadio', false))
   toast = $state<string | null>(null)
@@ -280,6 +281,13 @@ export function setAutoplay(on: boolean) {
   if (on && ui.repeat === 'all') setRepeat('off')
 }
 
+/** Shuffle mixes what's after the current song, and every queue you start; off restores. */
+export function setShuffle(on: boolean) {
+  ui.shuffle = on
+  save('hum.shuffle', on)
+  api.setShuffle(on)
+}
+
 /** Off, then the whole queue, then this song; the button cycles through them. */
 export function setRepeat(r: Repeat) {
   ui.repeat = r
@@ -438,6 +446,7 @@ export async function startListening() {
   api.setQuality(ui.quality)
   api.setAutoplay(ui.autoplay)
   api.setRepeat(ui.repeat)
+  api.setShuffle(ui.shuffle)
   api.setNormalize(ui.normalize)
   api.setAccountRadio(ui.accountRadio)
   refreshRecent()

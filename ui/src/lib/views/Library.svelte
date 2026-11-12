@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, type HistoryEntry, type Track } from '../api'
-  import { newPlaylistFromSidebar, openPlaylist, playList, player, ui } from '../state.svelte'
+  import { newPlaylistFromSidebar, openPlaylist, playList, player, shuffled, ui } from '../state.svelte'
   import Icon from '../components/Icon.svelte'
   import Mosaic from '../components/Mosaic.svelte'
   import TrackRow from '../components/TrackRow.svelte'
@@ -69,6 +69,10 @@
     </div>
   {:else if ui.libraryTab === 'liked'}
     {#if liked.length}
+      <div class="actions">
+        <button class="primary" onclick={() => playList(liked, 0)}><Icon name="play" size={16} /><span class="trim">Play</span></button>
+        <button class="secondary" onclick={() => playList(shuffled(liked), 0)}><Icon name="shuffle" size={16} /><span class="trim">Shuffle</span></button>
+      </div>
       <div class="list">
         {#each liked as t, i (t.id)}
           <TrackRow track={t} onplay={() => playList(liked, i)} />
@@ -121,6 +125,32 @@
   }
   .phone-only {
     display: none;
+  }
+  .actions {
+    display: flex;
+    gap: 8px;
+  }
+  .primary,
+  .secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 44px;
+    padding: 0 20px;
+    border-radius: 999px;
+    font-weight: 700;
+  }
+  .primary {
+    background: var(--accent, var(--accent-default));
+    color: var(--on-accent);
+  }
+  .secondary {
+    color: var(--muted);
+    padding: 0 14px;
+  }
+  .secondary:hover {
+    color: var(--text);
+    background: var(--raised);
   }
   .pl {
     display: flex;
