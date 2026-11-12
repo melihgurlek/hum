@@ -257,9 +257,10 @@
     .dlstatus > span {
       text-box: trim-both cap alphabetic;
     }
-    .name,
-    .name-input {
-      font-size: 26px;
+    /* .info: the desktop size below comes later in the file and won over a plain .name. */
+    .info .name,
+    .info .name-input {
+      font-size: 32px;
     }
   }
   .name,

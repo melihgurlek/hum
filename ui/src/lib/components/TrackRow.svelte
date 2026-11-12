@@ -203,13 +203,14 @@
   }
   @media (hover: none) {
     .main:active {
-      box-shadow: none;
+      transform: none;
+      opacity: 1;
     }
     .main::after {
-      transition: background-color 0.25s;
+      transition: background-color 0.12s ease-out;
     }
     .main:active::after {
-      background: color-mix(in srgb, var(--text) 10%, transparent);
+      background: color-mix(in srgb, var(--text) 6%, transparent);
       transition: none;
     }
   }

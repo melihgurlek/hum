@@ -121,16 +121,18 @@ h3 {
   object-fit: cover;
   display: block;
 }
-/* Press feedback on touchscreens (there is no hover to show what a tap hit): a tint of the
-   element's own text color over its shape, so it reads on a filled button, a circle icon or a
-   row, in either theme. It comes on at once and fades out, so even a quick tap shows it.
-   Buttons stretched over a card or a row (.main, .open) tint their ::after instead. */
+/* Press feedback on touchscreens (there is no hover to show what a tap hit): the pressed
+   control dims and gives a little, at once, and springs back fast. Buttons stretched over a
+   row or a card (.main, .open) tint their ::after faintly instead of shrinking the row. */
 @media (hover: none) {
   :where(button, a, [role='button']) {
-    transition: box-shadow 0.25s;
+    transition:
+      transform 0.12s ease-out,
+      opacity 0.12s ease-out;
   }
   :where(button, a, [role='button']):active:not(:disabled) {
-    box-shadow: inset 0 0 0 100vmax color-mix(in srgb, currentColor 14%, transparent);
+    transform: scale(0.95);
+    opacity: 0.65;
     transition: none;
   }
 }
