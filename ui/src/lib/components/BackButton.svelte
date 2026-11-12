@@ -33,6 +33,12 @@
     color: var(--text);
     flex: none;
   }
+  /* Phone: when it sticks, stay below the status bar. */
+  @media (max-width: 640px) {
+    .bar {
+      top: env(safe-area-inset-top);
+    }
+  }
   .back:hover {
     background: var(--raised-2);
   }

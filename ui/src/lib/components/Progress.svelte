@@ -7,25 +7,51 @@
 
   let { tone = 'bar' }: { tone?: 'bar' | 'np' } = $props()
 
-  const fraction = $derived(player.duration ? Math.min(1, Math.max(0, player.position / player.duration)) : 0)
+  // While a finger drags along the bar, the fill follows it and the seek happens on release.
+  let scrub = $state<number | null>(null)
+  const fraction = $derived(
+    scrub ?? (player.duration ? Math.min(1, Math.max(0, player.position / player.duration)) : 0),
+  )
 
   let el: HTMLDivElement
-  function seek(e: MouseEvent) {
-    if (!player.duration) return
+  const at = (x: number) => {
     const r = el.getBoundingClientRect()
-    const f = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))
-    api.seek(f * player.duration)
+    return Math.min(1, Math.max(0, (x - r.left) / r.width))
+  }
+  // Show the new spot at once: while paused no position report comes until playback resumes.
+  function seekTo(secs: number) {
+    player.position = secs
+    player.positionAt = performance.now()
+    api.seek(secs)
+  }
+  function down(e: PointerEvent) {
+    if (!player.duration) return
+    try {
+      el.setPointerCapture(e.pointerId)
+    } catch {}
+    scrub = at(e.clientX)
+  }
+  function move(e: PointerEvent) {
+    if (scrub !== null) scrub = at(e.clientX)
+  }
+  function up(e: PointerEvent) {
+    if (scrub === null) return
+    seekTo(at(e.clientX) * player.duration)
+    scrub = null
   }
   function key(e: KeyboardEvent) {
-    if (e.key === 'ArrowRight') api.seek(player.position + 5)
-    if (e.key === 'ArrowLeft') api.seek(Math.max(0, player.position - 5))
+    if (e.key === 'ArrowRight') seekTo(Math.min(player.duration, player.position + 5))
+    if (e.key === 'ArrowLeft') seekTo(Math.max(0, player.position - 5))
   }
 </script>
 
 <div
   class="track {tone}"
   bind:this={el}
-  onclick={seek}
+  onpointerdown={down}
+  onpointermove={move}
+  onpointerup={up}
+  onpointercancel={() => (scrub = null)}
   onkeydown={key}
   role="slider"
   tabindex="0"
@@ -35,6 +61,7 @@
   aria-valuenow={Math.round(player.position)}
 >
   <div class="fill" style="transform: scaleX({fraction})"></div>
+  {#if tone === 'np'}<div class="knob" class:held={scrub !== null} style:left={`${fraction * 100}%`}></div>{/if}
 </div>
 
 <style>
@@ -55,9 +82,12 @@
     border-radius: 2px;
     background: var(--line);
   }
+  .np {
+    height: 24px;
+    touch-action: none;
+  }
   .np::before {
     background: color-mix(in srgb, var(--np-text) 22%, transparent);
-    height: 6px;
   }
   .fill {
     position: absolute;
@@ -70,7 +100,19 @@
   }
   .np .fill {
     background: var(--np-text);
-    height: 6px;
+  }
+  .knob {
+    position: absolute;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    margin: -6px 0 0 -6px;
+    border-radius: 50%;
+    background: var(--np-text);
+    transition: transform 0.12s;
+  }
+  .knob.held {
+    transform: scale(1.4);
   }
   .track:hover .fill {
     background: var(--accent, var(--accent-default));

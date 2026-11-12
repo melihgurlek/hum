@@ -152,7 +152,7 @@ h3 {
    padding; this one rule overrides them all. */
 @media (max-width: 640px) {
   main .page {
-    padding: 16px 16px 24px !important;
+    padding: calc(16px + env(safe-area-inset-top)) 16px 24px !important;
   }
 }
 

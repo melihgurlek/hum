@@ -96,6 +96,13 @@ async fn play_radio(app: State<'_, App>, track: Track) -> Res<()> {
     app.engine.play(vec![track], 0).await.map_err(err)
 }
 
+/// Keep the current song playing and follow it with its radio.
+#[tauri::command]
+async fn radio_from_current(app: State<'_, App>) -> Res<()> {
+    app.engine.radio_from_current().await;
+    Ok(())
+}
+
 #[tauri::command]
 async fn next(app: State<'_, App>) -> Res<()> {
     app.engine.next().await.map_err(err)
@@ -727,6 +734,7 @@ pub fn run() {
             play_artist_radio,
             play,
             play_radio,
+            radio_from_current,
             next,
             previous,
             jump,

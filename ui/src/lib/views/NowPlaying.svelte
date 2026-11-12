@@ -147,7 +147,7 @@
   <header>
     <button class="round" onclick={close} aria-label="Close now playing"><Icon name="chevronDown" /></button>
     <div class="from">
-      {#if ui.autoplay}Playing with <strong>autoplay radio</strong>{:else}Playing your queue{/if}
+      <span class="from-l">Playing from</span> <strong>{ui.autoplay ? 'Autoplay radio' : 'Your queue'}</strong>
     </div>
     <span class="spacer"></span>
     <!-- Phone: the player bar is hidden here, so its sleep timer moves up here. -->
@@ -205,7 +205,7 @@
           <button role="tab" aria-selected={tab === 'next'} class:sel={tab === 'next' && (ui.npSheet || !layout.phone)} onclick={() => pickTab('next')}><span class="trim">Up next</span></button>
           <button role="tab" aria-selected={tab === 'lyrics'} class:sel={tab === 'lyrics' && (ui.npSheet || !layout.phone)} onclick={() => pickTab('lyrics')}><span class="trim">Lyrics</span></button>
           <span class="spacer"></span>
-          <label class="auto">
+          <label class="auto desk-only">
             Autoplay
             <input class="switch" type="checkbox" checked={ui.autoplay} onchange={(e) => setAutoplay(e.currentTarget.checked)} />
           </label>
@@ -213,6 +213,11 @@
 
         {#if tab === 'next'}
           <div class="queue scroll">
+            <!-- Phone: autoplay lives in the sheet, not on the bar that peeks below the player. -->
+            <label class="auto phone-only auto-row">
+              <span><strong>Autoplay radio</strong><span class="auto-d">Keep going with songs like these when the queue ends</span></span>
+              <input class="switch" type="checkbox" checked={ui.autoplay} onchange={(e) => setAutoplay(e.currentTarget.checked)} />
+            </label>
             {#each player.upNext.slice(0, 50) as q, i (q.id)}
               <button class="qrow" use:prefetchOnHover={q.id} onclick={() => api.jump(player.index + 1 + i)}>
                 {#if q.thumb}<img class="qart" src={img(q.thumb)} alt="" loading="lazy" />{:else}<div class="qart"></div>{/if}
@@ -425,8 +430,7 @@
   .phone-only {
     display: none;
   }
-  /* Phone: Now Playing is its own full screen over the tab bar, one scrolling column: cover,
-     song, progress, transport with the sleep timer, then Up next and lyrics below the fold. */
+  /* Phone: Now Playing is its own full screen over the tab bar (see the block below). */
   @media (max-width: 640px) {
     /* One screen, no scrolling: the cover gives way on short phones, and Up next and lyrics
        wait in a sheet whose bar is pinned at the bottom. */
@@ -442,25 +446,56 @@
     }
     /* Everything sits on one 24px gutter: the close button, cover, titles and the icons at
        both ends of the transport row (their buttons pulled out by their padding). */
+    /* Header: a bare chevron, the source centered on two lines, the sleep timer. */
     header {
-      padding: calc(8px + env(safe-area-inset-top)) 24px 4px;
+      display: grid;
+      grid-template-columns: 64px 1fr 64px;
+      padding: calc(4px + env(safe-area-inset-top)) 24px 0;
+    }
+    header .spacer {
+      display: none;
+    }
+    .round {
+      background: none;
+      margin-left: -10px;
+    }
+    .from {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .from strong {
+      font-size: 13px;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+    .desk-only {
+      display: none;
     }
     .body {
       overflow: hidden;
-      padding: 8px 24px calc(var(--peek) + 16px);
+      padding: 8px 24px calc(var(--peek) + 20px);
       gap: 0;
     }
+    /* The cover sits centered in the room above; the song, progress and controls stay
+       anchored at the bottom, where the thumb is. */
     .left {
       flex: 1 1 auto;
       min-height: 0;
       max-width: none;
-      justify-content: safe center;
+      justify-content: flex-start;
+      gap: 16px;
     }
     /* Square at the full width when there's room; shorter phones shrink it (width follows). */
     .art {
       flex: 0 1 calc(100vw - 48px);
       width: auto;
       min-height: 120px;
+      margin: auto 0;
       align-self: center;
       box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
     }
@@ -540,9 +575,41 @@
       border-radius: 2px;
       background: color-mix(in srgb, var(--np-text) 35%, transparent);
     }
+    /* Parked, the bar is two even labels; pulled up, the chosen one fills. */
     .tabs {
       flex: none;
       margin-top: -6px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .tabs .spacer {
+      display: none;
+    }
+    .tabs button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .auto-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 8px 8px 14px;
+      margin-bottom: 4px;
+      border-bottom: 1px solid color-mix(in srgb, var(--np-text) 10%, transparent);
+      font-size: 14px;
+      color: var(--np-text);
+    }
+    .auto-row > span {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .auto-d {
+      font-size: 12px;
+      color: var(--np-muted);
     }
     .panel :global(.scroll) {
       touch-action: pan-y;
@@ -642,5 +709,17 @@
     color: var(--np-muted);
     padding: 24px;
     font-size: 15px;
+  }
+  /* After .auto, which would otherwise show both switches everywhere. */
+  .auto.phone-only {
+    display: none;
+  }
+  @media (max-width: 640px) {
+    .auto.phone-only {
+      display: flex;
+    }
+    .auto.desk-only {
+      display: none;
+    }
   }
 </style>

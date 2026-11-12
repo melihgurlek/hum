@@ -1018,6 +1018,7 @@ mod tests {
             title: id.into(),
             artists: vec![artist.into()],
             artist_id: Some(artist.into()),
+            artist_ids: vec![],
             album: None,
             album_id: None,
             duration: Some(200),

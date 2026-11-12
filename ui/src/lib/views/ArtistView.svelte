@@ -93,7 +93,8 @@
   }
   .hero {
     position: relative;
-    margin: 0 -32px -8px;
+    /* Up by the page's 28px gap too (it sits under the zero-height back button strip). */
+    margin: -28px -32px -8px;
     height: clamp(240px, 30vw, 360px);
     display: flex;
     flex-direction: column;
@@ -101,6 +102,18 @@
     padding: 76px 32px 0;
     flex: none;
     overflow: hidden;
+  }
+  /* Phone: the banner reaches the screen's edges and up under the status bar. */
+  @media (max-width: 640px) {
+    .hero {
+      margin: calc(-44px - env(safe-area-inset-top)) -16px -8px;
+      height: calc(280px + env(safe-area-inset-top));
+      padding: calc(76px + env(safe-area-inset-top)) 16px 0;
+    }
+    h1 {
+      font-size: 40px;
+      overflow-wrap: anywhere;
+    }
   }
   .hero.plain {
     height: auto;

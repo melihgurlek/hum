@@ -1,14 +1,24 @@
 <script lang="ts">
   import { api, artistLine, type HomeCard, type QuickPicks, type Track, img } from '../api'
-  import { capSet, go, homeFeed, layout, playList, playRadio, playYtPlaylist, prefetchOnHover, quickPicksCache as cache, ui } from '../state.svelte'
+  import { untrack } from 'svelte'
+  import { capSet, go, homeFeed, layout, player, playList, playRadio, playYtPlaylist, prefetchOnHover, quickPicksCache as cache, ui } from '../state.svelte'
   import AlbumCard from '../components/AlbumCard.svelte'
   import Icon from '../components/Icon.svelte'
   import TrackRow from '../components/TrackRow.svelte'
 
   // Quick picks: up to four seeds' radios (your latest plays and favorites, or your likes on a
   // fresh install) fused and ranked by your taste. Cached for the session, keyed by the latest
-  // play, so returning to Home is instant.
-  const key = $derived(ui.recent[0]?.id ?? '')
+  // play, so returning to Home is instant. The key is read once per visit: playing something
+  // from Home shouldn't swap the list under your finger. (It waits for the library's first
+  // answer, so a cold start still keys on the latest play.)
+  let key = $state(untrack(() => ui.recent[0]?.id ?? ''))
+  // Recently played, likewise as it was when you came to Home.
+  let recentShown = $state(untrack(() => ui.recent.slice(0, 12)))
+  $effect(() => {
+    const first = ui.recent[0]?.id ?? ''
+    if (!key && first) key = first
+    if (!recentShown.length && ui.recent.length) recentShown = ui.recent.slice(0, 12)
+  })
   let qp = $state<QuickPicks | null>(null)
   let loading = $state(false)
   $effect(() => {
@@ -27,7 +37,13 @@
       .catch(() => {})
       .finally(() => (loading = false))
   })
-  const seed = $derived(ui.recent[0] ?? qp?.seeds[0] ?? null)
+  // The radio button follows the same snapshot, so it doesn't jump either.
+  const seed = $derived(untrack(() => ui.recent.find((t) => t.id === key)) ?? qp?.seeds[0] ?? null)
+  // Already playing it: keep it playing and line up its radio after it, rather than restart.
+  function keepGoing(t: Track) {
+    if (player.current?.id === t.id) api.radioFromCurrent().catch(() => {})
+    else playRadio(t)
+  }
   const picks = $derived(qp?.picks ?? [])
   // Desktop shows the first 12 (about four rows) so the sections below stay in sight; phones
   // swipe through all of them four rows at a time.
@@ -60,7 +76,7 @@
 <div class="page scroll">
   {#if seed}
     <div class="cta-row">
-      <button class="cta" use:prefetchOnHover={seed.id} onclick={() => playRadio(seed)}>
+      <button class="cta" use:prefetchOnHover={seed.id} onclick={() => keepGoing(seed)}>
         <span class="play"><Icon name="play" size={16} /></span>
         <span class="trim">Keep going with {seed.artists[0] ?? seed.title} radio</span>
       </button>
@@ -76,7 +92,7 @@
       {:else}
         <div class="picks">
           {#each shownPicks as t, i (t.id)}
-            <TrackRow track={t} onplay={() => playList(picks, i)} />
+            <TrackRow track={t} showDuration={!layout.phone} onplay={() => playList(picks, i)} />
           {/each}
         </div>
         {#if !layout.phone && picks.length > 12}
@@ -93,18 +109,18 @@
         </div>
         <div class="picks">
           {#each forgotten as f, i (f.track.id)}
-            <TrackRow track={f.track} suffix={`, last played ${monthYear(f.last_played)}`}
+            <TrackRow track={f.track} showDuration={!layout.phone} suffix={`, last played ${monthYear(f.last_played)}`}
               onplay={() => playList(forgotten.map((x) => x.track), i)} />
           {/each}
         </div>
       </section>
     {/if}
 
-    {#if ui.recent.length}
+    {#if recentShown.length}
       <section>
         <h2>Recently played</h2>
         <div class="tiles">
-          {#each ui.recent.slice(0, 12) as t (t.id)}
+          {#each recentShown as t (t.id)}
             <button class="tile" use:prefetchOnHover={t.id} onclick={() => playRadio(t)} title={`Radio from ${t.title}`}>
               {#if t.cover}<img class="cover art" src={img(t.cover)} alt="" loading="lazy" />{:else}<div class="cover art"></div>{/if}
               <span class="ellipsis tt">{t.title}</span>
@@ -132,7 +148,7 @@
         {#if shelf.songs.length}
           <div class="picks">
             {#each shelf.songs.slice(0, 8) as t, i (t.id)}
-              <TrackRow track={t} onplay={() => playList(shelf.songs, i)} />
+              <TrackRow track={t} showDuration={!layout.phone} onplay={() => playList(shelf.songs, i)} />
             {/each}
           </div>
         {/if}
@@ -257,8 +273,8 @@
       grid-template-columns: none;
       grid-template-rows: repeat(4, auto);
       grid-auto-flow: column;
-      grid-auto-columns: calc(100% - 48px);
-      gap: 0 8px;
+      grid-auto-columns: calc(100% - 40px);
+      gap: 0 24px;
       overflow-x: auto;
       scroll-snap-type: x mandatory;
       scroll-padding-inline: 8px;

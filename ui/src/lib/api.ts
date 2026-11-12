@@ -6,6 +6,8 @@ export interface Track {
   title: string
   artists: string[]
   artist_id: string | null
+  /** Every artist's id, in `artists` order; absent on songs saved before ids were kept. */
+  artist_ids?: (string | null)[]
   album: string | null
   album_id: string | null
   duration: number | null
@@ -61,6 +63,7 @@ export const api = {
   playArtistRadio: (id: string) => invoke<void>('play_artist_radio', { id }),
   play: (tracks: Track[], index: number) => invoke<void>('play', { tracks, index }),
   playRadio: (track: Track) => invoke<void>('play_radio', { track }),
+  radioFromCurrent: () => invoke<void>('radio_from_current'),
   next: () => invoke<void>('next'),
   previous: () => invoke<void>('previous'),
   jump: (index: number) => invoke<void>('jump', { index }),
@@ -152,4 +155,5 @@ export function img(url: string | null | undefined): string | undefined {
 }
 
 /** A track's artists as links. Only the first artist's id is known for a track. */
-export const artistLinks = (t: Track): ArtistLink[] => t.artists.map((name, i) => ({ name, id: i === 0 ? t.artist_id : null }))
+export const artistLinks = (t: Track): ArtistLink[] =>
+  t.artists.map((name, i) => ({ name, id: t.artist_ids?.[i] ?? (i === 0 ? t.artist_id : null) }))

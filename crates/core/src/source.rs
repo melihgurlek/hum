@@ -39,6 +39,10 @@ pub struct Track {
     pub title: String,
     pub artists: Vec<String>,
     pub artist_id: Option<String>,
+    /// Each artist's channel id, in `artists` order (missing for songs saved before this was
+    /// kept; `artist_id` still has the first).
+    #[serde(default)]
+    pub artist_ids: Vec<Option<String>>,
     pub album: Option<String>,
     pub album_id: Option<String>,
     pub duration: Option<u32>,
@@ -199,6 +203,7 @@ impl Track {
             id,
             title: t.title,
             artist_id: t.artists.first().and_then(|a| a.id.clone()),
+            artist_ids: t.artists.iter().map(|a| a.id.clone()).collect(),
             artists: t.artists.into_iter().map(|a| a.name).collect(),
             album: t.album.as_ref().map(|a| a.name.clone()),
             album_id: t.album.and_then(|a| a.id),

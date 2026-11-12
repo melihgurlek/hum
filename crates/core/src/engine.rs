@@ -606,12 +606,37 @@ impl Engine {
         });
     }
 
+    /// Keep the current song playing and replace what follows it with its radio.
+    pub async fn radio_from_current(&self) {
+        let (tracks, index) = {
+            let mut st = self.0.state.lock().unwrap();
+            let keep = (st.index + 1).min(st.queue.len());
+            st.queue.truncate(keep);
+            st.radio_seed = None;
+            st.unshuffled = None;
+            st.repeat_queued = false;
+            if st.next_loaded.take().is_some() {
+                self.0.player.send(Command::ClearNext);
+            }
+            (st.queue.clone(), st.index)
+        };
+        self.emit(Update::Queue { tracks, index });
+        self.fill_radio(true).await;
+        self.prefetch_next().await;
+    }
+
     async fn top_up_radio(&self) {
+        self.fill_radio(false).await
+    }
+
+    /// Add the current song's radio after the queue: when it's running low under autoplay,
+    /// or now (`force`).
+    async fn fill_radio(&self, force: bool) {
         let seed = {
             let st = self.0.state.lock().unwrap();
             let remaining = st.queue.len().saturating_sub(st.index + 1);
             let current = st.queue.get(st.index).map(|t| t.id.clone());
-            if !st.autoplay || remaining >= RADIO_LOOKAHEAD || current == st.radio_seed {
+            if (!force && (!st.autoplay || remaining >= RADIO_LOOKAHEAD)) || current == st.radio_seed {
                 return;
             }
             current
@@ -1018,6 +1043,7 @@ mod tests {
             title: id.into(),
             artists: vec![],
             artist_id: None,
+            artist_ids: vec![],
             album: None,
             album_id: None,
             duration: None,
@@ -1050,9 +1076,10 @@ mod tests {
         st.index = 4;
         let playing = st.queue[4].id.clone();
         st.queue.push(t("z"));
-        st.queue.retain(|t| t.id != "g" || t.id == playing);
+        // Drop the song right after the current one (upcoming songs are what retain_upcoming drops).
+        let dropped = st.queue.remove(5).id;
         st.unshuffle();
-        let expected = if playing == "g" { "abcdefghz".to_string() } else { "abcdefhz".to_string() };
+        let expected: String = "abcdefghz".chars().filter(|c| c.to_string() != dropped).collect();
         assert_eq!(ids(&st.queue), expected);
         assert_eq!(st.queue[st.index].id, playing);
     }
@@ -1064,6 +1091,7 @@ mod tests {
             title: id.into(),
             artists: vec![],
             artist_id: None,
+            artist_ids: vec![],
             album: None,
             album_id: None,
             duration: None,

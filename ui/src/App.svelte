@@ -53,6 +53,8 @@
   </main>
   <div class="player"><PlayerBar /></div>
   <div class="tabbar"><TabBar /></div>
+  <!-- Phone: a solid strip under the status bar; the artist page lets its banner show there. -->
+  <div class="statusbar" class:clear={ui.view === 'artist' && !ui.nowPlayingOpen}></div>
   <AddMenu />
   {#if ui.toast}
     <div class="toast" role="status">
@@ -108,7 +110,8 @@
   .side {
     display: contents;
   }
-  .tabbar {
+  .tabbar,
+  .statusbar {
     display: none;
   }
   @media (max-width: 860px) {
@@ -121,7 +124,20 @@
     .app {
       grid-template-columns: 1fr;
       grid-template-rows: 1fr auto auto;
-      padding-top: env(safe-area-inset-top);
+    }
+    .statusbar {
+      display: block;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: env(safe-area-inset-top);
+      z-index: 6;
+      background: var(--bg);
+      transition: background 0.2s;
+    }
+    .statusbar.clear {
+      background: transparent;
     }
     .side {
       display: none;

@@ -223,6 +223,24 @@ export const loadAlbum = (id: string) => cached(albumCache, id, api.album)
 export function openArtist(id: string | null | undefined) {
   if (id) navigate({ view: 'artist', artistId: id })
 }
+
+/** An artist we only have the name of (a featured artist on an older saved song): find the
+ *  page by searching for the name. */
+export async function openArtistNamed(name: string) {
+  try {
+    const r = await api.search(name)
+    const same = (n: string) => n.localeCompare(name, undefined, { sensitivity: 'base' }) === 0
+    if (r.top?.kind === 'artist' && same(r.top.name)) return openArtist(r.top.id)
+    for (const s of r.songs) {
+      const i = s.artists.findIndex(same)
+      const id = i >= 0 ? (s.artist_ids?.[i] ?? (i === 0 ? s.artist_id : null)) : null
+      if (id) return openArtist(id)
+    }
+    showToast(`Couldn't find ${name}'s page`)
+  } catch (e) {
+    showToast(String(e))
+  }
+}
 export function openAlbum(id: string | null | undefined) {
   if (id) navigate({ view: 'album', albumId: id })
 }
