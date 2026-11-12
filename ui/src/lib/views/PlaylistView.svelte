@@ -8,6 +8,7 @@
   import TrackRow from '../components/TrackRow.svelte'
 
   let pl = $state<Playlist | null>(null)
+  const dl = $derived(pl ? downloadOf(`playlist:${pl.id}`) : null)
   let missing = $state(false)
   let editing = $state(false)
   let draft = $state('')
@@ -123,8 +124,14 @@
         {/if}
         <p class="muted meta">
           {pl.tracks.length} {pl.tracks.length === 1 ? 'song' : 'songs'}{totalMin ? `, about ${totalMin} min` : ''}
-          {#if layout.phone && downloadOf(`playlist:${pl.id}`)}<br />{downloadLabel(`playlist:${pl.id}`)}{/if}
         </p>
+        {#if layout.phone && dl}
+          {@const whole = dl.done >= dl.total}
+          <div class="dlstatus" class:whole>
+            <span class="trim">{downloadLabel(`playlist:${pl.id}`)}</span>
+            {#if !whole}<span class="bar"><span style:width="{(dl.done / Math.max(dl.total, 1)) * 100}%"></span></span>{/if}
+          </div>
+        {/if}
         <div class="actions">
           <button class="primary" disabled={!pl.tracks.length} use:prefetchOnHover={pl.tracks[0]?.id} onclick={() => pl && playList(pl.tracks, 0)}>
             <Icon name="play" size={16} /><span class="trim">Play</span>
@@ -270,6 +277,29 @@
   }
   .meta {
     margin: 0;
+  }
+  /* The phone's download status (the button there is an icon): in the accent, with a bar while
+     songs come in, so it doesn't read as one more line of plain text. */
+  .dlstatus {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--accent, var(--accent-default));
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .dlstatus .bar {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--raised-2);
+    overflow: hidden;
+  }
+  .dlstatus .bar > span {
+    display: block;
+    height: 100%;
+    background: currentColor;
+    border-radius: 2px;
+    transition: width 0.3s;
   }
   .actions {
     display: flex;

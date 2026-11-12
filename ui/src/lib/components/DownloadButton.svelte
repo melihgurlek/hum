@@ -37,9 +37,13 @@
     padding: 0;
     justify-content: center;
   }
-  .dl:hover {
-    color: var(--text);
-    background: var(--raised);
+  /* Only with a real pointer: on a touchscreen :hover sticks after the tap, which left the
+     button lit after a download was removed. */
+  @media (hover: hover) {
+    .dl:hover {
+      color: var(--text);
+      background: var(--raised);
+    }
   }
   .dl.on {
     color: var(--accent, var(--accent-default));
