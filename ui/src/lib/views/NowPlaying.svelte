@@ -165,7 +165,8 @@
         {/if}
         <div class="meta">
           <div class="titles">
-            <h1>{t.title}</h1>
+            <!-- Phone drops the album line; the title takes you to the album instead. -->
+            <h1>{#if t.album_id && layout.phone}<button class="title-link" onclick={() => openAlbum(t.album_id)}>{t.title}</button>{:else}{t.title}{/if}</h1>
             <div class="artist"><ArtistLinks artists={artistLinks(t)} /></div>
             {#if t.album}
               {#if t.album_id}<button class="album album-link" onclick={() => openAlbum(t.album_id)}>{t.album}</button>
@@ -346,6 +347,12 @@
     font-size: 14px;
     color: var(--np-muted);
   }
+  .title-link {
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+  }
   .album-link {
     display: block;
     padding: 0;
@@ -478,7 +485,7 @@
     }
     .body {
       overflow: hidden;
-      padding: 8px 24px calc(var(--peek) + 20px);
+      padding: 8px 24px calc(var(--peek) + 24px);
       gap: 0;
     }
     /* The cover sits centered in the room above; the song, progress and controls stay
@@ -499,11 +506,28 @@
       align-self: center;
       box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
     }
+    /* Spacing like Spotify's player: the cover takes the slack, the bottom group gets a
+       steady rhythm (title, 24, seek bar, 12, controls, 24, sheet bar). */
     h1 {
-      font-size: 24px;
+      font-size: 22px;
+      line-height: 1.2;
     }
     .artist {
-      font-size: 16px;
+      font-size: 15px;
+      margin-top: 2px;
+    }
+    .album {
+      display: none;
+    }
+    .meta + .progress {
+      margin-top: 8px;
+    }
+    .controls {
+      margin-top: -4px;
+    }
+    .times {
+      font-size: 12px;
+      margin-top: -2px;
     }
     .meta .heart {
       margin-right: -10px;
@@ -592,7 +616,12 @@
       align-items: center;
       justify-content: center;
     }
+    /* Pinned at the top of Up next, so it doesn't scroll away with the list. */
     .auto-row {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: color-mix(in srgb, var(--np-bg-2, var(--np-bg-2-default)) 92%, black);
       display: flex;
       justify-content: space-between;
       gap: 16px;

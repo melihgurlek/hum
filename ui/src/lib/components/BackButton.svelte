@@ -33,10 +33,22 @@
     color: var(--text);
     flex: none;
   }
-  /* Phone: when it sticks, stay below the status bar. */
+  /* Phone: a plain arrow on the gutter, as phone apps draw it, not a raised desktop button.
+     A soft shadow keeps it readable over a banner or a scrolled page. When it sticks, it
+     stays below the status bar. */
   @media (max-width: 640px) {
     .bar {
       top: env(safe-area-inset-top);
+    }
+    .back {
+      top: -8px;
+      margin-left: -11px;
+      background: none;
+      box-shadow: none;
+      filter: drop-shadow(0 1px 3px rgb(0 0 0 / 0.6));
+    }
+    .back:hover {
+      background: none;
     }
   }
   .back:hover {

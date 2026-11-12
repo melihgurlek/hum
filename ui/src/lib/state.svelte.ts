@@ -125,7 +125,11 @@ function navigate(change: Partial<Place>) {
   const same = to.view === from.view && to.playlistId === from.playlistId && to.artistId === from.artistId && to.albumId === from.albumId
   if (!same) {
     ui.history = [...ui.history.slice(-49), from]
-    markBackStep()
+    // Leaving Now Playing for a page (an artist, an album): that page reuses Now Playing's
+    // back step, and the sheet's is unwound, so Back then returns to the page before.
+    const open = (ui.nowPlayingOpen ? 1 : 0) + (ui.npSheet ? 1 : 0)
+    if (open) unwind(open - 1)
+    else markBackStep()
   }
   show(to)
 }
@@ -204,6 +208,12 @@ export function capSet<K, V>(map: Map<K, V>, key: K, value: V, cap: number) {
 // a view's own variables are thrown away whenever you navigate off it.
 export const searchCache = new Map<string, SearchResults>()
 export const quickPicksCache = new Map<string, QuickPicks>()
+/** The last Quick picks, kept across launches so Home opens with them at once. */
+export const savedPicks = {
+  get: () => load<QuickPicks | null>('hum.quickPicks', null),
+  set: (q: QuickPicks) => save('hum.quickPicks', q),
+  clear: () => save('hum.quickPicks', null),
+}
 /** YouTube Music's home page, once per session. */
 export const homeFeed = $state<{ shelves: HomeShelf[] | null }>({ shelves: null })
 const artistCache = new Map<string, Promise<ArtistPage>>()
@@ -261,6 +271,7 @@ export async function blockArtist(track: Track) {
   try {
     await api.blockArtist(track)
     quickPicksCache.clear()
+    savedPicks.clear()
     const cur = player.current
     const same = (t: Track) => (track.artist_id ? t.artist_id === track.artist_id : t.artists[0]?.toLowerCase() === name.toLowerCase())
     if (cur && same(cur)) await api.next()

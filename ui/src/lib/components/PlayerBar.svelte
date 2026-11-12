@@ -45,16 +45,21 @@
     if (axis) swiped = true
     if (axis === 'x' && (Math.abs(mx) > width * 0.3 || fast)) {
       // Slide the song off that side, change track, and bring the new one in from the other.
+      // The new song is shown as it slides in, before the engine confirms it, so there's no
+      // empty beat between the two. (Previous more than 3 s in restarts this song, as the
+      // button does.)
       const dir = Math.sign(mx)
       settling = true
       dx = dir * width
       setTimeout(() => {
+        const target = dir < 0 ? player.queue[player.index + 1] : player.position > 3 ? player.current : player.queue[player.index - 1]
+        if (target) player.current = target
         if (dir < 0) api.next()
         else api.previous()
         settling = false
-        dx = -dir * width * 0.4
+        dx = -dir * width * 0.25
         requestAnimationFrame(() => requestAnimationFrame(() => ((settling = true), (dx = 0))))
-      }, 160)
+      }, 110)
     } else {
       if (axis === 'y' && my < -40) openNowPlaying()
       settling = true
@@ -327,7 +332,7 @@
       touch-action: none;
     }
     .left.settling {
-      transition: transform 0.16s ease-out, opacity 0.16s ease-out;
+      transition: transform 0.11s ease-out, opacity 0.11s ease-out;
     }
     .mini-progress {
       display: block;
@@ -341,6 +346,10 @@
     .np :global(.cover) {
       width: 44px;
       height: 44px;
+    }
+    /* The song fills the row, so the heart stays put beside Play whatever the title's length. */
+    .np {
+      flex: 1;
     }
     .controls :global(.icon-btn) {
       display: none;

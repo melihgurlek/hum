@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api, artistLine, type HomeCard, type QuickPicks, type Track, img } from '../api'
   import { untrack } from 'svelte'
-  import { capSet, go, homeFeed, layout, player, playList, playRadio, playYtPlaylist, prefetchOnHover, quickPicksCache as cache, ui } from '../state.svelte'
+  import { capSet, go, homeFeed, layout, player, savedPicks, playList, playRadio, playYtPlaylist, prefetchOnHover, quickPicksCache as cache, ui } from '../state.svelte'
   import AlbumCard from '../components/AlbumCard.svelte'
   import Icon from '../components/Icon.svelte'
   import TrackRow from '../components/TrackRow.svelte'
@@ -19,20 +19,27 @@
     if (!key && first) key = first
     if (!recentShown.length && ui.recent.length) recentShown = ui.recent.slice(0, 12)
   })
+  // On a cold start the list takes a few radio lookups, so the last one is shown meanwhile.
+  // The fresh list replaces it only if you haven't started using it, so nothing moves under
+  // your finger; otherwise it's saved for next time.
   let qp = $state<QuickPicks | null>(null)
   let loading = $state(false)
+  let touched = false
   $effect(() => {
     const k = key
     if (cache.has(k)) {
       qp = cache.get(k)!
       return
     }
-    loading = true
+    const saved = untrack(() => qp) ?? savedPicks.get()
+    if (saved) qp = saved
+    loading = !saved
     api
       .quickPicks()
       .then((r) => {
         capSet(cache, k, r, 10)
-        if (key === k) qp = r
+        savedPicks.set(r)
+        if (key === k && !(saved && touched)) qp = r
       })
       .catch(() => {})
       .finally(() => (loading = false))
@@ -82,7 +89,7 @@
       </button>
     </div>
 
-    <section>
+    <section onpointerdown={() => (touched = true)}>
       <div class="head">
         <h2>{fresh ? 'From your liked songs' : 'Quick picks'}</h2>
         {#if picks.length}<button class="link" use:prefetchOnHover={picks[0]?.id} onclick={() => playList(picks, 0)}>Play all</button>{/if}
