@@ -52,7 +52,7 @@ clang include dir in `BINDGEN_EXTRA_CLANG_ARGS`); R8 strips `HumPlayer.command` 
 |---|---|---|---|
 | APK | **16 MB** | 26 MB | 27 MB |
 | Cold start, first frame | **281–395 ms** | 301–372 ms | 479–627 ms |
-| Tap to sound, median of 3 | **1.34 s** | 2.1 s | 2.4 s |
+| Tap to sound, median of 3 | **1.34 s** (now ~0.5 s, below) | 2.1 s | 2.4 s |
 | Memory, idle after launch | **86 MB** | 188 MB | 132 MB |
 | Memory, screen off, playing | **131 MB** | 299 MB | 156 MB |
 | CPU, screen off, playing | **16.9 %** | 34.8 % | 25.9 % |
@@ -66,15 +66,33 @@ What the numbers say:
 - hum is already the lightest and fastest of the three, before any phone-specific tuning.
 - Screen-off CPU is ExoPlayer's playback and decoder threads, not Rust (~0 %). Media3's audio
   offload (decoding on the DSP while the screen is off) is the next thing to try for battery.
-- Tap to sound has room: ExoPlayer waits for 2.5 s of buffer by default before starting, and
-  touch has no hover to pre-resolve on.
+- Tap to sound had room, and most of it was ExoPlayer: see below.
+
+### Tap to sound, after tuning (2026-11-12)
+
+hum's own logs split the wait (stream lookup, then the player from its play command to
+PLAYING). Same phone, Wi-Fi, an app already running:
+
+| | Before | After |
+|---|---|---|
+| Stream lookup | 115-280 ms | 45-280 ms (touch-down prefetch) |
+| ExoPlayer, command to sound | 887-947 ms | 326-390 ms |
+| Tap to sound, URL not resolved | 1106-1227 ms | 431-659 ms |
+| Tap to sound, URL resolved | 900 ms | 331-396 ms |
+
+- ExoPlayer started only after 2.5 s of buffer, a video default; hum starts at 0.5 s (2 s
+  after a stall). At 130 kbps that's ~8 KB instead of ~40 KB, and the connection set-up left.
+- Rows resolve their song on touch-down (a tap holds ~100 ms), and the engine shares a lookup
+  in progress, so the play that follows waits for it rather than asking YouTube again.
+- Still slow: the first tap after launch (the player's first start, ~700 ms) and YouTube's own
+  odd slow lookup (~700 ms).
 - The Activity and WebView stay in memory after a swipe-away (Samsung keeps them); fine at
   131 MB, but the renderer could be released when the UI is gone.
 
 ### Still to do for a real port
 - Phone layouts: today it's the desktop design squeezed onto a phone.
 - Track title, artist and cover in the notification and lock screen (the stream has none yet).
-- Audio offload, a shorter start buffer, prefetch on visible search results.
+- Audio offload. (The shorter start buffer and touch prefetch are done.)
 - Song cache and Data used on Android (mpv's recording and byte counter have no ExoPlayer
   equivalent yet), saved queue across process death, battery measured over an hour unplugged.
 
