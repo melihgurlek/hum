@@ -45,10 +45,10 @@ Status 2026-11-12 (Linux): sign-in, account sync and the song cache (#33) work a
 account. Order below comes from [COMPETITORS.md](COMPETITORS.md): every dead client died of
 playback breaking, so reliability comes first.
 
-1. **Cipher configs from the community registries** (`MetrolistGroup/faraday`,
+1. **Cheap desktop wins**: restore queue and position on launch, sleep timer with fade.
+2. **Cipher configs from the community registries** (`MetrolistGroup/faraday`,
    `ZemerTeam/zemer-cipher`), refreshed when an unknown player hash appears, so YouTube
    changes are fixed without a hum release.
-2. **Cheap desktop wins**: restore queue and position on launch, sleep timer with fade.
 3. **Test on Windows** (WebView2): sign-in, account sync, the song cache, account radio.
 4. **Test the song cache by hand**: seeking or skipping mid-song must discard the recording; a
    song played to the end shows up under Settings → Saved songs.
