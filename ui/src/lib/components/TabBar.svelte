@@ -14,7 +14,11 @@
 
 <nav class="tabs" aria-label="Main">
   {#each tabs as t}
-    <button class="tab" class:active={active(t)} aria-current={active(t) ? 'page' : undefined} onclick={() => go(t.view)}>
+    <button class="tab" class:active={active(t)} aria-current={active(t) ? 'page' : undefined} onclick={() => {
+      // Library opens on the list of your collections, as phone music apps do.
+      if (t.view === 'library') ui.libraryTab = 'playlists'
+      go(t.view)
+    }}>
       <Icon name={t.icon} size={22} />
       <span>{t.label}</span>
     </button>

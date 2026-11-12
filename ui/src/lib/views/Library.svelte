@@ -60,6 +60,15 @@
         <span class="new" aria-hidden="true"><Icon name="plus" size={22} /></span>
         <span class="t">New playlist</span>
       </button>
+      <!-- Liked songs and History first, like pinned playlists. -->
+      <button class="pl" onclick={() => (ui.libraryTab = 'liked')}>
+        <span class="new liked" aria-hidden="true"><Icon name="heart" size={22} /></span>
+        <span class="text"><span class="ellipsis t">Liked songs</span><span class="ellipsis muted s">{liked.length} {liked.length === 1 ? 'song' : 'songs'}</span></span>
+      </button>
+      <button class="pl" onclick={() => (ui.libraryTab = 'history')}>
+        <span class="new" aria-hidden="true"><Icon name="clock" size={22} /></span>
+        <span class="text"><span class="ellipsis t">History</span><span class="ellipsis muted s">Songs you've played</span></span>
+      </button>
       {#each ui.playlists as p (p.id)}
         <button class="pl" onclick={() => openPlaylist(p.id)}>
           <Mosaic covers={p.covers} size={52} radius={8} />
@@ -174,6 +183,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+  .new.liked {
+    background: var(--accent, var(--accent-default));
+    color: var(--on-accent);
   }
   .text {
     display: flex;
