@@ -6,6 +6,7 @@
   import Progress from '../components/Progress.svelte'
   import Lyrics from '../components/Lyrics.svelte'
   import SleepTimer from '../components/SleepTimer.svelte'
+  import RepeatButton from '../components/RepeatButton.svelte'
 
   // Remember which tab you left open.
   let tab = $state<'next' | 'lyrics'>((localStorage.getItem('hum.npTab') as 'next' | 'lyrics') ?? 'lyrics')
@@ -27,10 +28,6 @@
   function close() {
     ui.nowPlayingOpen = false
   }
-
-  // Phone: Up next and lyrics sit below the controls; this button scrolls down to them.
-  let panel = $state<HTMLElement>()
-  const showPanel = () => panel?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && close()} />
@@ -75,18 +72,18 @@
           <div class="times"><span>{fmtTime(player.position)}</span><span>{fmtTime(player.duration)}</span></div>
         </div>
         <div class="controls">
-          <!-- Phone: the player bar is hidden here, so its sleep timer moves into this row. -->
+          <!-- Phone: the player bar is hidden here, so its sleep timer and repeat move into this row. -->
           <span class="phone-only side-ctl"><SleepTimer size={22} align="left" /></span>
           <button class="ctl" aria-label="Previous" onclick={() => api.previous()}><Icon name="prev" size={28} /></button>
           <button class="big" aria-label={player.paused ? 'Play' : 'Pause'} onclick={() => api.togglePause()}>
             <Icon name={player.paused ? 'play' : 'pause'} size={30} />
           </button>
           <button class="ctl" aria-label="Next" onclick={() => api.next()}><Icon name="next" size={28} /></button>
-          <span class="phone-only side-ctl right"><button class="icon-btn" aria-label="Show up next and lyrics" onclick={showPanel}><Icon name="queue" size={22} /></button></span>
+          <span class="phone-only side-ctl right"><RepeatButton size={22} /></span>
         </div>
       </section>
 
-      <section class="panel" bind:this={panel} aria-label="Up next and lyrics">
+      <section class="panel" aria-label="Up next and lyrics">
         <div class="tabs" role="tablist">
           <button role="tab" aria-selected={tab === 'next'} class:sel={tab === 'next'} onclick={() => (tab = 'next')}><span class="trim">Up next</span></button>
           <button role="tab" aria-selected={tab === 'lyrics'} class:sel={tab === 'lyrics'} onclick={() => (tab = 'lyrics')}><span class="trim">Lyrics</span></button>
@@ -319,8 +316,10 @@
       z-index: 40;
       padding-bottom: env(safe-area-inset-bottom);
     }
+    /* Everything sits on one 24px gutter: the close button, cover, titles and the icons at
+       both ends of the transport row (their buttons pulled out by their padding). */
     header {
-      padding: calc(8px + env(safe-area-inset-top)) 16px 4px;
+      padding: calc(8px + env(safe-area-inset-top)) 24px 4px;
     }
     .body {
       padding: 8px 24px 24px;
@@ -366,6 +365,12 @@
     .side-ctl.right {
       justify-content: flex-end;
     }
+    .side-ctl:not(.right) :global(.icon-btn) {
+      margin-left: -8px;
+    }
+    .side-ctl.right :global(.icon-btn) {
+      margin-right: -11px;
+    }
     .side-ctl :global(.icon-btn) {
       color: var(--np-muted);
     }
@@ -376,7 +381,6 @@
       height: calc(100dvh - 120px);
       margin: 0 -12px;
       padding: 14px 12px;
-      scroll-margin-top: 12px;
     }
     .tabs {
       flex-wrap: wrap;

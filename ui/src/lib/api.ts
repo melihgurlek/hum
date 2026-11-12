@@ -19,6 +19,8 @@ export interface HistoryEntry { track: Track; played_at: number; outcome: 'compl
 export interface LyricLine { at: number; text: string }
 export interface Lyrics { lines: LyricLine[] | null; plain: string | null; source: string }
 
+export type Repeat = 'off' | 'all' | 'one'
+
 export interface PlaylistSummary { id: number; name: string; count: number; covers: string[] }
 export interface Playlist { id: number; name: string; tracks: Track[]; synced: boolean }
 
@@ -71,6 +73,7 @@ export const api = {
   setQuality: (quality: Quality) => invoke<void>('set_quality', { quality }),
   getQuality: () => invoke<Quality>('get_quality'),
   setAutoplay: (on: boolean) => invoke<void>('set_autoplay', { on }),
+  setRepeat: (repeat: Repeat) => invoke<void>('set_repeat', { repeat }),
   setNormalize: (on: boolean) => invoke<void>('set_normalize', { on }),
   setAccountRadio: (on: boolean) => invoke<void>('set_account_radio', { on }),
   queue: () => invoke<{ tracks: Track[]; index: number }>('queue'),

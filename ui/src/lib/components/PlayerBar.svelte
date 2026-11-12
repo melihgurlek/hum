@@ -5,6 +5,7 @@
   import ArtistLinks from './ArtistLinks.svelte'
   import Progress from './Progress.svelte'
   import SleepTimer from './SleepTimer.svelte'
+  import RepeatButton from './RepeatButton.svelte'
 </script>
 
 <footer class="bar" class:tinted={ui.nowPlayingOpen} aria-label="Player">
@@ -52,6 +53,7 @@
       <button class="icon-btn" aria-label="Next" onclick={() => api.next()} disabled={!player.current}>
         <Icon name="next" />
       </button>
+      <RepeatButton size={18} />
     </div>
     <div class="time">
       <span>{fmtTime(player.position)}</span>
@@ -177,6 +179,11 @@
   .controls .icon-btn {
     color: var(--text);
   }
+  /* Repeat sits right of Next; an equal space on the left keeps Play centered over the bar. */
+  .controls::before {
+    content: '';
+    width: 44px;
+  }
   .play {
     width: 48px;
     height: 48px;
@@ -259,7 +266,8 @@
       width: 44px;
       height: 44px;
     }
-    .controls .icon-btn {
+    .controls :global(.icon-btn),
+    .controls::before {
       display: none;
     }
     .play {

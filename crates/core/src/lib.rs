@@ -17,6 +17,6 @@ pub mod source;
 pub mod sync;
 
 pub use account::Account;
-pub use engine::{Engine, Update};
+pub use engine::{Engine, Repeat, Update};
 pub use library::Library;
 pub use source::{Quality, Source, Stream, Track};

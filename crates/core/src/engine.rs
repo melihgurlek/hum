@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, mpsc};
 
 use crate::library::{self, Library};
@@ -55,10 +55,25 @@ pub enum Update {
     AutoQuality { low: bool },
 }
 
+/// What plays after the current song: the next one (`Off`), the next one and the first again
+/// after the last (`All`), or this one again (`One`). Skipping still moves on under `One`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Repeat {
+    #[default]
+    Off,
+    All,
+    One,
+}
+
 struct State {
     queue: Vec<Track>,
     index: usize,
     autoplay: bool,
+    repeat: Repeat,
+    /// mpv has the current song queued again after itself (repeat one), so its next start is a
+    /// new play rather than the same one.
+    repeat_queued: bool,
     /// When the user asked for the current track, for the timing log.
     requested_at: Option<(String, Instant, bool)>,
     /// Which video id mpv has queued after the current one.
@@ -71,6 +86,27 @@ struct State {
     resume_at: Option<f64>,
     /// The play in progress, recorded to the library when the track changes.
     playing: Option<PlayRecord>,
+}
+
+impl State {
+    /// The index that plays when the current song ends, under the repeat mode.
+    fn upcoming(&self) -> Option<usize> {
+        match self.repeat {
+            Repeat::One if self.index < self.queue.len() => Some(self.index),
+            _ => self.after_current(),
+        }
+    }
+
+    /// The index Next goes to: the following song, or the first after the last on repeat all.
+    fn after_current(&self) -> Option<usize> {
+        if self.index + 1 < self.queue.len() {
+            Some(self.index + 1)
+        } else if self.repeat != Repeat::Off && !self.queue.is_empty() {
+            Some(0)
+        } else {
+            None
+        }
+    }
 }
 
 struct PlayRecord {
@@ -189,6 +225,8 @@ impl Engine {
                 queue: vec![],
                 index: 0,
                 autoplay: true,
+                repeat: Repeat::Off,
+                repeat_queued: false,
                 requested_at: None,
                 next_loaded: None,
                 resume_at: None,
@@ -321,6 +359,23 @@ impl Engine {
 
     pub fn set_autoplay(&self, on: bool) {
         self.0.state.lock().unwrap().autoplay = on;
+    }
+
+    /// Change what plays after this song, and re-queue mpv's next entry to match.
+    pub fn set_repeat(&self, repeat: Repeat) {
+        {
+            let mut st = self.0.state.lock().unwrap();
+            if st.repeat == repeat {
+                return;
+            }
+            st.repeat = repeat;
+            st.repeat_queued = false;
+            if st.next_loaded.take().is_some() {
+                self.0.player.send(Command::ClearNext);
+            }
+        }
+        let e = self.clone();
+        self.0.rt.spawn(async move { e.prefetch_next().await });
     }
 
     /// The song from disk, a cached unexpired stream URL, or one resolved now. A network
@@ -516,15 +571,16 @@ impl Engine {
     async fn prefetch_next(&self) {
         let next = {
             let st = self.0.state.lock().unwrap();
-            st.queue.get(st.index + 1).cloned()
+            st.upcoming().and_then(|i| st.queue.get(i).cloned())
         };
         let Some(next) = next else { return };
         match self.stream(&next.id).await {
             Ok((s, _)) => {
                 let mut st = self.0.state.lock().unwrap();
                 // Still the right next track?
-                if st.queue.get(st.index + 1).map(|t| &t.id) == Some(&next.id) {
+                if st.upcoming().and_then(|i| st.queue.get(i)).map(|t| &t.id) == Some(&next.id) {
                     st.next_loaded = Some(next.id.clone());
+                    st.repeat_queued = st.upcoming() == Some(st.index);
                     self.0.player.send(Command::SetNext(s));
                 }
             }
@@ -540,9 +596,10 @@ impl Engine {
             let i = st.index;
             let queue = std::mem::take(&mut st.queue);
             st.queue = queue.into_iter().enumerate().filter(|(j, t)| *j <= i || keep(t)).map(|(_, t)| t).collect();
-            let next = st.queue.get(i + 1).map(|t| t.id.clone());
+            let next = st.upcoming().and_then(|j| st.queue.get(j)).map(|t| t.id.clone());
             if st.next_loaded.is_some() && st.next_loaded != next {
                 st.next_loaded = None;
+                st.repeat_queued = false;
                 self.0.player.send(Command::ClearNext);
             }
             (st.queue.clone(), st.index)
@@ -558,10 +615,10 @@ impl Engine {
     pub async fn next(&self) -> Result<()> {
         let idx = {
             let st = self.0.state.lock().unwrap();
-            if st.index + 1 >= st.queue.len() {
-                return Ok(());
+            match st.after_current() {
+                Some(i) => i,
+                None => return Ok(()),
             }
-            st.index + 1
         };
         self.play_index(idx).await
     }
@@ -675,12 +732,12 @@ impl Engine {
                 PlayerEvent::Idle => {
                     self.finish_play();
                     // Reached the end with nothing prefetched: try the next item.
-                    let has_next = {
+                    let upcoming = {
                         let st = self.0.state.lock().unwrap();
-                        st.index + 1 < st.queue.len() && st.requested_at.is_none()
+                        st.upcoming().filter(|_| st.requested_at.is_none())
                     };
-                    if has_next {
-                        let _ = self.next().await;
+                    if let Some(i) = upcoming {
+                        let _ = self.play_index(i).await;
                     }
                 }
                 PlayerEvent::Error { video_id, message } => {
@@ -692,14 +749,30 @@ impl Engine {
     }
 
     fn on_started(&self, video_id: String) {
-        let same = self
-            .0
-            .state
-            .lock()
-            .unwrap()
-            .playing
-            .as_ref()
-            .is_some_and(|r| r.track.id == video_id);
+        // mpv reached the copy of this song queued for repeat one: a new play of it.
+        let repeated = {
+            let mut st = self.0.state.lock().unwrap();
+            let r = st.repeat_queued
+                && st.next_loaded.as_deref() == Some(video_id.as_str())
+                && st.queue.get(st.index).is_some_and(|t| t.id == video_id)
+                && st.requested_at.is_none()
+                // It ended rather than reloaded mid-song (a quality switch also restarts it).
+                && st.playing.as_ref().is_some_and(|p| p.duration > 0.0 && p.position >= p.duration - 3.0);
+            if r {
+                st.repeat_queued = false;
+                st.next_loaded = None;
+            }
+            r
+        };
+        let same = !repeated
+            && self
+                .0
+                .state
+                .lock()
+                .unwrap()
+                .playing
+                .as_ref()
+                .is_some_and(|r| r.track.id == video_id);
         if !same {
             self.finish_play();
         }
@@ -745,6 +818,9 @@ impl Engine {
         }
         if let Some((track, index)) = advanced {
             self.emit(Update::NowPlaying { track, index });
+            self.after_track_change();
+        } else if repeated {
+            // Queue it again for the next time round.
             self.after_track_change();
         }
     }
@@ -865,6 +941,42 @@ fn explain(title: &str, e: &anyhow::Error) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn repeat_picks_what_plays_next() {
+        let t = |id: &str| super::Track {
+            id: id.into(),
+            title: id.into(),
+            artists: vec![],
+            artist_id: None,
+            album: None,
+            album_id: None,
+            duration: None,
+            thumb: None,
+            cover: None,
+        };
+        let mut st = super::State {
+            queue: vec![t("a"), t("b")],
+            index: 1,
+            autoplay: false,
+            repeat: super::Repeat::Off,
+            repeat_queued: false,
+            requested_at: None,
+            next_loaded: None,
+            radio_seed: None,
+            position: 0.0,
+            retried: None,
+            resume_at: None,
+            playing: None,
+        };
+        assert_eq!((st.upcoming(), st.after_current()), (None, None));
+        st.repeat = super::Repeat::All;
+        assert_eq!((st.upcoming(), st.after_current()), (Some(0), Some(0)));
+        st.repeat = super::Repeat::One;
+        assert_eq!((st.upcoming(), st.after_current()), (Some(1), Some(0)));
+        st.index = 0;
+        assert_eq!((st.upcoming(), st.after_current()), (Some(0), Some(1)));
+    }
+
     #[test]
     fn errors_say_what_broke() {
         let e = |m: &str| anyhow::anyhow!(m.to_string());

@@ -1,4 +1,4 @@
-import { api, onSync, onUpdate, type AlbumPage, type ArtistPage, type HomeShelf, type QuickPicks, type SearchResults, type Palette, type PlaylistSummary, type Quality, type Track } from './api'
+import { api, onSync, onUpdate, type AlbumPage, type ArtistPage, type HomeShelf, type QuickPicks, type SearchResults, type Palette, type PlaylistSummary, type Quality, type Repeat, type Track } from './api'
 
 export type View = 'home' | 'search' | 'library' | 'settings' | 'playlist' | 'artist' | 'album'
 export type ThemePref = 'system' | 'dark' | 'light'
@@ -48,6 +48,7 @@ class Ui {
   // 'normal' was the same stream as 'high' and is gone from Settings.
   quality = $state<Quality>(load<Quality>('hum.quality', 'auto') === 'normal' ? 'high' : load<Quality>('hum.quality', 'auto'))
   autoplay = $state(load('hum.autoplay', true))
+  repeat = $state<Repeat>(load<Repeat>('hum.repeat', 'off'))
   normalize = $state(load('hum.normalize', true))
   accountRadio = $state(load('hum.accountRadio', false))
   toast = $state<string | null>(null)
@@ -275,6 +276,16 @@ export function setAutoplay(on: boolean) {
   ui.autoplay = on
   save('hum.autoplay', on)
   api.setAutoplay(on)
+  // Radio keeps adding songs, so a queue that repeats would never come round again.
+  if (on && ui.repeat === 'all') setRepeat('off')
+}
+
+/** Off, then the whole queue, then this song; the button cycles through them. */
+export function setRepeat(r: Repeat) {
+  ui.repeat = r
+  save('hum.repeat', r)
+  api.setRepeat(r)
+  if (r === 'all' && ui.autoplay) setAutoplay(false)
 }
 
 function isDark(): boolean {
@@ -426,6 +437,7 @@ export async function startListening() {
   applyTheme()
   api.setQuality(ui.quality)
   api.setAutoplay(ui.autoplay)
+  api.setRepeat(ui.repeat)
   api.setNormalize(ui.normalize)
   api.setAccountRadio(ui.accountRadio)
   refreshRecent()
