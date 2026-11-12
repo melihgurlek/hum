@@ -693,10 +693,12 @@
     }
     /* Parked, only the handle and the tabs show; the list under them stays hidden instead of
        peeking out as a sliver (it fades in as the sheet comes up). */
-    .panel > :not(.grab):not(.tabs) {
+    /* :global: the lyrics are another component's element, which a scoped selector skipped,
+       so their sliver still showed. */
+    .panel > :global(:not(.grab):not(.tabs)) {
       transition: opacity 0.2s;
     }
-    .panel:not(.open):not(.dragging) > :not(.grab):not(.tabs) {
+    .panel:not(.open):not(.dragging) > :global(:not(.grab):not(.tabs)) {
       opacity: 0;
       pointer-events: none;
     }

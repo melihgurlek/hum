@@ -103,11 +103,14 @@ export async function copyToastDetails() {
   showToast('Copied. Paste it into a bug report.')
 }
 
-interface Place { view: View; playlistId: number | null; artistId: string | null; albumId: string | null }
-const here = (): Place => ({ view: ui.view, playlistId: ui.playlistId, artistId: ui.artistId, albumId: ui.albumId })
+// Library's part (collections, Liked songs, History) is a place too, so Back steps through it.
+interface Place { view: View; playlistId: number | null; artistId: string | null; albumId: string | null; libraryTab: LibraryTab }
+type LibraryTab = 'liked' | 'history' | 'playlists'
+const here = (): Place => ({ view: ui.view, playlistId: ui.playlistId, artistId: ui.artistId, albumId: ui.albumId, libraryTab: ui.libraryTab })
 
 function show(p: Place) {
   ui.view = p.view
+  ui.libraryTab = p.libraryTab
   ui.playlistId = p.playlistId
   ui.artistId = p.artistId
   ui.albumId = p.albumId
@@ -122,7 +125,7 @@ function show(p: Place) {
 function navigate(change: Partial<Place>) {
   const from = here()
   const to = { ...from, ...change }
-  const same = to.view === from.view && to.playlistId === from.playlistId && to.artistId === from.artistId && to.albumId === from.albumId
+  const same = to.view === from.view && to.playlistId === from.playlistId && to.artistId === from.artistId && to.albumId === from.albumId && (to.view !== 'library' || to.libraryTab === from.libraryTab)
   if (!same) {
     ui.history = [...ui.history.slice(-49), from]
     // Leaving Now Playing for a page (an artist, an album): that page reuses Now Playing's
@@ -685,13 +688,16 @@ export function openPlaylist(id: number) {
 }
 
 export function openLiked() {
-  ui.libraryTab = 'liked'
-  go('library')
+  navigate({ view: 'library', libraryTab: 'liked' })
 }
 
 export function openHistory() {
-  ui.libraryTab = 'history'
-  go('library')
+  navigate({ view: 'library', libraryTab: 'history' })
+}
+
+/** The Library tab: on a phone, always its list of collections. */
+export function openLibrary() {
+  navigate({ view: 'library', libraryTab: layout.phone ? 'playlists' : ui.libraryTab === 'playlists' ? 'liked' : ui.libraryTab })
 }
 
 // ---- recent searches ------------------------------------------------------

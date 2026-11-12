@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { api, artistLine, artistLinks, img } from '../api'
+  import { api, artistLine, artistLinks, img, type Track } from '../api'
+  import { fade, fly } from 'svelte/transition'
+  import { cubicOut } from 'svelte/easing'
   import { addToNewPlaylist, addToPlaylist, blockArtist, layout, openAlbum, openArtist, openArtistNamed, playRadio, refreshPlaylists, showToast, ui } from '../state.svelte'
   import Icon from './Icon.svelte'
   import Mosaic from './Mosaic.svelte'
@@ -57,9 +59,12 @@
     ui.addMenu = null
   }
   // The song's own actions: where it's from, and a radio of it.
-  function act(f: () => void) {
+  // Run it with the song in hand: closing the menu clears `single`, and Start radio once got
+  // null (an error, and the player emptied).
+  function act(f: (t: Track) => void) {
+    const t = single
     ui.addMenu = null
-    f()
+    if (t) f(t)
   }
   function create() {
     if (ui.addMenu) addToNewPlaylist(name || 'New playlist', ui.addMenu.tracks)
@@ -72,9 +77,11 @@
 <svelte:window onkeydown={(e) => e.key === 'Escape' && close()} />
 
 {#if ui.addMenu}
-  <button class="backdrop" aria-label="Close menu" onclick={close} oncontextmenu={(e) => (e.preventDefault(), close())}></button>
+  <button class="backdrop" transition:fade={{ duration: 180 }} aria-label="Close menu" onclick={close} oncontextmenu={(e) => (e.preventDefault(), close())}></button>
   <!-- On a phone, a sheet from the bottom edge, in reach of the thumb. -->
-  <div class="menu" class:sheet={layout.phone} bind:this={menu} role="dialog" aria-label={single ? single.title : 'Add to playlist'}
+  <!-- Phones: the sheet rises from the bottom edge; desktop: the menu drops in a few px. -->
+  <div class="menu" class:sheet={layout.phone} bind:this={menu}
+    transition:fly={{ y: layout.phone ? 480 : -6, duration: layout.phone ? 260 : 140, easing: cubicOut }} role="dialog" aria-label={single ? single.title : 'Add to playlist'}
     style={layout.phone ? undefined : `left:${pos.left}px;top:${pos.top}px`}>
     {#if single}
       <div class="song">
@@ -82,12 +89,12 @@
         <span class="text"><span class="ellipsis">{single.title}</span><span class="muted n ellipsis">{artistLine(single)}</span></span>
       </div>
       <div class="acts">
-        <button class="item act" onclick={() => act(() => playRadio(single))}><Icon name="radio" size={20} /><span>Start radio</span></button>
+        <button class="item act" onclick={() => act((t) => playRadio(t))}><Icon name="radio" size={20} /><span>Start radio</span></button>
         {#each artistLinks(single) as a}
           <button class="item act" onclick={() => act(() => (a.id ? openArtist(a.id) : openArtistNamed(a.name)))}><Icon name="person" size={20} /><span class="ellipsis">Go to {a.name}</span></button>
         {/each}
         {#if single.album_id}
-          <button class="item act" onclick={() => act(() => openAlbum(single.album_id))}><Icon name="disc" size={20} /><span class="ellipsis">Go to {single.album ?? 'album'}</span></button>
+          <button class="item act" onclick={() => act((t) => openAlbum(t.album_id))}><Icon name="disc" size={20} /><span class="ellipsis">Go to {single.album ?? 'album'}</span></button>
         {/if}
       </div>
     {/if}

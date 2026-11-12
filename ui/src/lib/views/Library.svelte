@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api, type HistoryEntry, type Track } from '../api'
-  import { newPlaylistFromSidebar, openPlaylist, playList, player, shuffled, ui } from '../state.svelte'
+  import { layout, newPlaylistFromSidebar, openHistory, openLiked, openPlaylist, playList, player, shuffled, ui } from '../state.svelte'
+  import BackButton from '../components/BackButton.svelte'
   import Icon from '../components/Icon.svelte'
   import Mosaic from '../components/Mosaic.svelte'
   import TrackRow from '../components/TrackRow.svelte'
@@ -40,16 +41,19 @@
 </script>
 
 <div class="page scroll">
-  <h1>Library</h1>
-  <div class="tabs" role="tablist">
-    <!-- Phones have no sidebar, so their playlists live here. -->
-    <button class="phone-only" role="tab" aria-selected={ui.libraryTab === 'playlists'} class:sel={ui.libraryTab === 'playlists'} onclick={() => (ui.libraryTab = 'playlists')}>
-      <span class="trim">Playlists</span>
-    </button>
-    <button role="tab" aria-selected={ui.libraryTab === 'liked'} class:sel={ui.libraryTab === 'liked'} onclick={() => (ui.libraryTab = 'liked')}>
+  {#if layout.phone}
+    <!-- Phone: the list of collections is the Library; Liked songs and History are pages of
+         their own, with Back, instead of tabs that repeated the list's first two rows. -->
+    {#if ui.libraryTab !== 'playlists'}<BackButton />{/if}
+    <h1 class:sub={ui.libraryTab !== 'playlists'}>{ui.libraryTab === 'liked' ? 'Liked songs' : ui.libraryTab === 'history' ? 'History' : 'Library'}</h1>
+  {:else}
+    <h1>Library</h1>
+  {/if}
+  <div class="tabs desk-only" role="tablist">
+    <button role="tab" aria-selected={ui.libraryTab === 'liked'} class:sel={ui.libraryTab === 'liked'} onclick={openLiked}>
       <span class="trim">Liked songs{liked.length ? ` (${liked.length})` : ''}</span>
     </button>
-    <button role="tab" aria-selected={ui.libraryTab === 'history'} class:sel={ui.libraryTab === 'history'} onclick={() => (ui.libraryTab = 'history')}>
+    <button role="tab" aria-selected={ui.libraryTab === 'history'} class:sel={ui.libraryTab === 'history'} onclick={openHistory}>
       <span class="trim">History</span>
     </button>
   </div>
@@ -61,11 +65,11 @@
         <span class="t">New playlist</span>
       </button>
       <!-- Liked songs and History first, like pinned playlists. -->
-      <button class="pl" onclick={() => (ui.libraryTab = 'liked')}>
+      <button class="pl" onclick={openLiked}>
         <span class="new liked" aria-hidden="true"><Icon name="heart" size={22} /></span>
         <span class="text"><span class="ellipsis t">Liked songs</span><span class="ellipsis muted s">{liked.length} {liked.length === 1 ? 'song' : 'songs'}</span></span>
       </button>
-      <button class="pl" onclick={() => (ui.libraryTab = 'history')}>
+      <button class="pl" onclick={openHistory}>
         <span class="new" aria-hidden="true"><Icon name="clock" size={22} /></span>
         <span class="text"><span class="ellipsis t">History</span><span class="ellipsis muted s">Songs you've played</span></span>
       </button>
@@ -200,18 +204,12 @@
     font-size: 13px;
   }
   @media (max-width: 640px) {
-    .phone-only {
-      display: block;
+    .desk-only {
+      display: none;
     }
-    /* Three pills don't fit 360px with desktop padding: tighten, and scroll if they still don't. */
-    .tabs {
-      overflow-x: auto;
-      scrollbar-width: none;
-      flex: none;
-    }
-    .tabs button {
-      flex: none;
-      padding: 0 14px;
+    /* Room for the back button above the title. */
+    h1.sub {
+      margin-top: 40px;
     }
   }
   .list {

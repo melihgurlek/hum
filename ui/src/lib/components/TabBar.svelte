@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { go, ui, type View } from '../state.svelte'
+  import { go, openLibrary, ui, type View } from '../state.svelte'
   import Icon from './Icon.svelte'
 
   // On a phone this replaces the sidebar; playlists live in Library there.
@@ -16,8 +16,8 @@
   {#each tabs as t}
     <button class="tab" class:active={active(t)} aria-current={active(t) ? 'page' : undefined} onclick={() => {
       // Library opens on the list of your collections, as phone music apps do.
-      if (t.view === 'library') ui.libraryTab = 'playlists'
-      go(t.view)
+      if (t.view === 'library') openLibrary()
+      else go(t.view)
     }}>
       <Icon name={t.icon} size={22} />
       <span>{t.label}</span>
