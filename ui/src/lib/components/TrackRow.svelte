@@ -1,6 +1,6 @@
 <script lang="ts">
   import { artistLine, artistLinks, fmtTime, img, type Track } from '../api'
-  import { hoverCancel, hoverPrefetch, layout, openAddMenu, player } from '../state.svelte'
+  import { hoverCancel, hoverPrefetch, layout, openAddMenu, player, touchPrefetch } from '../state.svelte'
   import Icon from './Icon.svelte'
   import ArtistLinks from './ArtistLinks.svelte'
   import Playing from './Playing.svelte'
@@ -37,6 +37,7 @@
   role="group"
   aria-label={`${track.title} by ${artistLine(track)}`}
   onmouseenter={() => hoverPrefetch(track.id)}
+  ontouchstart={() => touchPrefetch(track.id)}
   onmouseleave={hoverCancel}
   oncontextmenu={(e) => openAddMenu([track], e)}
 >

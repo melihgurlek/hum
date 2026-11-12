@@ -146,6 +146,9 @@ struct Inner {
     player: Player,
     state: Mutex<State>,
     streams: Mutex<HashMap<String, Stream>>,
+    /// Lookups in progress, shared: a tap that lands while the touch-down's prefetch is still
+    /// resolving the same song waits for it instead of asking YouTube again.
+    resolving: Mutex<HashMap<String, Arc<tokio::sync::OnceCell<Result<Stream, Arc<anyhow::Error>>>>>>,
     quality: AtomicU8,
     auto: Mutex<AutoState>,
     /// Downloaded bytes not yet written to the library.
@@ -263,6 +266,7 @@ impl Engine {
                 playing: None,
             }),
             streams: Mutex::new(HashMap::new()),
+            resolving: Mutex::new(HashMap::new()),
             quality: AtomicU8::new(3),
             auto: Mutex::new(AutoState::default()),
             normalize: std::sync::atomic::AtomicBool::new(true),
@@ -485,7 +489,19 @@ impl Engine {
                 return Ok((s.clone(), true));
             }
         }
-        let s = self.0.source.resolve(id, self.effective_quality()).await?;
+        let cell = self.0.resolving.lock().unwrap().entry(id.to_string()).or_default().clone();
+        let quality = self.effective_quality();
+        let res = cell
+            .get_or_init(|| async { self.0.source.resolve(id, quality).await.map_err(Arc::new) })
+            .await
+            .clone();
+        {
+            let mut resolving = self.0.resolving.lock().unwrap();
+            if resolving.get(id).is_some_and(|c| Arc::ptr_eq(c, &cell)) {
+                resolving.remove(id);
+            }
+        }
+        let s = res.map_err(|e| anyhow::anyhow!("{e:#}"))?;
         {
             // Every play and hover adds a URL (~2 KB); drop the ones that have expired.
             let mut streams = self.0.streams.lock().unwrap();
@@ -586,6 +602,7 @@ impl Engine {
             track
         };
         self.emit(Update::NowPlaying { track: track.clone(), index });
+        let resolving = Instant::now();
         let (mut stream, cached) = match self.stream(&track.id).await {
             Ok(s) => s,
             Err(e) => {
@@ -597,6 +614,7 @@ impl Engine {
             }
         };
         stream.meta = Some((&track).into());
+        log::info!("stream for {} in {} ms (url cached: {cached})", track.id, resolving.elapsed().as_millis());
         self.0.state.lock().unwrap().requested_at = Some((track.id.clone(), requested, cached));
         // A resume a few seconds in starts there; otherwise from the top.
         match start.filter(|s| *s > 2.0) {

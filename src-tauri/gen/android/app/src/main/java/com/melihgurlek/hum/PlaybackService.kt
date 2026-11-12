@@ -7,6 +7,7 @@ import androidx.media3.common.C
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
@@ -35,6 +36,19 @@ class PlaybackService : MediaSessionService() {
                 true,
             )
             .setHandleAudioBecomingNoisy(true)
+            // Start once 0.5 s is buffered, not ExoPlayer's 2.5 s (a video default): measured, the
+            // player took ~920 ms from command to sound and the stream URL only ~220 ms. After a
+            // stall, wait for 2 s so a weak connection doesn't stutter.
+            .setLoadControl(
+                DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(
+                        DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
+                        DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
+                        500,
+                        2000,
+                    )
+                    .build(),
+            )
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
         // Tapping the notification (or One UI's status-bar media pill) opens hum. Without a
