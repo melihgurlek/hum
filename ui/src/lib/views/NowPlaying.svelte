@@ -691,6 +691,15 @@
     .panel.open {
       transform: translateY(var(--drag, 0px));
     }
+    /* Parked, only the handle and the tabs show; the list under them stays hidden instead of
+       peeking out as a sliver (it fades in as the sheet comes up). */
+    .panel > :not(.grab):not(.tabs) {
+      transition: opacity 0.2s;
+    }
+    .panel:not(.open):not(.dragging) > :not(.grab):not(.tabs) {
+      opacity: 0;
+      pointer-events: none;
+    }
     .panel:not(.dragging) {
       transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
     }
