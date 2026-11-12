@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { downloadOf, setDownload } from '../state.svelte'
+  import { downloadOf, downloads, setDownload } from '../state.svelte'
   import Icon from './Icon.svelte'
 
   /** `target`: 'liked' or `playlist:<id>`. */
@@ -7,7 +7,10 @@
 
   const d = $derived(downloadOf(target))
   const whole = $derived(!!d && d.done >= d.total)
-  const label = $derived(!d ? 'Download' : whole ? 'Downloaded' : `Downloading ${d.done} of ${d.total}`)
+  const label = $derived(
+    !d ? 'Download' : whole ? 'Downloaded' : downloads.status?.waiting_for_wifi ? `Waiting for Wi-Fi, ${d.done} of ${d.total}` : `Downloading ${d.done} of ${d.total}`,
+  )
+  const waiting = $derived(!!d && !whole && !!downloads.status?.waiting_for_wifi)
 </script>
 
 <!-- Off: Download. On: Downloading n of m, then Downloaded; a tap on either takes it off this
@@ -15,7 +18,7 @@
 <button class="dl" class:on={!!d} aria-pressed={!!d}
   title={d ? 'Remove the download from this device' : 'Keep these songs on this device to play offline'}
   onclick={() => setDownload(target, !d)}>
-  {#if d && !whole}<span class="spin" aria-hidden="true"></span>{:else}<Icon name={whole ? 'check' : 'download'} size={16} />{/if}
+  {#if d && !whole && !waiting}<span class="spin" aria-hidden="true"></span>{:else if waiting}<Icon name="download" size={16} />{:else}<Icon name={whole ? 'check' : 'download'} size={16} />{/if}
   <span class="trim">{label}</span>
 </button>
 

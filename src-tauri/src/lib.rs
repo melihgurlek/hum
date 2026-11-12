@@ -456,6 +456,12 @@ fn set_song_cache_limit(app: State<'_, App>, bytes: u64) {
     app.engine.set_song_cache_limit(bytes);
 }
 
+/// Whether downloads may use mobile data (Android); otherwise they wait for Wi-Fi.
+#[tauri::command]
+fn set_metered_downloads(app: State<'_, App>, on: bool) {
+    app.engine.set_metered_downloads(on);
+}
+
 /// Keep a playlist (`playlist:<id>`) or `liked` for offline, or stop.
 #[tauri::command]
 async fn set_download(app: State<'_, App>, target: String, on: bool) -> Res<()> {
@@ -791,6 +797,7 @@ pub fn run() {
             clear_saved_songs,
             set_song_cache_limit,
             set_download,
+            set_metered_downloads,
             downloads,
             remove_all_downloads,
             set_account_radio,

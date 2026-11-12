@@ -47,6 +47,7 @@ pub fn event(json: &str) {
             bytes: v["bytes"].as_u64().unwrap_or(0),
             rate: v["rate"].as_f64().unwrap_or(0.0),
         },
+        "network" => PlayerEvent::Network { metered: v["metered"].as_bool().unwrap_or(true) },
         "recorded" => match v["path"].as_str() {
             Some(p) => PlayerEvent::Recorded { path: p.into(), expected: v["expected"].as_u64() },
             None => return,
@@ -95,6 +96,7 @@ fn to_json(cmd: &Command) -> Value {
         Command::Seek(secs) => json!({ "cmd": "seek", "secs": secs }),
         Command::Volume(v) => json!({ "cmd": "volume", "volume": v / 100.0 }),
         Command::Stop => json!({ "cmd": "stop" }),
+        Command::QueryNetwork => json!({ "cmd": "network" }),
     }
 }
 

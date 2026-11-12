@@ -2,6 +2,9 @@ package com.melihgurlek.hum
 
 import android.content.ComponentName
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -46,6 +49,27 @@ object HumPlayer {
     fun init(context: Context) {
         app = context.applicationContext
         nativeInit()
+        // Tell the engine when the network turns metered (mobile data) or not, so downloads can
+        // wait for Wi-Fi.
+        val cm = app.getSystemService(ConnectivityManager::class.java)
+        cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                reportNetwork(!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED))
+            }
+        })
+    }
+
+    @Volatile private var metered: Boolean? = null
+    private fun reportNetwork(m: Boolean) {
+        metered = m
+        send(ev("network").put("metered", m))
+    }
+
+    /** The engine asks (it may have started after the last change was sent). */
+    private fun answerNetwork() {
+        val cm = app.getSystemService(ConnectivityManager::class.java)
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+        reportNetwork(caps == null || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED))
     }
 
     /** Called by Rust from any thread. */
@@ -111,6 +135,7 @@ object HumPlayer {
     }
 
     private fun apply(c: JSONObject) {
+        if (c.getString("cmd") == "network") return answerNetwork()
         val p = player ?: run {
             pending.addLast(c)
             ensureService()

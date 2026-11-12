@@ -20,6 +20,8 @@ pub enum Command {
     /// 0-100.
     Volume(f64),
     Stop,
+    /// Report the network (`PlayerEvent::Network`); only Android's player knows it.
+    QueryNetwork,
 }
 
 #[derive(Debug, Clone)]
@@ -40,4 +42,6 @@ pub enum PlayerEvent {
     /// stream's size.
     Recorded { path: std::path::PathBuf, expected: Option<u64> },
     Error { video_id: Option<String>, message: String },
+    /// The connection is metered (mobile data) or not (Wi-Fi), on Android.
+    Network { metered: bool },
 }

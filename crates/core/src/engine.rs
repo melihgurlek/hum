@@ -169,6 +169,11 @@ struct Inner {
     pass: Mutex<Pass>,
     /// Wakes a pass waiting to retry the network.
     pass_wake: tokio::sync::Notify,
+    /// On mobile data (Android reports it; assumed until it does, so nothing downloads on
+    /// mobile data by surprise). Never set on the desktop.
+    metered: std::sync::atomic::AtomicBool,
+    /// Downloads may use mobile data (off unless turned on in Settings).
+    metered_downloads: std::sync::atomic::AtomicBool,
     /// Loudness normalization (on unless turned off in Settings).
     normalize: std::sync::atomic::AtomicBool,
 }
@@ -309,6 +314,8 @@ impl Engine {
             downloads: Default::default(),
             pass: Default::default(),
             pass_wake: Default::default(),
+            metered: std::sync::atomic::AtomicBool::new(cfg!(target_os = "android")),
+            metered_downloads: std::sync::atomic::AtomicBool::new(false),
         }));
         let e = engine.clone();
         engine.0.rt.spawn(async move { e.player_events(prx).await });
@@ -368,13 +375,29 @@ impl Engine {
         let sets = lib.run(|l| l.download_sets()).await?;
         let d = self.downloads().ok_or_else(|| anyhow::anyhow!("downloads unavailable"))?;
         let active = self.0.pass.lock().unwrap().running;
-        Ok(tokio::task::spawn_blocking(move || DownloadStatus::new(sets, &d, active)).await?)
+        let held = self.held_for_wifi();
+        let mut s = tokio::task::spawn_blocking(move || DownloadStatus::new(sets, &d, active)).await?;
+        s.waiting_for_wifi = held && s.targets.iter().any(|t| t.done < t.total);
+        Ok(s)
+    }
+
+    /// Downloads may use mobile data. Turning it on starts any that were waiting.
+    pub fn set_metered_downloads(&self, on: bool) {
+        self.0.metered_downloads.store(on, Ordering::Relaxed);
+        self.sync_downloads();
+    }
+
+    fn held_for_wifi(&self) -> bool {
+        self.0.metered.load(Ordering::Relaxed) && !self.0.metered_downloads.load(Ordering::Relaxed)
     }
 
     /// Bring the downloads in line with what is marked: delete what no collection holds, fetch
     /// what is missing. Cheap to call; one pass runs at a time and a call during a pass makes it
     /// go round once more.
     pub fn sync_downloads(&self) {
+        // Ask the player what network this is (Android answers with a Network event, which
+        // calls back here when it changes).
+        self.0.player.send(Command::QueryNetwork);
         {
             let mut pass = self.0.pass.lock().unwrap();
             if pass.running {
@@ -433,6 +456,10 @@ impl Engine {
             };
             let next = wanted.iter().find(|id| !have.contains(*id) && failures.get(*id).copied().unwrap_or(0) < 2);
             let Some(id) = next else { return false };
+            // On mobile data without leave: wait (a switch to Wi-Fi wakes the pass).
+            if self.held_for_wifi() {
+                return true;
+            }
             match self.download_song(&dl, id).await {
                 Ok(()) => {}
                 Err(e) if is_network_error(&e) => {
@@ -1060,6 +1087,13 @@ impl Engine {
                     };
                     if let Some(i) = upcoming {
                         let _ = self.play_index(i).await;
+                    }
+                }
+                PlayerEvent::Network { metered } => {
+                    let was = self.0.metered.swap(metered, Ordering::Relaxed);
+                    if was != metered {
+                        log::info!("network: {}", if metered { "mobile data" } else { "Wi-Fi" });
+                        self.sync_downloads();
                     }
                 }
                 PlayerEvent::Error { video_id, message } => {

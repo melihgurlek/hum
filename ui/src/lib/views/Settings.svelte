@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, img, onAccount, type AccountPlaylist, type Profile, type Quality } from '../api'
-  import { downloads, player, quickPicksCache, refreshDownloads, refreshPlaylists, setAccountRadio, setQuality, setSongCacheLimit, setTheme, setAutoplay, setNormalize, showToast, ui, type ThemePref } from '../state.svelte'
+  import { downloads, layout, player, setMeteredDownloads, quickPicksCache, refreshDownloads, refreshPlaylists, setAccountRadio, setQuality, setSongCacheLimit, setTheme, setAutoplay, setNormalize, showToast, ui, type ThemePref } from '../state.svelte'
 
   let lists = $state<AccountPlaylist[] | null>(null)
   $effect(() => {
@@ -180,6 +180,12 @@
         </div>
       {/if}
     </div>
+    {#if layout.phone}
+      <label class="opt">
+        <span><span class="ol">Download over mobile data</span><span class="od">Off: downloads wait for Wi-Fi</span></span>
+        <input class="switch" type="checkbox" checked={ui.meteredDownloads} onchange={(e) => setMeteredDownloads(e.currentTarget.checked)} />
+      </label>
+    {/if}
     <div class="account lists">
       <span class="who">
         <span class="ol">Downloads</span>

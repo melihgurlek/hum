@@ -33,6 +33,8 @@ pub struct DownloadStatus {
     pub bytes: u64,
     /// A download pass is running (or waiting to retry).
     pub active: bool,
+    /// Songs are left to fetch but the phone is on mobile data, and that's not allowed.
+    pub waiting_for_wifi: bool,
 }
 
 impl Downloads {
@@ -123,7 +125,7 @@ impl DownloadStatus {
             })
             .collect();
         let (count, bytes) = downloads.usage();
-        DownloadStatus { targets, count, bytes, active }
+        DownloadStatus { targets, count, bytes, active, waiting_for_wifi: false }
     }
 }
 

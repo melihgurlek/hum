@@ -24,7 +24,7 @@ export interface Lyrics { lines: LyricLine[] | null; plain: string | null; sourc
 export type Repeat = 'off' | 'all' | 'one'
 
 export interface DownloadTarget { target: string; total: number; done: number }
-export interface DownloadStatus { targets: DownloadTarget[]; count: number; bytes: number; active: boolean }
+export interface DownloadStatus { targets: DownloadTarget[]; count: number; bytes: number; active: boolean; waiting_for_wifi: boolean }
 
 export interface PlaylistSummary { id: number; name: string; count: number; covers: string[] }
 export interface Playlist { id: number; name: string; tracks: Track[]; synced: boolean }
@@ -116,6 +116,7 @@ export const api = {
   setDownload: (target: string, on: boolean) => invoke<void>('set_download', { target, on }),
   downloads: () => invoke<DownloadStatus>('downloads'),
   removeAllDownloads: () => invoke<void>('remove_all_downloads'),
+  setMeteredDownloads: (on: boolean) => invoke<void>('set_metered_downloads', { on }),
   dataUsed: () => invoke<{ month: number; total: number; auto_low: boolean }>('data_used'),
   coverPalette: (url: string) => invoke<Palette>('cover_palette', { url }),
   account: () => invoke<Profile | null>('account'),

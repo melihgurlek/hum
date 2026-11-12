@@ -54,6 +54,8 @@ class Ui {
   shuffle = $state(load('hum.shuffle', false))
   /** How much the automatic song cache may keep, in bytes; 0 is off. */
   songCacheLimit = $state(load('hum.songCacheLimit', 2 ** 30))
+  /** Downloads may use mobile data; otherwise they wait for Wi-Fi. */
+  meteredDownloads = $state(load('hum.meteredDownloads', false))
   normalize = $state(load('hum.normalize', true))
   accountRadio = $state(load('hum.accountRadio', false))
   toast = $state<string | null>(null)
@@ -352,6 +354,13 @@ export function setSongCacheLimit(bytes: number) {
 
 // ---- downloads ------------------------------------------------------------
 
+export function setMeteredDownloads(on: boolean) {
+  ui.meteredDownloads = on
+  save('hum.meteredDownloads', on)
+  api.setMeteredDownloads(on).catch((e) => showToast(String(e)))
+  refreshDownloads()
+}
+
 /** What's marked for download and how far along it is; polled while a pass runs. */
 export const downloads = $state<{ status: DownloadStatus | null }>({ status: null })
 let downloadPoll: ReturnType<typeof setTimeout> | undefined
@@ -362,7 +371,8 @@ export async function refreshDownloads() {
   } catch {
     return
   }
-  if (downloads.status.active) downloadPoll = setTimeout(refreshDownloads, 2000)
+  // Only while songs are actually coming in: not while waiting for Wi-Fi, which can be hours.
+  if (downloads.status.active && !downloads.status.waiting_for_wifi) downloadPoll = setTimeout(refreshDownloads, 2000)
 }
 export const downloadOf = (target: string) => downloads.status?.targets.find((t) => t.target === target) ?? null
 export async function setDownload(target: string, on: boolean) {
@@ -541,6 +551,7 @@ export async function startListening() {
   api.setRepeat(ui.repeat)
   api.setShuffle(ui.shuffle)
   api.setSongCacheLimit(ui.songCacheLimit).catch(() => {})
+  api.setMeteredDownloads(ui.meteredDownloads).catch(() => {})
   refreshDownloads()
   api.setNormalize(ui.normalize)
   api.setAccountRadio(ui.accountRadio)
