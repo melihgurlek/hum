@@ -1,7 +1,8 @@
 <script lang="ts">
   import { api, type HistoryEntry, type Track } from '../api'
-  import { layout, newPlaylistFromSidebar, openHistory, openLiked, openPlaylist, playList, player, shuffled, ui } from '../state.svelte'
+  import { downloadOf, layout, newPlaylistFromSidebar, openHistory, openLiked, openPlaylist, playList, player, shuffled, ui } from '../state.svelte'
   import BackButton from '../components/BackButton.svelte'
+  import DownloadButton from '../components/DownloadButton.svelte'
   import Icon from '../components/Icon.svelte'
   import Mosaic from '../components/Mosaic.svelte'
   import TrackRow from '../components/TrackRow.svelte'
@@ -67,7 +68,7 @@
       <!-- Liked songs and History first, like pinned playlists. -->
       <button class="pl" onclick={openLiked}>
         <span class="new liked" aria-hidden="true"><Icon name="heart" size={22} /></span>
-        <span class="text"><span class="ellipsis t">Liked songs</span><span class="ellipsis muted s">{liked.length} {liked.length === 1 ? 'song' : 'songs'}</span></span>
+        <span class="text"><span class="ellipsis t">Liked songs</span><span class="ellipsis muted s">{liked.length} {liked.length === 1 ? 'song' : 'songs'}{downloadOf('liked') ? ', downloaded' : ''}</span></span>
       </button>
       <button class="pl" onclick={openHistory}>
         <span class="new" aria-hidden="true"><Icon name="clock" size={22} /></span>
@@ -76,7 +77,7 @@
       {#each ui.playlists as p (p.id)}
         <button class="pl" onclick={() => openPlaylist(p.id)}>
           <Mosaic covers={p.covers} size={52} radius={8} />
-          <span class="text"><span class="ellipsis t">{p.name}</span><span class="ellipsis muted s">{p.count} {p.count === 1 ? 'song' : 'songs'}</span></span>
+          <span class="text"><span class="ellipsis t">{p.name}</span><span class="ellipsis muted s">{p.count} {p.count === 1 ? 'song' : 'songs'}{downloadOf(`playlist:${p.id}`) ? ', downloaded' : ''}</span></span>
         </button>
       {/each}
     </div>
@@ -85,6 +86,7 @@
       <div class="actions">
         <button class="primary" onclick={() => playList(liked, 0)}><Icon name="play" size={16} /><span class="trim">Play</span></button>
         <button class="secondary" onclick={() => playList(shuffled(liked), 0)}><Icon name="shuffle" size={16} /><span class="trim">Shuffle</span></button>
+        <DownloadButton target="liked" />
       </div>
       <div class="list">
         {#each liked as t, i (t.id)}
@@ -141,6 +143,7 @@
   }
   .actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
   }
   .primary,

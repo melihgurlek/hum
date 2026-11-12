@@ -1,6 +1,8 @@
 <script lang="ts">
   import { api, type Playlist } from '../api'
-  import { go, playList, prefetchOnHover, refreshPlaylists, showToast, ui } from '../state.svelte'
+  import { go, layout, playList, prefetchOnHover, refreshPlaylists, showToast, ui } from '../state.svelte'
+  import BackButton from '../components/BackButton.svelte'
+  import DownloadButton from '../components/DownloadButton.svelte'
   import Icon from '../components/Icon.svelte'
   import Mosaic from '../components/Mosaic.svelte'
   import TrackRow from '../components/TrackRow.svelte'
@@ -101,11 +103,13 @@
 </script>
 
 <div class="page scroll">
+  <!-- Phones reach playlists from the Library list, so they get Back; the desktop has the sidebar. -->
+  {#if layout.phone}<BackButton />{/if}
   {#if missing}
     <p class="muted">This playlist no longer exists.</p>
   {:else if pl}
     <header>
-      <Mosaic covers={summary?.covers ?? []} size={168} radius={14} />
+      <Mosaic covers={summary?.covers ?? []} size={layout.phone ? 240 : 168} radius={14} />
       <div class="info">
         {#if editing}
           <label for="pl-name" class="sr">Playlist name</label>
@@ -127,6 +131,7 @@
           <button class="secondary" disabled={!pl.tracks.length} onclick={() => playList(shuffled(), 0)}>
             <Icon name="shuffle" size={16} /><span class="trim">Shuffle</span>
           </button>
+          {#if pl.tracks.length}<DownloadButton target={`playlist:${pl.id}`} />{/if}
           {#if confirmDelete}
             <span class="confirm">
               {#if pl.synced}
@@ -220,6 +225,26 @@
     gap: 8px;
     min-width: 0;
     flex: 1;
+  }
+  /* Phone: the cover centered and large under the back button, the name and buttons below
+     at full width (side by side, they were squeezed into a narrow column). */
+  @media (max-width: 640px) {
+    header {
+      flex-direction: column;
+      align-items: stretch;
+      margin-top: 36px;
+      gap: 20px;
+    }
+    header > :global(.mosaic) {
+      align-self: center;
+    }
+    .info {
+      flex: none;
+    }
+    .name,
+    .name-input {
+      font-size: 26px;
+    }
   }
   .name,
   .name-input {

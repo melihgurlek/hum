@@ -4,6 +4,7 @@
 pub mod account;
 pub mod cache;
 pub mod color;
+pub mod downloads;
 pub mod engine;
 pub mod library;
 pub mod lyrics;

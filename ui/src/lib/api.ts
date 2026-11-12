@@ -23,6 +23,9 @@ export interface Lyrics { lines: LyricLine[] | null; plain: string | null; sourc
 
 export type Repeat = 'off' | 'all' | 'one'
 
+export interface DownloadTarget { target: string; total: number; done: number }
+export interface DownloadStatus { targets: DownloadTarget[]; count: number; bytes: number; active: boolean }
+
 export interface PlaylistSummary { id: number; name: string; count: number; covers: string[] }
 export interface Playlist { id: number; name: string; tracks: Track[]; synced: boolean }
 
@@ -107,6 +110,12 @@ export const api = {
   moveInPlaylist: (id: number, from: number, to: number) => invoke<void>('move_in_playlist', { id, from, to }),
   savedSongs: () => invoke<{ count: number; bytes: number }>('saved_songs'),
   clearSavedSongs: () => invoke<void>('clear_saved_songs'),
+  /** The automatic cache's size in bytes; 0 turns it off. */
+  setSongCacheLimit: (bytes: number) => invoke<void>('set_song_cache_limit', { bytes }),
+  /** `target`: 'liked' or `playlist:<id>`. */
+  setDownload: (target: string, on: boolean) => invoke<void>('set_download', { target, on }),
+  downloads: () => invoke<DownloadStatus>('downloads'),
+  removeAllDownloads: () => invoke<void>('remove_all_downloads'),
   dataUsed: () => invoke<{ month: number; total: number; auto_low: boolean }>('data_used'),
   coverPalette: (url: string) => invoke<Palette>('cover_palette', { url }),
   account: () => invoke<Profile | null>('account'),

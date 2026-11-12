@@ -9,7 +9,7 @@ description = "hum: YouTube Music source, playback and queue, with no UI depende
 anyhow = "1"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "io-util"] }
 # Fork of sonorahq/ytmusic-rs: upstream plus our fixes, offered back as PRs.
 ytmusic = { git = "https://github.com/melihgurlek/ytmusic-rs", rev = "89b9ea9" }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }

@@ -521,6 +521,12 @@ impl Source {
         Ok(text)
     }
 
+    /// The song's best stream, already arriving, to save to disk (offline downloads). Reads it a
+    /// range at a time: the stream host serves a plain GET at a trickle.
+    pub async fn open_audio(&self, video_id: &str) -> Result<(ytmusic::AudioFormat, ytmusic::AudioStream)> {
+        self.ytm.open_audio(video_id).await
+    }
+
     pub async fn resolve(&self, video_id: &str, quality: Quality) -> Result<Stream> {
         let t = Instant::now();
         let fmt = match quality {

@@ -213,6 +213,13 @@ impl Library {
                  PRAGMA user_version = 5;",
             )?;
         }
+        // v6: what is kept for offline: `liked` or `playlist:<id>`.
+        if db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))? < 6 {
+            db.execute_batch(
+                "CREATE TABLE IF NOT EXISTS downloads (target TEXT PRIMARY KEY);
+                 PRAGMA user_version = 6;",
+            )?;
+        }
         Ok(Library {
             db: Arc::new(Mutex::new(db)),
         })
@@ -360,6 +367,7 @@ impl Library {
         )?;
         db.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?1", params![id])?;
         db.execute("DELETE FROM playlists WHERE id = ?1", params![id])?;
+        db.execute("DELETE FROM downloads WHERE target = ?1", params![format!("playlist:{id}")])?;
         Ok(())
     }
 
@@ -656,6 +664,7 @@ impl Library {
         let db = self.db.lock().unwrap();
         db.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?1", params![id])?;
         db.execute("DELETE FROM playlists WHERE id = ?1", params![id])?;
+        db.execute("DELETE FROM downloads WHERE target = ?1", params![format!("playlist:{id}")])?;
         Ok(())
     }
 
@@ -669,6 +678,10 @@ impl Library {
         )?;
         tx.execute(
             "DELETE FROM playlist_tracks WHERE playlist_id IN (SELECT id FROM playlists WHERE remote_id = ?1)",
+            params![remote_id],
+        )?;
+        tx.execute(
+            "DELETE FROM downloads WHERE target IN (SELECT 'playlist:' || id FROM playlists WHERE remote_id = ?1)",
             params![remote_id],
         )?;
         tx.execute("DELETE FROM playlists WHERE remote_id = ?1", params![remote_id])?;
@@ -723,6 +736,55 @@ impl Library {
         Ok(rows
             .filter_map(|j| j.ok().and_then(|j| serde_json::from_str(&j).ok()))
             .collect())
+    }
+
+    /// Keep (or stop keeping) a collection for offline. `target` is `liked` or `playlist:<id>`.
+    pub fn set_download(&self, target: &str, on: bool) -> Result<()> {
+        let valid = target == "liked" || target.strip_prefix("playlist:").is_some_and(|id| id.parse::<i64>().is_ok());
+        anyhow::ensure!(valid, "unknown download target {target:?}");
+        let db = self.db.lock().unwrap();
+        if on {
+            db.execute("INSERT OR IGNORE INTO downloads (target) VALUES (?1)", params![target])?;
+        } else {
+            db.execute("DELETE FROM downloads WHERE target = ?1", params![target])?;
+        }
+        Ok(())
+    }
+
+    pub fn clear_downloads(&self) -> Result<()> {
+        self.db.lock().unwrap().execute("DELETE FROM downloads", [])?;
+        Ok(())
+    }
+
+    /// Each collection marked for offline with its song ids, in listing order.
+    pub fn download_sets(&self) -> Result<Vec<(String, Vec<String>)>> {
+        let db = self.db.lock().unwrap();
+        let targets = db
+            .prepare("SELECT target FROM downloads ORDER BY target")?
+            .query_map([], |r| r.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let mut out = Vec::new();
+        for target in targets {
+            let ids = if target == "liked" {
+                db.prepare("SELECT track_id FROM likes ORDER BY liked_at DESC")?
+                    .query_map([], |r| r.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?
+            } else {
+                let id: i64 = target.strip_prefix("playlist:").and_then(|id| id.parse().ok()).unwrap_or(-1);
+                db.prepare("SELECT track_id FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY pos")?
+                    .query_map(params![id], |r| r.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?
+            };
+            out.push((target, ids));
+        }
+        Ok(out)
+    }
+
+    /// Songs to keep for offline: every marked collection's, once each.
+    pub fn download_wanted(&self) -> Result<Vec<String>> {
+        let mut seen = std::collections::HashSet::new();
+        let sets = self.download_sets()?;
+        Ok(sets.into_iter().flat_map(|(_, ids)| ids).filter(|id| seen.insert(id.clone())).collect())
     }
 
     /// Plays, newest first.
@@ -1025,6 +1087,31 @@ mod tests {
             thumb: None,
             cover: None,
         }
+    }
+
+    #[test]
+    fn offline_marks_pick_the_wanted_songs() {
+        let lib = Library::memory().unwrap();
+        let pl = lib.create_playlist("Mix").unwrap();
+        lib.add_to_playlist(pl, &[track("a", "x"), track("b", "x")]).unwrap();
+        lib.set_liked(&track("b", "x"), true).unwrap();
+        lib.set_liked(&track("c", "x"), true).unwrap();
+        assert!(lib.download_wanted().unwrap().is_empty(), "nothing is marked yet");
+        lib.set_download(&format!("playlist:{pl}"), true).unwrap();
+        assert_eq!(lib.download_wanted().unwrap(), vec!["a", "b"]);
+        lib.set_download("liked", true).unwrap();
+        let wanted = lib.download_wanted().unwrap();
+        assert_eq!(wanted.len(), 3, "a song in both is wanted once");
+        assert!(["a", "b", "c"].iter().all(|id| wanted.iter().any(|w| w == id)));
+        lib.remove_from_playlist(pl, 0).unwrap();
+        lib.set_liked(&track("c", "x"), false).unwrap();
+        assert_eq!(lib.download_wanted().unwrap(), vec!["b"]);
+        assert!(lib.set_download("album:1", true).is_err());
+        lib.delete_playlist(pl).unwrap();
+        let marks: Vec<_> = lib.download_sets().unwrap().into_iter().map(|(t, _)| t).collect();
+        assert_eq!(marks, vec!["liked"], "deleting a playlist drops its mark");
+        lib.clear_downloads().unwrap();
+        assert!(lib.download_sets().unwrap().is_empty());
     }
 
     #[test]
