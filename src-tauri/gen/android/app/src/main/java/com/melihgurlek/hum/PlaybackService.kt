@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
@@ -50,6 +51,19 @@ class PlaybackService : MediaSessionService() {
                     .build(),
             )
             .setWakeMode(C.WAKE_MODE_NETWORK)
+            .build()
+        // Audio offload: the audio chip decodes AAC itself and the CPU sleeps between large
+        // buffers. Screen off, playing, on the S23 FE: hum plus the system's decoder and audio
+        // services went from 63.4 % of a core to 4.4 % (`dumpsys media.audio_flinger` shows an
+        // OFFLOAD output). Only where the device keeps songs gapless offloaded; otherwise
+        // playback stays as it was.
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setAudioOffloadPreferences(
+                AudioOffloadPreferences.Builder()
+                    .setAudioOffloadMode(AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
+                    .setIsGaplessSupportRequired(true)
+                    .build(),
+            )
             .build()
         // Tapping the notification (or One UI's status-bar media pill) opens hum. Without a
         // session activity the notification had no contentIntent: taps did nothing.
