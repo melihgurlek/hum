@@ -48,7 +48,7 @@ export type Update =
   | { type: 'duration'; secs: number }
   | { type: 'paused'; paused: boolean }
   | { type: 'timing'; video_id: string; ms: number; cached: boolean }
-  | { type: 'error'; message: string }
+  | { type: 'error'; message: string; details: string | null }
   | { type: 'auto_quality'; low: boolean }
 
 export const api = {

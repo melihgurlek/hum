@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { back, go, startListening, ui } from './lib/state.svelte'
+  import { back, copyToastDetails, go, startListening, ui } from './lib/state.svelte'
   import Sidebar from './lib/components/Sidebar.svelte'
   import PlayerBar from './lib/components/PlayerBar.svelte'
   import Home from './lib/views/Home.svelte'
@@ -52,7 +52,12 @@
   </main>
   <div class="player"><PlayerBar /></div>
   <AddMenu />
-  {#if ui.toast}<div class="toast" role="status">{ui.toast}</div>{/if}
+  {#if ui.toast}
+    <div class="toast" role="status">
+      <span>{ui.toast}</span>
+      {#if ui.toastDetails}<button class="copy" onclick={copyToastDetails}>Copy details</button>{/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -80,8 +85,23 @@
     padding: 12px 18px;
     border-radius: var(--r-md);
     font-weight: 600;
-    max-width: 90vw;
+    max-width: min(90vw, 640px);
     z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .copy {
+    flex: none;
+    min-height: 32px;
+    padding: 0 12px;
+    border-radius: 999px;
+    font-weight: 700;
+    color: var(--bg);
+    background: color-mix(in srgb, var(--bg) 14%, transparent);
+  }
+  .copy:hover {
+    background: color-mix(in srgb, var(--bg) 24%, transparent);
   }
   @media (max-width: 860px) {
     .app {

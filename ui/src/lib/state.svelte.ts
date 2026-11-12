@@ -48,6 +48,8 @@ class Ui {
   autoplay = $state(load('hum.autoplay', true))
   accountRadio = $state(load('hum.accountRadio', false))
   toast = $state<string | null>(null)
+  /** A report the toast offers to copy (a song that wouldn't play). */
+  toastDetails = $state<string | null>(null)
   playlistId = $state<number | null>(load<number | null>('hum.playlistId', null))
   artistId = $state<string | null>(load<string | null>('hum.artistId', null))
   albumId = $state<string | null>(load<string | null>('hum.albumId', null))
@@ -69,10 +71,29 @@ export const player = new Player()
 export const ui = new Ui()
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined
-export function showToast(msg: string) {
+export function showToast(msg: string, details: string | null = null) {
   ui.toast = msg
+  ui.toastDetails = details
   clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => (ui.toast = null), 4000)
+  // Long enough to reach the Copy button.
+  toastTimer = setTimeout(() => ((ui.toast = null), (ui.toastDetails = null)), details ? 10000 : 4000)
+}
+
+/** Copy the toast's report. The async clipboard API, then the old copy command as a fallback. */
+export async function copyToastDetails() {
+  const text = ui.toastDetails
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    const area = document.createElement('textarea')
+    area.value = text
+    document.body.append(area)
+    area.select()
+    document.execCommand('copy')
+    area.remove()
+  }
+  showToast('Copied. Paste it into a bug report.')
 }
 
 interface Place { view: View; playlistId: number | null; artistId: string | null; albumId: string | null }
@@ -346,7 +367,7 @@ export async function startListening() {
         if (u.low) showToast('Slow connection: switched to lower sound quality')
         break
       case 'error':
-        showToast(u.message)
+        showToast(u.message, u.details)
         player.loading = false
         break
     }
