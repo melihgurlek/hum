@@ -225,6 +225,12 @@ pub struct Stream {
     pub record_to: Option<PathBuf>,
     /// A copy from the song cache: no network.
     pub local: bool,
+    /// How much louder than YouTube's reference level the song is, in dB (YouTube's
+    /// `loudnessDb`). Unknown for a cached copy until the engine looks it up.
+    pub loudness_db: Option<f32>,
+    /// Volume change to play it at, in dB, decided by the engine (loudness normalization).
+    #[serde(skip)]
+    pub gain_db: Option<f64>,
 }
 
 pub struct Source {
@@ -474,6 +480,8 @@ impl Source {
             content_length: fmt.content_length,
             record_to: None,
             local: false,
+            loudness_db: fmt.loudness_db,
+            gain_db: None,
         };
         log::debug!(
             "resolved {video_id} itag {} {}k in {:?}",

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, img, onAccount, type AccountPlaylist, type Profile, type Quality } from '../api'
-  import { player, quickPicksCache, refreshPlaylists, setAccountRadio, setQuality, setTheme, setAutoplay, showToast, ui, type ThemePref } from '../state.svelte'
+  import { player, quickPicksCache, refreshPlaylists, setAccountRadio, setQuality, setTheme, setAutoplay, setNormalize, showToast, ui, type ThemePref } from '../state.svelte'
 
   let lists = $state<AccountPlaylist[] | null>(null)
   $effect(() => {
@@ -165,6 +165,10 @@
       <label class="opt" class:sel={ui.autoplay}>
         <input type="checkbox" checked={ui.autoplay} onchange={(e) => setAutoplay(e.currentTarget.checked)} />
         <span><span class="ol">Autoplay radio</span><span class="od">When your queue runs out, keep going with songs like the last one</span></span>
+      </label>
+      <label class="opt" class:sel={ui.normalize}>
+        <input type="checkbox" checked={ui.normalize} onchange={(e) => setNormalize(e.currentTarget.checked)} />
+        <span><span class="ol">Even out loudness</span><span class="od">Turns down songs mastered louder than most, as YouTube does, so you don't reach for the volume</span></span>
       </label>
       {#if profile}
         <label class="opt" class:sel={ui.accountRadio}>
