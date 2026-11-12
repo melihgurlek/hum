@@ -36,15 +36,29 @@ Updated in every PR. Newest done items at the top of each section.
 
 ## Next
 
-Status 2026-11-11 (Linux): sign-in and account sync work against a real account; #33 (song
-cache) is open.
+Status 2026-11-12 (Linux): sign-in, account sync and the song cache (#33) work against a real
+account. Order below comes from [COMPETITORS.md](COMPETITORS.md): every dead client died of
+playback breaking, so reliability comes first.
 
-1. **Test on Windows** (WebView2): sign-in, account sync, the song cache, account radio.
-2. **Test the song cache by hand**: seeking or skipping mid-song must discard the recording; a
+1. **Playback that recovers on its own**: on an error, drop that song's link and cache entry,
+   skip the failing client for that song for 5 minutes, retry (at most 3), and as a last resort
+   try every client at low quality. Needs ytmusic-rs to accept clients to skip.
+2. **Cipher configs from the community registries** (`MetrolistGroup/faraday`,
+   `ZemerTeam/zemer-cipher`), refreshed when an unknown player hash appears, so YouTube
+   changes are fixed without a hum release.
+3. **Errors that say what broke** (network, link expired, client blocked, bot check), with a
+   "Copy playback report" button (client, itag, error).
+4. **Recommendations**: quick picks from several seeds, fused by how many point at a song (as
+   ArchiveTune does); demote songs heard in the last 30 days instead of dropping the last 6
+   hours; follow radio continuations; block an artist; cold start from account likes or
+   history.
+5. **Cheap desktop wins**: restore queue and position on launch, loudness normalization from
+   `loudness_db`, sleep timer with fade.
+6. **Test on Windows** (WebView2): sign-in, account sync, the song cache, account radio.
+7. **Test the song cache by hand**: seeking or skipping mid-song must discard the recording; a
    song played to the end shows up under Settings → Saved songs.
-3. **Phone as a remote** ([MOBILE.md](MOBILE.md)): a small page served on the home network,
-   opened from a QR code in Settings, to control playback, the queue and search.
-4. **Offline mode**: play saved songs with no connection.
+8. **Android spike** ([MOBILE.md](MOBILE.md)): the Rust engine playing from a Media3 foreground
+   service after the WebView is gone.
 
 ## Later
 
@@ -53,12 +67,14 @@ cache) is open.
   since the test account's history has been paused since 2026-02. Paused history also means
   YouTube ignores listening for recommendations, so it only matters to people who keep it on.
 - Offline mode: play saved songs with no connection (the cache is there since #33).
-- Crossfade, equalizer, skip silence, sleep timer.
-- Discord status, Last.fm scrobbling.
-- Mini player, tray menu.
+- Tray and mini player.
+- Scrobbling (ListenBrainz, Last.fm), Discord status.
+- Skip silence, equalizer; gapless before crossfade (crossfade is buggy in every client that has it).
+- Cookie fallback for users whose IP gets YouTube's bot check (the guest VisionOS client fails there, SimpMusic #2861).
+- Year in review from local history (SimpMusic's analytics are the template).
+- Flatpak / COPR packaging.
 - Code signing for the Windows installer (costs money; worth it once hum is public).
-- **Android port, undecided** ([MOBILE.md](MOBILE.md) has the research still to do). Same `ui/` and `crates/core`, but no mpv there: needs a Media3 player
-  plugin, phone layouts, background playback, lock-screen controls (weeks).
+- **Android port**: worth building once the spike passes; plan in [MOBILE.md](MOBILE.md).
 
 ## Decided against (and why)
 
