@@ -68,6 +68,23 @@ What the numbers say:
   offload (decoding on the DSP while the screen is off) is the next thing to try for battery.
 - Tap to sound had room, and most of it was ExoPlayer: see below.
 
+### Audio offload (2026-11-12)
+
+Screen off, playing, 5 minutes each, % of one core from `/proc/<pid>/stat`. The earlier 16.9 %
+counted hum's process only; the system's decoder and audio services were doing most of the
+work:
+
+| | Before | Offload |
+|---|---|---|
+| hum | 18.1 % | 2.9 % |
+| media.swcodec (AAC decoder) | 10.9 % | 0.0 % |
+| audioserver | 27.4 % | 1.0 % |
+| audio HAL service | 7.0 % | 0.4 % |
+| Total | 63.4 % | 4.4 % |
+
+Media3 offload with gapless required; `dumpsys media.audio_flinger` shows an OFFLOAD output
+(`COMPRESS_OFFLOAD`, AAC), and a song change stayed on it.
+
 ### Tap to sound, after tuning (2026-11-12)
 
 hum's own logs split the wait (stream lookup, then the player from its play command to
@@ -92,7 +109,7 @@ PLAYING). Same phone, Wi-Fi, an app already running:
 ### Still to do for a real port
 - Phone layouts: today it's the desktop design squeezed onto a phone.
 - Track title, artist and cover in the notification and lock screen (the stream has none yet).
-- Audio offload. (The shorter start buffer and touch prefetch are done.)
+- (Audio offload, the shorter start buffer and touch prefetch are done.)
 - Song cache and Data used on Android (mpv's recording and byte counter have no ExoPlayer
   equivalent yet), saved queue across process death, battery measured over an hour unplugged.
 
