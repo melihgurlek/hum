@@ -373,4 +373,16 @@
       display: none;
     }
   }
+  @media (hover: none) {
+    .open:active {
+      box-shadow: none;
+    }
+    .open::after {
+      transition: background-color 0.25s;
+    }
+    .open:active::after {
+      background: color-mix(in srgb, var(--text) 10%, transparent);
+      transition: none;
+    }
+  }
 </style>

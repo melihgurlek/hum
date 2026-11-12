@@ -248,6 +248,14 @@
     }
     .info {
       flex: none;
+      gap: 14px;
+    }
+    /* Trimmed to the letters: the title's line box left more room under it than the song
+       count had above the buttons, so the count sat low. */
+    .name,
+    .meta,
+    .dlstatus > span {
+      text-box: trim-both cap alphabetic;
     }
     .name,
     .name-input {
