@@ -48,7 +48,9 @@ pub enum Update {
     Paused { paused: bool },
     /// Click to first audio, in ms. The number the whole app is judged by.
     Timing { video_id: String, ms: u64, cached: bool },
-    Error { message: String },
+    /// `message` says what broke in plain words; `details` is a report to copy into a bug
+    /// report (song, quality, the full error), when there is one.
+    Error { message: String, details: Option<String> },
     /// Auto quality stepped down (`low`) because the connection stalled, or back up.
     AutoQuality { low: bool },
 }
@@ -386,7 +388,8 @@ impl Engine {
             Ok(s) => s,
             Err(e) => {
                 self.emit(Update::Error {
-                    message: format!("Couldn't play {}: {e}", track.title),
+                    message: explain(&track.title, &e),
+                    details: Some(self.report(&track.id, &track.title, &format!("{e:#}"))),
                 });
                 return Err(e);
             }
@@ -595,7 +598,7 @@ impl Engine {
                 }
                 PlayerEvent::Error { video_id, message } => {
                     log::warn!("playback error {video_id:?}: {message}");
-                    self.on_error(video_id).await;
+                    self.on_error(video_id, message).await;
                 }
             }
         }
@@ -704,8 +707,22 @@ impl Engine {
         }
     }
 
+    /// What to paste into a bug report about a song that wouldn't play.
+    fn report(&self, video_id: &str, title: &str, error: &str) -> String {
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        format!(
+            "hum {} on {}\nunix time: {secs}\nsong: {title} (https://music.youtube.com/watch?v={video_id})\nquality: {:?}{}\nerror: {error}",
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::OS,
+            self.quality(),
+            if self.auto_low() { " (stepped down)" } else { "" },
+        )
+    }
+
     /// A stream failed: drop its cached URL and retry once, then skip.
-    async fn on_error(&self, video_id: Option<String>) {
+    async fn on_error(&self, video_id: Option<String>, message: String) {
         let Some(id) = video_id else { return };
         self.0.streams.lock().unwrap().remove(&id);
         let (retry, index) = {
@@ -717,14 +734,66 @@ impl Engine {
         if retry {
             let _ = self.play_index(index).await;
         } else {
-            self.emit(Update::Error { message: "That song wouldn't play, skipping it.".into() });
+            let title = self.current().map(|t| t.title).unwrap_or_default();
+            self.emit(Update::Error {
+                message: "That song stopped playing twice, so hum skipped it.".into(),
+                details: Some(self.report(&id, &title, &format!("playback: {message}"))),
+            });
             let _ = self.next().await;
         }
     }
 }
 
+/// What broke, in words a listener can act on. The error text comes from ytmusic-rs and
+/// reqwest; anything unrecognised falls back to a plain "couldn't play".
+fn explain(title: &str, e: &anyhow::Error) -> String {
+    let offline = e.chain().any(|c| {
+        c.downcast_ref::<reqwest::Error>().is_some_and(|r| r.is_connect() || r.is_timeout())
+    });
+    let text = format!("{e:#}");
+    let has = |s: &str| text.contains(s);
+    if offline || has("dns error") || has("tcp connect error") || has("timed out") {
+        "Can't reach YouTube. Check your internet connection.".into()
+    } else if has("not a bot") {
+        "YouTube is asking this network to prove it isn't a bot. Signing in usually helps; otherwise try again later.".into()
+    } else if has("confirm your age") {
+        format!("\u{201c}{title}\u{201d} is age-restricted. Sign in to play it.")
+    } else if has("is not playable") {
+        let reason = text
+            .split("is not playable: ")
+            .nth(1)
+            .and_then(|r| r.split_once('(')?.1.split_once(')'))
+            .map(|(r, _)| r.trim().trim_end_matches('.'))
+            .filter(|r| !r.is_empty() && *r != "no reason");
+        match reason {
+            Some(r) => format!("\u{201c}{title}\u{201d} isn't available. YouTube says: {r}."),
+            None => format!("\u{201c}{title}\u{201d} isn't available on YouTube Music."),
+        }
+    } else if has("refused") || has("is not being served") {
+        format!("YouTube refused every stream for \u{201c}{title}\u{201d}. Copy the details if it keeps happening.")
+    } else {
+        format!("Couldn't play \u{201c}{title}\u{201d}.")
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn errors_say_what_broke() {
+        let e = |m: &str| anyhow::anyhow!(m.to_string());
+        let unavailable = e("the tokenless streams failed too (x is not playable: ERROR (This video is unavailable), x is not playable: ERROR (Video unavailable))");
+        assert_eq!(explain("Song", &unavailable), "\u{201c}Song\u{201d} isn't available. YouTube says: This video is unavailable.");
+        let offline = e("the tokenless streams failed too (cannot reach player: error sending request for url (https://www.youtube.com/youtubei/v1/player): client error (Connect): tcp connect error: Connection refused (os error 111))");
+        assert!(explain("Song", &offline).starts_with("Can't reach YouTube"));
+        let bot = e("x is not playable: LOGIN_REQUIRED (Sign in to confirm you\u{2019}re not a bot)");
+        assert!(explain("Song", &bot).contains("isn't a bot"));
+        let age = e("x is not playable: LOGIN_REQUIRED (Sign in to confirm your age)");
+        assert!(explain("Song", &age).contains("age-restricted"));
+        let refused = e("stream host refused the download with status 403 Forbidden");
+        assert!(explain("Song", &refused).starts_with("YouTube refused"));
+        assert_eq!(explain("Song", &e("something new")), "Couldn't play \u{201c}Song\u{201d}.");
+    }
+
     use super::*;
 
     const S: Duration = Duration::from_secs(1);

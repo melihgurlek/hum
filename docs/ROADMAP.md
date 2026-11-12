@@ -6,6 +6,7 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #41 | A song that won't play says why: no connection, YouTube's bot check, age-restricted, not available (with YouTube's reason), or every stream refused, instead of the raw error chain. The toast has Copy details: hum version, OS, song link, quality and the full error, for a bug report |
 | #40 | ytmusic-rs now comes from the fork (`melihgurlek/ytmusic-rs`). A stream link is checked at a byte past 1.2 MB as well as the first, side by side, so a link served at the start and refused later (as iOS links without a token are) falls through to the next client. Resolve time unchanged (median ~115 ms) |
 | #39 | Radio: your taste now counts against your favorite artist, not the sum of all of them (it used to be ~5 % of the score); songs heard in the last 2 hours dropped, earlier ones pushed down by how recently (a lot for yesterday, half for a week ago) instead of dropping the last 6 hours; "Don't play this artist" in a song's right-click menu, undone in Settings. Radio continuations dropped: radio already re-seeds from the playing song |
 | #38 | Home on a first launch: YouTube Music's own home page (the account's when signed in) until something is played; quick picks fuse up to four seeds' radios (latest plays, favorites, then account likes), so likes from the account fill Home at once |
@@ -46,14 +47,12 @@ playback breaking, so reliability comes first.
 1. **Cipher configs from the community registries** (`MetrolistGroup/faraday`,
    `ZemerTeam/zemer-cipher`), refreshed when an unknown player hash appears, so YouTube
    changes are fixed without a hum release.
-2. **Errors that say what broke** (network, link expired, client blocked, bot check), with a
-   "Copy playback report" button (client, itag, error).
-3. **Cheap desktop wins**: restore queue and position on launch, loudness normalization from
+2. **Cheap desktop wins**: restore queue and position on launch, loudness normalization from
    `loudness_db`, sleep timer with fade.
-4. **Test on Windows** (WebView2): sign-in, account sync, the song cache, account radio.
-5. **Test the song cache by hand**: seeking or skipping mid-song must discard the recording; a
+3. **Test on Windows** (WebView2): sign-in, account sync, the song cache, account radio.
+4. **Test the song cache by hand**: seeking or skipping mid-song must discard the recording; a
    song played to the end shows up under Settings → Saved songs.
-6. **Android spike** ([MOBILE.md](MOBILE.md)): the Rust engine playing from a Media3 foreground
+5. **Android spike** ([MOBILE.md](MOBILE.md)): the Rust engine playing from a Media3 foreground
    service after the WebView is gone.
 
 ## Later
