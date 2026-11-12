@@ -69,7 +69,12 @@
     const i = active
     if (i < 0 || !box || performance.now() < followPausedUntil) return
     const el = box.querySelector<HTMLElement>(`[data-i="${i}"]`)
-    el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    if (!el) return
+    // Scroll this box only. scrollIntoView also scrolls every scrollable parent, and phone Now
+    // Playing's screen is one: it slid the whole player up to the parked lyrics.
+    const b = box.getBoundingClientRect()
+    const r = el.getBoundingClientRect()
+    box.scrollTo({ top: box.scrollTop + r.top - b.top - (b.height - r.height) / 2, behavior: 'smooth' })
   })
 
   function userScrolled() {

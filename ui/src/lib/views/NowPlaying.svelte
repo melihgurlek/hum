@@ -59,11 +59,14 @@
     }
   }
 
-  // Phone gestures. Drag the player down to close it; drag the Up next bar up to open its
-  // sheet, and the sheet's top down to put it away. The first 10px pick the direction, so taps,
-  // the progress bar and the sheet's own scrolling keep working.
+  // Phone gestures. Drag the player down to close it, or sideways to change song; drag the Up
+  // next bar up to open its sheet, and the sheet down (from its top, or from a list already
+  // scrolled to the top) to put it away. The first 10px pick the direction, so taps and the
+  // progress bar keep working.
   let dragY = $state(0) // the whole screen, while closing it
   let sheetDy = $state(0) // the sheet, while moving it
+  let artDx = $state(0) // the cover, while swiping to another song
+  let artSettling = $state(false)
   let dragging = $state(false)
   let g: { x: number; y: number; t: number; mode: 'np' | 'sheet' } | null = null
   let axis: 'x' | 'y' | null = null
@@ -85,11 +88,14 @@
     const my = e.clientY - g.y
     if (!axis && Math.hypot(mx, my) > 10) {
       axis = Math.abs(my) > Math.abs(mx) ? 'y' : 'x'
-      if (axis === 'y') {
-        try {
-          ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-        } catch {}
-      }
+      try {
+        ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+      } catch {}
+    }
+    if (axis === 'x' && g.mode === 'np') {
+      artSettling = false
+      artDx = mx
+      return
     }
     if (axis !== 'y') return
     dragging = true
@@ -101,6 +107,15 @@
     const my = e.clientY - g.y
     const speed = my / Math.max(1, performance.now() - g.t) // px/ms, down is positive
     if (axis) dragged = true
+    if (axis === 'x' && g.mode === 'np') {
+      const mx = e.clientX - g.x
+      const fast = Math.abs(mx) / Math.max(1, performance.now() - g.t) > 0.5
+      if (Math.abs(mx) > innerWidth * 0.25 || fast) swipeSong(Math.sign(mx))
+      else {
+        artSettling = true
+        artDx = 0
+      }
+    }
     if (axis === 'y') {
       if (g.mode === 'np') {
         if (my > 140 || speed > 0.6) close()
@@ -116,6 +131,71 @@
     g = null
     axis = null
   }
+  // The cover slides off, the next (or previous) song is shown at once, and its cover slides
+  // in from the other side. Previous more than 3 s in restarts this song, as the button does.
+  function swipeSong(dir: number) {
+    artSettling = true
+    artDx = dir * innerWidth
+    setTimeout(() => {
+      const target = dir < 0 ? player.queue[player.index + 1] : player.position > 3 ? player.current : player.queue[player.index - 1]
+      if (target) player.current = target
+      if (dir < 0) api.next()
+      else api.previous()
+      artSettling = false
+      artDx = -dir * innerWidth * 0.3
+      requestAnimationFrame(() => requestAnimationFrame(() => ((artSettling = true), (artDx = 0))))
+    }, 120)
+  }
+
+  // A drag down inside Up next or the lyrics, with the list already at its top, moves the
+  // sheet instead. Touch events, not pointer ones: the list scrolls natively, and only a
+  // non-passive touchmove can take the gesture back from it.
+  function sheetPull(node: HTMLElement) {
+    let y0 = 0
+    let t0 = 0
+    let list: HTMLElement | null = null
+    let pulling = false
+    let dy = 0
+    const start = (e: TouchEvent) => {
+      const el = e.target as HTMLElement
+      list = ui.npSheet && layout.phone ? el.closest<HTMLElement>('.scroll') : null
+      y0 = e.touches[0].clientY
+      t0 = performance.now()
+      pulling = false
+      dy = 0
+    }
+    const moveT = (e: TouchEvent) => {
+      if (!list) return
+      dy = e.touches[0].clientY - y0
+      if (!pulling && dy > 6 && list.scrollTop <= 0) pulling = true
+      if (!pulling) return
+      e.preventDefault()
+      dragging = true
+      sheetDy = Math.max(0, dy)
+    }
+    const end = () => {
+      if (pulling) {
+        const speed = dy / Math.max(1, performance.now() - t0)
+        if (dy > 100 || speed > 0.6) setNpSheet(false)
+        settle()
+      }
+      list = null
+      pulling = false
+    }
+    node.addEventListener('touchstart', start, { passive: true })
+    node.addEventListener('touchmove', moveT, { passive: false })
+    node.addEventListener('touchend', end)
+    node.addEventListener('touchcancel', end)
+    return {
+      destroy() {
+        node.removeEventListener('touchstart', start)
+        node.removeEventListener('touchmove', moveT)
+        node.removeEventListener('touchend', end)
+        node.removeEventListener('touchcancel', end)
+      },
+    }
+  }
+
   function settle() {
     dragging = false
     if (ui.nowPlayingOpen) dragY = 0
@@ -159,9 +239,10 @@
     <div class="body">
       <section class="left" aria-label="Song">
         {#if t.cover}
-          <img class="art" src={img(t.cover)} alt={`${t.album ?? t.title} cover`} />
+          <img class="art" class:settling={artSettling} src={img(t.cover)} alt={`${t.album ?? t.title} cover`}
+            style:transform={artDx ? `translateX(${artDx}px)` : undefined} style:opacity={artDx ? Math.max(0.3, 1 - Math.abs(artDx) / 500) : undefined} />
         {:else}
-          <div class="art"></div>
+          <div class="art" class:settling={artSettling} style:transform={artDx ? `translateX(${artDx}px)` : undefined}></div>
         {/if}
         <div class="meta">
           <div class="titles">
@@ -198,7 +279,7 @@
         </div>
       </section>
 
-      <section class="panel" class:open={ui.npSheet} class:dragging aria-label="Up next and lyrics" style:--drag={`${sheetDy}px`}>
+      <section class="panel" use:sheetPull class:open={ui.npSheet} class:dragging aria-label="Up next and lyrics" style:--drag={`${sheetDy}px`}>
         <!-- Phone: the sheet's handle. Tap or drag it to pull the sheet up or put it away. -->
         <button class="grab phone-only" aria-label={ui.npSheet ? 'Hide up next and lyrics' : 'Show up next and lyrics'}
           aria-expanded={ui.npSheet} onclick={() => setNpSheet(!ui.npSheet)}><span></span></button>
@@ -446,12 +527,17 @@
   @media (max-width: 640px) {
     /* One screen, no scrolling: the cover gives way on short phones, and Up next and lyrics
        wait in a sheet whose bar is pinned at the bottom. */
+    /* clip, not hidden: a hidden box can still be scrolled by code, which once slid the whole
+       player up to the lyrics. */
     .np {
       position: fixed;
       z-index: 40;
-      overflow: hidden;
+      overflow: clip;
       touch-action: none;
       --peek: calc(64px + env(safe-area-inset-bottom));
+    }
+    .art.settling {
+      transition: transform 0.12s ease-out, opacity 0.12s ease-out;
     }
     .np:not(.dragging) {
       transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -489,7 +575,7 @@
       display: none;
     }
     .body {
-      overflow: hidden;
+      overflow: clip;
       padding: 8px 24px calc(var(--peek) + 8px);
       gap: 0;
     }

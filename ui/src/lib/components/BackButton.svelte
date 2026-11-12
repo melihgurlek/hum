@@ -33,10 +33,14 @@
     color: var(--text);
     flex: none;
   }
-  /* Phone: when it sticks, stay below the status bar. */
+  /* Phone: 4px under the page's top edge (it was 16px, too low), and when it sticks it stays
+     below the status bar. */
   @media (max-width: 640px) {
     .bar {
       top: env(safe-area-inset-top);
+    }
+    .back {
+      top: -12px;
     }
   }
   .back:hover {
