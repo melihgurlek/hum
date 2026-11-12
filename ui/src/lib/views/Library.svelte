@@ -1,6 +1,9 @@
 <script lang="ts">
   import { api, type HistoryEntry, type Track } from '../api'
-  import { playList, player, ui } from '../state.svelte'
+  import { layout, newPlaylistFromSidebar, openHistory, openLiked, openPlaylist, playList, player, shuffled, ui } from '../state.svelte'
+  import BackButton from '../components/BackButton.svelte'
+  import Icon from '../components/Icon.svelte'
+  import Mosaic from '../components/Mosaic.svelte'
   import TrackRow from '../components/TrackRow.svelte'
 
   let liked = $state<Track[]>([])
@@ -38,18 +41,51 @@
 </script>
 
 <div class="page scroll">
-  <h1>Library</h1>
-  <div class="tabs" role="tablist">
-    <button role="tab" aria-selected={ui.libraryTab === 'liked'} class:sel={ui.libraryTab === 'liked'} onclick={() => (ui.libraryTab = 'liked')}>
+  {#if layout.phone}
+    <!-- Phone: the list of collections is the Library; Liked songs and History are pages of
+         their own, with Back, instead of tabs that repeated the list's first two rows. -->
+    {#if ui.libraryTab !== 'playlists'}<BackButton />{/if}
+    <h1 class:sub={ui.libraryTab !== 'playlists'}>{ui.libraryTab === 'liked' ? 'Liked songs' : ui.libraryTab === 'history' ? 'History' : 'Library'}</h1>
+  {:else}
+    <h1>Library</h1>
+  {/if}
+  <div class="tabs desk-only" role="tablist">
+    <button role="tab" aria-selected={ui.libraryTab === 'liked'} class:sel={ui.libraryTab === 'liked'} onclick={openLiked}>
       <span class="trim">Liked songs{liked.length ? ` (${liked.length})` : ''}</span>
     </button>
-    <button role="tab" aria-selected={ui.libraryTab === 'history'} class:sel={ui.libraryTab === 'history'} onclick={() => (ui.libraryTab = 'history')}>
+    <button role="tab" aria-selected={ui.libraryTab === 'history'} class:sel={ui.libraryTab === 'history'} onclick={openHistory}>
       <span class="trim">History</span>
     </button>
   </div>
 
-  {#if ui.libraryTab === 'liked'}
+  {#if ui.libraryTab === 'playlists'}
+    <div class="list">
+      <button class="pl" onclick={newPlaylistFromSidebar}>
+        <span class="new" aria-hidden="true"><Icon name="plus" size={22} /></span>
+        <span class="t">New playlist</span>
+      </button>
+      <!-- Liked songs and History first, like pinned playlists. -->
+      <button class="pl" onclick={openLiked}>
+        <span class="new liked" aria-hidden="true"><Icon name="heart" size={22} /></span>
+        <span class="text"><span class="ellipsis t">Liked songs</span><span class="ellipsis muted s">{liked.length} {liked.length === 1 ? 'song' : 'songs'}</span></span>
+      </button>
+      <button class="pl" onclick={openHistory}>
+        <span class="new" aria-hidden="true"><Icon name="clock" size={22} /></span>
+        <span class="text"><span class="ellipsis t">History</span><span class="ellipsis muted s">Songs you've played</span></span>
+      </button>
+      {#each ui.playlists as p (p.id)}
+        <button class="pl" onclick={() => openPlaylist(p.id)}>
+          <Mosaic covers={p.covers} size={52} radius={8} />
+          <span class="text"><span class="ellipsis t">{p.name}</span><span class="ellipsis muted s">{p.count} {p.count === 1 ? 'song' : 'songs'}</span></span>
+        </button>
+      {/each}
+    </div>
+  {:else if ui.libraryTab === 'liked'}
     {#if liked.length}
+      <div class="actions">
+        <button class="primary" onclick={() => playList(liked, 0)}><Icon name="play" size={16} /><span class="trim">Play</span></button>
+        <button class="secondary" onclick={() => playList(shuffled(liked), 0)}><Icon name="shuffle" size={16} /><span class="trim">Shuffle</span></button>
+      </div>
       <div class="list">
         {#each liked as t, i (t.id)}
           <TrackRow track={t} onplay={() => playList(liked, i)} />
@@ -99,6 +135,82 @@
   .tabs button.sel {
     background: var(--text);
     color: var(--bg);
+  }
+  .phone-only {
+    display: none;
+  }
+  .actions {
+    display: flex;
+    gap: 8px;
+  }
+  .primary,
+  .secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 44px;
+    padding: 0 20px;
+    border-radius: 999px;
+    font-weight: 700;
+  }
+  .primary {
+    background: var(--accent, var(--accent-default));
+    color: var(--on-accent);
+  }
+  .secondary {
+    color: var(--muted);
+    padding: 0 14px;
+  }
+  .secondary:hover {
+    color: var(--text);
+    background: var(--raised);
+  }
+  .pl {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 64px;
+    padding: 6px 8px;
+    margin: 0 -8px;
+    border-radius: var(--r-md);
+    text-align: left;
+  }
+  .pl:hover {
+    background: var(--raised);
+  }
+  .new {
+    width: 52px;
+    height: 52px;
+    flex: none;
+    border-radius: 8px;
+    background: var(--raised);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .new.liked {
+    background: var(--accent, var(--accent-default));
+    color: var(--on-accent);
+  }
+  .text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .t {
+    font-weight: 600;
+  }
+  .s {
+    font-size: 13px;
+  }
+  @media (max-width: 640px) {
+    .desk-only {
+      display: none;
+    }
+    /* Room for the back button above the title. */
+    h1.sub {
+      margin-top: 40px;
+    }
   }
   .list {
     display: flex;

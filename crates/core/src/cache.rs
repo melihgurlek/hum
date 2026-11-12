@@ -58,6 +58,7 @@ impl SongCache {
                 local: true,
                 loudness_db: None,
                 gain_db: None,
+                meta: None,
             })
         })
     }
@@ -149,6 +150,7 @@ mod tests {
             local: false,
             loudness_db: None,
             gain_db: None,
+            meta: None,
         }
     }
 

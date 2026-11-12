@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, mpsc};
 
 use crate::library::{self, Library};
@@ -55,10 +55,28 @@ pub enum Update {
     AutoQuality { low: bool },
 }
 
+/// What plays after the current song: the next one (`Off`), the next one and the first again
+/// after the last (`All`), or this one again (`One`). Skipping still moves on under `One`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Repeat {
+    #[default]
+    Off,
+    All,
+    One,
+}
+
 struct State {
     queue: Vec<Track>,
     index: usize,
     autoplay: bool,
+    repeat: Repeat,
+    shuffle: bool,
+    /// The queue's order before shuffle mixed it, so turning shuffle off puts it back.
+    unshuffled: Option<Vec<Track>>,
+    /// mpv has the current song queued again after itself (repeat one), so its next start is a
+    /// new play rather than the same one.
+    repeat_queued: bool,
     /// When the user asked for the current track, for the timing log.
     requested_at: Option<(String, Instant, bool)>,
     /// Which video id mpv has queued after the current one.
@@ -71,6 +89,49 @@ struct State {
     resume_at: Option<f64>,
     /// The play in progress, recorded to the library when the track changes.
     playing: Option<PlayRecord>,
+}
+
+impl State {
+    /// Mix the songs after the current one, remembering the order they had.
+    fn shuffle_upcoming(&mut self) {
+        self.unshuffled = Some(self.queue.clone());
+        if self.index + 1 < self.queue.len() {
+            fastrand::shuffle(&mut self.queue[self.index + 1..]);
+        }
+    }
+
+    /// Put the remembered order back, keeping the current song current. Songs dropped since
+    /// (a blocked artist's) stay out; songs added since (radio) follow in their order.
+    fn unshuffle(&mut self) {
+        let Some(original) = self.unshuffled.take() else { return };
+        let current = self.queue.get(self.index).map(|t| t.id.clone());
+        let now: std::collections::HashSet<&str> = self.queue.iter().map(|t| t.id.as_str()).collect();
+        let was: std::collections::HashSet<&str> = original.iter().map(|t| t.id.as_str()).collect();
+        let added: Vec<Track> = self.queue.iter().filter(|t| !was.contains(t.id.as_str())).cloned().collect();
+        let mut queue: Vec<Track> = original.into_iter().filter(|t| now.contains(t.id.as_str())).collect();
+        queue.extend(added);
+        self.index = current.and_then(|id| queue.iter().position(|t| t.id == id)).unwrap_or(0);
+        self.queue = queue;
+    }
+
+    /// The index that plays when the current song ends, under the repeat mode.
+    fn upcoming(&self) -> Option<usize> {
+        match self.repeat {
+            Repeat::One if self.index < self.queue.len() => Some(self.index),
+            _ => self.after_current(),
+        }
+    }
+
+    /// The index Next goes to: the following song, or the first after the last on repeat all.
+    fn after_current(&self) -> Option<usize> {
+        if self.index + 1 < self.queue.len() {
+            Some(self.index + 1)
+        } else if self.repeat != Repeat::Off && !self.queue.is_empty() {
+            Some(0)
+        } else {
+            None
+        }
+    }
 }
 
 struct PlayRecord {
@@ -189,6 +250,10 @@ impl Engine {
                 queue: vec![],
                 index: 0,
                 autoplay: true,
+                repeat: Repeat::Off,
+                shuffle: false,
+                unshuffled: None,
+                repeat_queued: false,
                 requested_at: None,
                 next_loaded: None,
                 resume_at: None,
@@ -305,7 +370,8 @@ impl Engine {
         let e = self.clone();
         self.0.rt.spawn(async move {
             match e.stream(&track.id).await {
-                Ok((s, _)) => {
+                Ok((mut s, _)) => {
+                    s.meta = Some((&track).into());
                     // Only if the user hasn't moved on while this resolved.
                     let still = e.current().is_some_and(|t| t.id == track.id);
                     if still {
@@ -320,7 +386,58 @@ impl Engine {
     }
 
     pub fn set_autoplay(&self, on: bool) {
-        self.0.state.lock().unwrap().autoplay = on;
+        let was = std::mem::replace(&mut self.0.state.lock().unwrap().autoplay, on);
+        // Turned on mid-song: fetch the radio now, not at the next song (with the queue at its
+        // end there may be no next song to wait for).
+        if on && !was {
+            let e = self.clone();
+            self.0.rt.spawn(async move {
+                e.top_up_radio().await;
+                e.prefetch_next().await;
+            });
+        }
+    }
+
+    /// Shuffle on mixes the songs after this one (and those of every new queue); off puts
+    /// the order back.
+    pub fn set_shuffle(&self, on: bool) {
+        let (tracks, index) = {
+            let mut st = self.0.state.lock().unwrap();
+            if st.shuffle == on {
+                return;
+            }
+            st.shuffle = on;
+            if on {
+                st.shuffle_upcoming();
+            } else {
+                st.unshuffle();
+            }
+            st.repeat_queued = false;
+            if st.next_loaded.take().is_some() {
+                self.0.player.send(Command::ClearNext);
+            }
+            (st.queue.clone(), st.index)
+        };
+        self.emit(Update::Queue { tracks, index });
+        let e = self.clone();
+        self.0.rt.spawn(async move { e.prefetch_next().await });
+    }
+
+    /// Change what plays after this song, and re-queue mpv's next entry to match.
+    pub fn set_repeat(&self, repeat: Repeat) {
+        {
+            let mut st = self.0.state.lock().unwrap();
+            if st.repeat == repeat {
+                return;
+            }
+            st.repeat = repeat;
+            st.repeat_queued = false;
+            if st.next_loaded.take().is_some() {
+                self.0.player.send(Command::ClearNext);
+            }
+        }
+        let e = self.clone();
+        self.0.rt.spawn(async move { e.prefetch_next().await });
     }
 
     /// The song from disk, a cached unexpired stream URL, or one resolved now. A network
@@ -392,13 +509,30 @@ impl Engine {
         if tracks.is_empty() {
             return Ok(());
         }
-        let start = start.min(tracks.len() - 1);
+        let mut start = start.min(tracks.len() - 1);
         {
             let mut st = self.0.state.lock().unwrap();
-            st.queue = tracks;
-            st.index = start;
             st.radio_seed = None;
             st.next_loaded = None;
+            st.unshuffled = None;
+            if st.shuffle {
+                // The picked song first, then all the others mixed, the ones above it too.
+                let mut queue = tracks.clone();
+                let picked = queue.remove(start);
+                queue.insert(0, picked);
+                st.queue = queue;
+                st.index = 0;
+                st.shuffle_upcoming();
+                st.unshuffled = Some(tracks);
+                start = 0;
+            } else {
+                st.queue = tracks;
+                st.index = start;
+            }
+        }
+        if self.0.state.lock().unwrap().shuffle {
+            let (tracks, index) = self.queue();
+            self.emit(Update::Queue { tracks, index });
         }
         self.play_index(start).await
     }
@@ -416,6 +550,7 @@ impl Engine {
         let mut st = self.0.state.lock().unwrap();
         st.index = index.min(tracks.len() - 1);
         st.queue = tracks;
+        st.unshuffled = None;
         st.position = position;
         st.resume_at = Some(position);
         st.radio_seed = None;
@@ -451,7 +586,7 @@ impl Engine {
             track
         };
         self.emit(Update::NowPlaying { track: track.clone(), index });
-        let (stream, cached) = match self.stream(&track.id).await {
+        let (mut stream, cached) = match self.stream(&track.id).await {
             Ok(s) => s,
             Err(e) => {
                 self.emit(Update::Error {
@@ -461,6 +596,7 @@ impl Engine {
                 return Err(e);
             }
         };
+        stream.meta = Some((&track).into());
         self.0.state.lock().unwrap().requested_at = Some((track.id.clone(), requested, cached));
         // A resume a few seconds in starts there; otherwise from the top.
         match start.filter(|s| *s > 2.0) {
@@ -481,12 +617,37 @@ impl Engine {
         });
     }
 
+    /// Keep the current song playing and replace what follows it with its radio.
+    pub async fn radio_from_current(&self) {
+        let (tracks, index) = {
+            let mut st = self.0.state.lock().unwrap();
+            let keep = (st.index + 1).min(st.queue.len());
+            st.queue.truncate(keep);
+            st.radio_seed = None;
+            st.unshuffled = None;
+            st.repeat_queued = false;
+            if st.next_loaded.take().is_some() {
+                self.0.player.send(Command::ClearNext);
+            }
+            (st.queue.clone(), st.index)
+        };
+        self.emit(Update::Queue { tracks, index });
+        self.fill_radio(true).await;
+        self.prefetch_next().await;
+    }
+
     async fn top_up_radio(&self) {
+        self.fill_radio(false).await
+    }
+
+    /// Add the current song's radio after the queue: when it's running low under autoplay,
+    /// or now (`force`).
+    async fn fill_radio(&self, force: bool) {
         let seed = {
             let st = self.0.state.lock().unwrap();
             let remaining = st.queue.len().saturating_sub(st.index + 1);
             let current = st.queue.get(st.index).map(|t| t.id.clone());
-            if !st.autoplay || remaining >= RADIO_LOOKAHEAD || current == st.radio_seed {
+            if (!force && (!st.autoplay || remaining >= RADIO_LOOKAHEAD)) || current == st.radio_seed {
                 return;
             }
             current
@@ -516,15 +677,17 @@ impl Engine {
     async fn prefetch_next(&self) {
         let next = {
             let st = self.0.state.lock().unwrap();
-            st.queue.get(st.index + 1).cloned()
+            st.upcoming().and_then(|i| st.queue.get(i).cloned())
         };
         let Some(next) = next else { return };
         match self.stream(&next.id).await {
-            Ok((s, _)) => {
+            Ok((mut s, _)) => {
+                s.meta = Some((&next).into());
                 let mut st = self.0.state.lock().unwrap();
                 // Still the right next track?
-                if st.queue.get(st.index + 1).map(|t| &t.id) == Some(&next.id) {
+                if st.upcoming().and_then(|i| st.queue.get(i)).map(|t| &t.id) == Some(&next.id) {
                     st.next_loaded = Some(next.id.clone());
+                    st.repeat_queued = st.upcoming() == Some(st.index);
                     self.0.player.send(Command::SetNext(s));
                 }
             }
@@ -540,9 +703,10 @@ impl Engine {
             let i = st.index;
             let queue = std::mem::take(&mut st.queue);
             st.queue = queue.into_iter().enumerate().filter(|(j, t)| *j <= i || keep(t)).map(|(_, t)| t).collect();
-            let next = st.queue.get(i + 1).map(|t| t.id.clone());
+            let next = st.upcoming().and_then(|j| st.queue.get(j)).map(|t| t.id.clone());
             if st.next_loaded.is_some() && st.next_loaded != next {
                 st.next_loaded = None;
+                st.repeat_queued = false;
                 self.0.player.send(Command::ClearNext);
             }
             (st.queue.clone(), st.index)
@@ -558,10 +722,10 @@ impl Engine {
     pub async fn next(&self) -> Result<()> {
         let idx = {
             let st = self.0.state.lock().unwrap();
-            if st.index + 1 >= st.queue.len() {
-                return Ok(());
+            match st.after_current() {
+                Some(i) => i,
+                None => return Ok(()),
             }
-            st.index + 1
         };
         self.play_index(idx).await
     }
@@ -675,12 +839,12 @@ impl Engine {
                 PlayerEvent::Idle => {
                     self.finish_play();
                     // Reached the end with nothing prefetched: try the next item.
-                    let has_next = {
+                    let upcoming = {
                         let st = self.0.state.lock().unwrap();
-                        st.index + 1 < st.queue.len() && st.requested_at.is_none()
+                        st.upcoming().filter(|_| st.requested_at.is_none())
                     };
-                    if has_next {
-                        let _ = self.next().await;
+                    if let Some(i) = upcoming {
+                        let _ = self.play_index(i).await;
                     }
                 }
                 PlayerEvent::Error { video_id, message } => {
@@ -692,14 +856,30 @@ impl Engine {
     }
 
     fn on_started(&self, video_id: String) {
-        let same = self
-            .0
-            .state
-            .lock()
-            .unwrap()
-            .playing
-            .as_ref()
-            .is_some_and(|r| r.track.id == video_id);
+        // mpv reached the copy of this song queued for repeat one: a new play of it.
+        let repeated = {
+            let mut st = self.0.state.lock().unwrap();
+            let r = st.repeat_queued
+                && st.next_loaded.as_deref() == Some(video_id.as_str())
+                && st.queue.get(st.index).is_some_and(|t| t.id == video_id)
+                && st.requested_at.is_none()
+                // It ended rather than reloaded mid-song (a quality switch also restarts it).
+                && st.playing.as_ref().is_some_and(|p| p.duration > 0.0 && p.position >= p.duration - 3.0);
+            if r {
+                st.repeat_queued = false;
+                st.next_loaded = None;
+            }
+            r
+        };
+        let same = !repeated
+            && self
+                .0
+                .state
+                .lock()
+                .unwrap()
+                .playing
+                .as_ref()
+                .is_some_and(|r| r.track.id == video_id);
         if !same {
             self.finish_play();
         }
@@ -745,6 +925,9 @@ impl Engine {
         }
         if let Some((track, index)) = advanced {
             self.emit(Update::NowPlaying { track, index });
+            self.after_track_change();
+        } else if repeated {
+            // Queue it again for the next time round.
             self.after_track_change();
         }
     }
@@ -865,6 +1048,93 @@ fn explain(title: &str, e: &anyhow::Error) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn unshuffle_puts_the_order_back() {
+        let t = |id: &str| super::Track {
+            id: id.into(),
+            title: id.into(),
+            artists: vec![],
+            artist_id: None,
+            artist_ids: vec![],
+            album: None,
+            album_id: None,
+            duration: None,
+            thumb: None,
+            cover: None,
+        };
+        let ids = |q: &[super::Track]| q.iter().map(|t| t.id.clone()).collect::<Vec<_>>().join("");
+        let mut st = super::State {
+            queue: "abcdefgh".chars().map(|c| t(&c.to_string())).collect(),
+            index: 1,
+            autoplay: false,
+            repeat: super::Repeat::Off,
+            shuffle: true,
+            unshuffled: None,
+            repeat_queued: false,
+            requested_at: None,
+            next_loaded: None,
+            radio_seed: None,
+            position: 0.0,
+            retried: None,
+            resume_at: None,
+            playing: None,
+        };
+        st.shuffle_upcoming();
+        assert_eq!(&ids(&st.queue)[..2], "ab");
+        let mut rest: Vec<char> = ids(&st.queue)[2..].chars().collect();
+        rest.sort();
+        assert_eq!(rest.into_iter().collect::<String>(), "cdefgh");
+        // Play on to a later song, radio adds one, a blocked artist's song is dropped.
+        st.index = 4;
+        let playing = st.queue[4].id.clone();
+        st.queue.push(t("z"));
+        // Drop the song right after the current one (upcoming songs are what retain_upcoming drops).
+        let dropped = st.queue.remove(5).id;
+        st.unshuffle();
+        let expected: String = "abcdefghz".chars().filter(|c| c.to_string() != dropped).collect();
+        assert_eq!(ids(&st.queue), expected);
+        assert_eq!(st.queue[st.index].id, playing);
+    }
+
+    #[test]
+    fn repeat_picks_what_plays_next() {
+        let t = |id: &str| super::Track {
+            id: id.into(),
+            title: id.into(),
+            artists: vec![],
+            artist_id: None,
+            artist_ids: vec![],
+            album: None,
+            album_id: None,
+            duration: None,
+            thumb: None,
+            cover: None,
+        };
+        let mut st = super::State {
+            queue: vec![t("a"), t("b")],
+            index: 1,
+            autoplay: false,
+            repeat: super::Repeat::Off,
+            shuffle: false,
+            unshuffled: None,
+            repeat_queued: false,
+            requested_at: None,
+            next_loaded: None,
+            radio_seed: None,
+            position: 0.0,
+            retried: None,
+            resume_at: None,
+            playing: None,
+        };
+        assert_eq!((st.upcoming(), st.after_current()), (None, None));
+        st.repeat = super::Repeat::All;
+        assert_eq!((st.upcoming(), st.after_current()), (Some(0), Some(0)));
+        st.repeat = super::Repeat::One;
+        assert_eq!((st.upcoming(), st.after_current()), (Some(1), Some(0)));
+        st.index = 0;
+        assert_eq!((st.upcoming(), st.after_current()), (Some(0), Some(1)));
+    }
+
     #[test]
     fn errors_say_what_broke() {
         let e = |m: &str| anyhow::anyhow!(m.to_string());

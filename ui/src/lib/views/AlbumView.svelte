@@ -95,6 +95,22 @@
     flex: none;
     box-shadow: 0 12px 40px rgb(0 0 0 / 0.3);
   }
+  /* Phone: the cover centered and large under the back arrow, the details below it. */
+  @media (max-width: 640px) {
+    header {
+      margin-top: 36px;
+      gap: 20px;
+    }
+    .art {
+      width: min(68vw, 280px);
+      height: auto;
+      aspect-ratio: 1;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 26px;
+    }
+  }
   .info {
     display: flex;
     flex-direction: column;

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import { back, copyToastDetails, go, startListening, ui } from './lib/state.svelte'
   import Sidebar from './lib/components/Sidebar.svelte'
+  import TabBar from './lib/components/TabBar.svelte'
   import PlayerBar from './lib/components/PlayerBar.svelte'
   import Home from './lib/views/Home.svelte'
   import Search from './lib/views/Search.svelte'
@@ -39,7 +40,7 @@
 <svelte:window onkeydown={keys} onmouseup={mouse} />
 
 <div class="app">
-  <Sidebar />
+  <div class="side"><Sidebar /></div>
   <main>
     {#if ui.view === 'home'}<Home />
     {:else if ui.view === 'search'}<Search />
@@ -51,6 +52,9 @@
     {#if ui.nowPlayingOpen}<NowPlaying />{/if}
   </main>
   <div class="player"><PlayerBar /></div>
+  <div class="tabbar"><TabBar /></div>
+  <!-- Phone: a solid strip under the status bar; the artist page lets its banner show there. -->
+  <div class="statusbar" class:clear={ui.view === 'artist' && !ui.nowPlayingOpen}></div>
   <AddMenu />
   {#if ui.toast}
     <div class="toast" role="status">
@@ -86,7 +90,7 @@
     border-radius: var(--r-md);
     font-weight: 600;
     max-width: min(90vw, 640px);
-    z-index: 20;
+    z-index: 60;
     display: flex;
     align-items: center;
     gap: 16px;
@@ -103,9 +107,49 @@
   .copy:hover {
     background: color-mix(in srgb, var(--bg) 24%, transparent);
   }
+  .side {
+    display: contents;
+  }
+  .tabbar,
+  .statusbar {
+    display: none;
+  }
   @media (max-width: 860px) {
     .app {
       grid-template-columns: 72px 1fr;
+    }
+  }
+  /* Phone: one column, the mini player and the tab bar at the bottom, clear of the status bar. */
+  @media (max-width: 640px) {
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr auto auto;
+    }
+    .statusbar {
+      display: block;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: env(safe-area-inset-top);
+      z-index: 6;
+      background: var(--bg);
+      transition: background 0.2s;
+    }
+    .statusbar.clear {
+      background: transparent;
+    }
+    .side {
+      display: none;
+    }
+    .tabbar {
+      display: block;
+      grid-column: 1 / -1;
+    }
+    .toast {
+      bottom: calc(140px + env(safe-area-inset-bottom));
+      max-width: calc(100vw - 32px);
+      font-size: 14px;
     }
   }
 </style>

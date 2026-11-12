@@ -96,6 +96,13 @@ async fn play_radio(app: State<'_, App>, track: Track) -> Res<()> {
     app.engine.play(vec![track], 0).await.map_err(err)
 }
 
+/// Keep the current song playing and follow it with its radio.
+#[tauri::command]
+async fn radio_from_current(app: State<'_, App>) -> Res<()> {
+    app.engine.radio_from_current().await;
+    Ok(())
+}
+
 #[tauri::command]
 async fn next(app: State<'_, App>) -> Res<()> {
     app.engine.next().await.map_err(err)
@@ -320,6 +327,11 @@ async fn lyrics(app: State<'_, App>, track: Track) -> Res<Option<hum_core::lyric
 }
 
 #[tauri::command]
+async fn playlists_with(app: State<'_, App>, track_id: String) -> Res<Vec<(i64, usize)>> {
+    lib(&app)?.run(move |l| l.playlists_with(&track_id)).await.map_err(err)
+}
+
+#[tauri::command]
 async fn playlists(app: State<'_, App>) -> Res<Vec<PlaylistSummary>> {
     lib(&app)?.run(|l| l.playlists()).await.map_err(err)
 }
@@ -432,6 +444,16 @@ async fn clear_saved_songs(app: State<'_, App>) -> Res<()> {
 #[tauri::command]
 fn set_autoplay(app: State<'_, App>, on: bool) {
     app.engine.set_autoplay(on);
+}
+
+#[tauri::command]
+fn set_shuffle(app: State<'_, App>, on: bool) {
+    app.engine.set_shuffle(on);
+}
+
+#[tauri::command]
+fn set_repeat(app: State<'_, App>, repeat: hum_core::Repeat) {
+    app.engine.set_repeat(repeat);
 }
 
 /// Put back the last session's queue, paused (the UI saves it).
@@ -712,6 +734,7 @@ pub fn run() {
             play_artist_radio,
             play,
             play_radio,
+            radio_from_current,
             next,
             previous,
             jump,
@@ -723,6 +746,9 @@ pub fn run() {
             set_quality,
             get_quality,
             set_autoplay,
+            set_repeat,
+            set_shuffle,
+            playlists_with,
             set_normalize,
             restore_queue,
             saved_songs,

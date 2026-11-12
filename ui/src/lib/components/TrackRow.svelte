@@ -1,6 +1,6 @@
 <script lang="ts">
   import { artistLine, artistLinks, fmtTime, img, type Track } from '../api'
-  import { hoverCancel, hoverPrefetch, openAddMenu, player } from '../state.svelte'
+  import { hoverCancel, hoverPrefetch, layout, openAddMenu, player } from '../state.svelte'
   import Icon from './Icon.svelte'
   import ArtistLinks from './ArtistLinks.svelte'
   import Playing from './Playing.svelte'
@@ -55,11 +55,14 @@
   {/if}
   <span class="text">
     <button class="main title ellipsis" onclick={onplay} aria-label={`Play ${track.title} by ${artistLine(track)}`}>{track.title}</button>
-    {#if detail !== ''}<span class="sub ellipsis">{#if detail != null}{detail}{:else}<ArtistLinks artists={artistLinks(track)} />{suffix ?? ''}{/if}</span>{/if}
+    {#if detail !== ''}<span class="sub ellipsis">{#if detail != null}{detail}{:else if layout.phone}{artistLine(track)}{suffix ?? ''}{:else}<ArtistLinks artists={artistLinks(track)} />{suffix ?? ''}{/if}</span>{/if}
   </span>
   <span class="tools">
-    <button class="tool" aria-label={`Add ${track.title} to a playlist`} title="Add to playlist" onclick={(e) => openAddMenu([track], e)}>
-      <Icon name="plus" size={18} />
+    <!-- Phone: ⋮ for the song's menu (also on a long press); its artist links live there, not
+         in the row, where they were easy to hit when you meant to play. -->
+    <button class="tool" aria-label={layout.phone ? `More for ${track.title}` : `Add ${track.title} to a playlist`}
+      title={layout.phone ? 'More' : 'Add to playlist'} onclick={(e) => openAddMenu([track], e)}>
+      <Icon name={layout.phone ? 'more' : 'plus'} size={18} />
     </button>
     {@render actions?.()}
   </span>
@@ -183,5 +186,18 @@
   .tools :global(.tool:hover) {
     color: var(--text);
     background: var(--raised-2);
+  }
+  /* Touch screens have no hover: keep the row's tools in reach. */
+  /* Phone: covers and durations line up with the page's 16px gutter, not 8px inside it. */
+  @media (max-width: 640px) {
+    .row {
+      padding: 6px 8px;
+      margin: 0 -8px;
+    }
+  }
+  @media (hover: none) {
+    .tools {
+      opacity: 1;
+    }
   }
 </style>

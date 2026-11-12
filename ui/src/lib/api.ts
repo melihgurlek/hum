@@ -6,6 +6,8 @@ export interface Track {
   title: string
   artists: string[]
   artist_id: string | null
+  /** Every artist's id, in `artists` order; absent on songs saved before ids were kept. */
+  artist_ids?: (string | null)[]
   album: string | null
   album_id: string | null
   duration: number | null
@@ -18,6 +20,8 @@ export interface HistoryEntry { track: Track; played_at: number; outcome: 'compl
 
 export interface LyricLine { at: number; text: string }
 export interface Lyrics { lines: LyricLine[] | null; plain: string | null; source: string }
+
+export type Repeat = 'off' | 'all' | 'one'
 
 export interface PlaylistSummary { id: number; name: string; count: number; covers: string[] }
 export interface Playlist { id: number; name: string; tracks: Track[]; synced: boolean }
@@ -59,6 +63,7 @@ export const api = {
   playArtistRadio: (id: string) => invoke<void>('play_artist_radio', { id }),
   play: (tracks: Track[], index: number) => invoke<void>('play', { tracks, index }),
   playRadio: (track: Track) => invoke<void>('play_radio', { track }),
+  radioFromCurrent: () => invoke<void>('radio_from_current'),
   next: () => invoke<void>('next'),
   previous: () => invoke<void>('previous'),
   jump: (index: number) => invoke<void>('jump', { index }),
@@ -71,6 +76,8 @@ export const api = {
   setQuality: (quality: Quality) => invoke<void>('set_quality', { quality }),
   getQuality: () => invoke<Quality>('get_quality'),
   setAutoplay: (on: boolean) => invoke<void>('set_autoplay', { on }),
+  setRepeat: (repeat: Repeat) => invoke<void>('set_repeat', { repeat }),
+  setShuffle: (on: boolean) => invoke<void>('set_shuffle', { on }),
   setNormalize: (on: boolean) => invoke<void>('set_normalize', { on }),
   setAccountRadio: (on: boolean) => invoke<void>('set_account_radio', { on }),
   queue: () => invoke<{ tracks: Track[]; index: number }>('queue'),
@@ -95,6 +102,8 @@ export const api = {
   deletePlaylist: (id: number) => invoke<void>('delete_playlist', { id }),
   addToPlaylist: (id: number, tracks: Track[]) => invoke<number>('add_to_playlist', { id, tracks }),
   removeFromPlaylist: (id: number, index: number) => invoke<void>('remove_from_playlist', { id, index }),
+  /** Playlists holding the song, each with the song's place in it. */
+  playlistsWith: (trackId: string) => invoke<[number, number][]>('playlists_with', { trackId }),
   moveInPlaylist: (id: number, from: number, to: number) => invoke<void>('move_in_playlist', { id, from, to }),
   savedSongs: () => invoke<{ count: number; bytes: number }>('saved_songs'),
   clearSavedSongs: () => invoke<void>('clear_saved_songs'),
@@ -146,4 +155,5 @@ export function img(url: string | null | undefined): string | undefined {
 }
 
 /** A track's artists as links. Only the first artist's id is known for a track. */
-export const artistLinks = (t: Track): ArtistLink[] => t.artists.map((name, i) => ({ name, id: i === 0 ? t.artist_id : null }))
+export const artistLinks = (t: Track): ArtistLink[] =>
+  t.artists.map((name, i) => ({ name, id: t.artist_ids?.[i] ?? (i === 0 ? t.artist_id : null) }))

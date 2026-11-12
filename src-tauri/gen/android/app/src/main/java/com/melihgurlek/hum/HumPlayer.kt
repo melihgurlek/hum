@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -78,7 +79,14 @@ object HumPlayer {
         if (s.optString("userAgent").isNotEmpty()) userAgents[url] = s.getString("userAgent")
         gains[id] = s.optDouble("gain", 1.0).toFloat()
         val uri = if (s.optBoolean("local")) Uri.fromFile(File(url)) else Uri.parse(url)
-        return MediaItem.Builder().setUri(uri).setMediaId(id).build()
+        // What the notification and lock screen show; Media3 loads the cover from its URL.
+        val meta = MediaMetadata.Builder()
+            .setTitle(s.optString("title").ifEmpty { null })
+            .setArtist(s.optString("artist").ifEmpty { null })
+            .setAlbumTitle(s.optString("album").ifEmpty { null })
+            .setArtworkUri(s.optString("artwork").ifEmpty { null }?.let(Uri::parse))
+            .build()
+        return MediaItem.Builder().setUri(uri).setMediaId(id).setMediaMetadata(meta).build()
     }
 
     private fun applyVolume(p: Player) {

@@ -1,5 +1,6 @@
 package com.melihgurlek.hum
 
+import android.app.PendingIntent
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -36,7 +37,12 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
-        session = MediaSession.Builder(this, player).build()
+        // Tapping the notification (or One UI's status-bar media pill) opens hum. Without a
+        // session activity the notification had no contentIntent: taps did nothing.
+        val open = packageManager.getLaunchIntentForPackage(packageName)!!
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+        val activity = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        session = MediaSession.Builder(this, player).setSessionActivity(activity).build()
         HumPlayer.attach(player)
     }
 

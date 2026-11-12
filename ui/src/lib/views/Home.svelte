@@ -1,34 +1,61 @@
 <script lang="ts">
   import { api, artistLine, type HomeCard, type QuickPicks, type Track, img } from '../api'
-  import { capSet, go, homeFeed, playList, playRadio, playYtPlaylist, prefetchOnHover, quickPicksCache as cache, ui } from '../state.svelte'
+  import { untrack } from 'svelte'
+  import { capSet, go, homeFeed, layout, player, savedPicks, playList, playRadio, playYtPlaylist, prefetchOnHover, quickPicksCache as cache, ui } from '../state.svelte'
   import AlbumCard from '../components/AlbumCard.svelte'
   import Icon from '../components/Icon.svelte'
   import TrackRow from '../components/TrackRow.svelte'
 
   // Quick picks: up to four seeds' radios (your latest plays and favorites, or your likes on a
   // fresh install) fused and ranked by your taste. Cached for the session, keyed by the latest
-  // play, so returning to Home is instant.
-  const key = $derived(ui.recent[0]?.id ?? '')
+  // play, so returning to Home is instant. The key is read once per visit: playing something
+  // from Home shouldn't swap the list under your finger. (It waits for the library's first
+  // answer, so a cold start still keys on the latest play.)
+  let key = $state(untrack(() => ui.recent[0]?.id ?? ''))
+  // Recently played, likewise as it was when you came to Home.
+  let recentShown = $state(untrack(() => ui.recent.slice(0, 12)))
+  $effect(() => {
+    const first = ui.recent[0]?.id ?? ''
+    if (!key && first) key = first
+    if (!recentShown.length && ui.recent.length) recentShown = ui.recent.slice(0, 12)
+  })
+  // On a cold start the list takes a few radio lookups, so the last one is shown meanwhile.
+  // The fresh list replaces it only if you haven't started using it, so nothing moves under
+  // your finger; otherwise it's saved for next time.
   let qp = $state<QuickPicks | null>(null)
   let loading = $state(false)
+  let touched = false
   $effect(() => {
     const k = key
     if (cache.has(k)) {
       qp = cache.get(k)!
       return
     }
-    loading = true
+    const saved = untrack(() => qp) ?? savedPicks.get()
+    if (saved) qp = saved
+    loading = !saved
     api
       .quickPicks()
       .then((r) => {
         capSet(cache, k, r, 10)
-        if (key === k) qp = r
+        savedPicks.set(r)
+        if (key === k && !(saved && touched)) qp = r
       })
       .catch(() => {})
       .finally(() => (loading = false))
   })
-  const seed = $derived(ui.recent[0] ?? qp?.seeds[0] ?? null)
+  // The radio button follows the same snapshot, so it doesn't jump either.
+  const seed = $derived(untrack(() => ui.recent.find((t) => t.id === key)) ?? qp?.seeds[0] ?? null)
+  // Already playing it: keep it playing and line up its radio after it, rather than restart.
+  function keepGoing(t: Track) {
+    if (player.current?.id === t.id) api.radioFromCurrent().catch(() => {})
+    else playRadio(t)
+  }
   const picks = $derived(qp?.picks ?? [])
+  // Desktop shows the first 12 (about four rows) so the sections below stay in sight; phones
+  // swipe through all of them four rows at a time.
+  let allPicks = $state(false)
+  const shownPicks = $derived(layout.phone || allPicks ? picks : picks.slice(0, 12))
 
   let forgotten = $state<{ track: Track; last_played: number }[]>([])
   $effect(() => {
@@ -47,6 +74,8 @@
   // One row of cards per shelf, as many as fit at 150px or wider with 20px gaps.
   let rowWidth = $state(0)
   const cols = $derived(Math.max(2, Math.floor((rowWidth + 20) / 170)))
+  // Phone: two cards a row is too few, so shelves become carousels you swipe through.
+  const shown = $derived(layout.phone ? 12 : cols)
   const asCard = (c: Extract<HomeCard, { type: 'playlist' }>) =>
     ({ id: c.id, title: c.title, kind: 'Playlist', year: null, artists: [], thumb: c.thumb })
 </script>
@@ -54,13 +83,13 @@
 <div class="page scroll">
   {#if seed}
     <div class="cta-row">
-      <button class="cta" use:prefetchOnHover={seed.id} onclick={() => playRadio(seed)}>
+      <button class="cta" use:prefetchOnHover={seed.id} onclick={() => keepGoing(seed)}>
         <span class="play"><Icon name="play" size={16} /></span>
         <span class="trim">Keep going with {seed.artists[0] ?? seed.title} radio</span>
       </button>
     </div>
 
-    <section>
+    <section onpointerdown={() => (touched = true)}>
       <div class="head">
         <h2>{fresh ? 'From your liked songs' : 'Quick picks'}</h2>
         {#if picks.length}<button class="link" use:prefetchOnHover={picks[0]?.id} onclick={() => playList(picks, 0)}>Play all</button>{/if}
@@ -69,10 +98,13 @@
         <p class="muted">Finding songs like {seed.title}…</p>
       {:else}
         <div class="picks">
-          {#each picks as t, i (t.id)}
-            <TrackRow track={t} onplay={() => playList(picks, i)} />
+          {#each shownPicks as t, i (t.id)}
+            <TrackRow track={t} showDuration={!layout.phone} onplay={() => playList(picks, i)} />
           {/each}
         </div>
+        {#if !layout.phone && picks.length > 12}
+          <button class="link more" onclick={() => (allPicks = !allPicks)}>{allPicks ? 'Show fewer' : `Show all ${picks.length}`}</button>
+        {/if}
       {/if}
     </section>
 
@@ -84,18 +116,18 @@
         </div>
         <div class="picks">
           {#each forgotten as f, i (f.track.id)}
-            <TrackRow track={f.track} suffix={`, last played ${monthYear(f.last_played)}`}
+            <TrackRow track={f.track} showDuration={!layout.phone} suffix={`, last played ${monthYear(f.last_played)}`}
               onplay={() => playList(forgotten.map((x) => x.track), i)} />
           {/each}
         </div>
       </section>
     {/if}
 
-    {#if ui.recent.length}
+    {#if recentShown.length}
       <section>
         <h2>Recently played</h2>
         <div class="tiles">
-          {#each ui.recent.slice(0, 12) as t (t.id)}
+          {#each recentShown as t (t.id)}
             <button class="tile" use:prefetchOnHover={t.id} onclick={() => playRadio(t)} title={`Radio from ${t.title}`}>
               {#if t.cover}<img class="cover art" src={img(t.cover)} alt="" loading="lazy" />{:else}<div class="cover art"></div>{/if}
               <span class="ellipsis tt">{t.title}</span>
@@ -123,13 +155,13 @@
         {#if shelf.songs.length}
           <div class="picks">
             {#each shelf.songs.slice(0, 8) as t, i (t.id)}
-              <TrackRow track={t} onplay={() => playList(shelf.songs, i)} />
+              <TrackRow track={t} showDuration={!layout.phone} onplay={() => playList(shelf.songs, i)} />
             {/each}
           </div>
         {/if}
         {#if shelf.cards.length}
           <div class="row" style:--cols={cols} bind:clientWidth={rowWidth}>
-            {#each shelf.cards.slice(0, cols) as c (c.id)}
+            {#each shelf.cards.slice(0, shown) as c (c.id)}
               {#if c.type === 'album'}
                 <AlbumCard album={c} showArtist />
               {:else}
@@ -237,6 +269,57 @@
   .ts {
     font-size: 13px;
     margin-top: -4px;
+  }
+  .more {
+    margin-top: 4px;
+  }
+  /* Phone: song lists swipe sideways in columns of four rows, each column a little narrower
+     than the screen so the next one peeks in; long lists no longer bury the sections below. */
+  @media (max-width: 640px) {
+    .picks {
+      grid-template-columns: none;
+      grid-template-rows: repeat(4, auto);
+      grid-auto-flow: column;
+      grid-auto-columns: calc(100% - 40px);
+      gap: 0 24px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      scroll-padding-inline: 8px;
+      scrollbar-width: none;
+      margin: 0 -16px;
+      padding: 0 8px;
+    }
+    /* Each row's own 8px padding puts its cover on the 16px gutter. */
+    .picks > :global(*) {
+      margin: 0;
+      scroll-snap-align: start;
+    }
+  }
+  /* Phone: card rows and Recently played scroll sideways, edge to edge past the 16px gutter,
+     with the next card peeking in so it's clear there's more. */
+  @media (max-width: 640px) {
+    .row,
+    .tiles {
+      display: grid;
+      grid-template-columns: none;
+      grid-auto-flow: column;
+      grid-auto-columns: 140px;
+      gap: 16px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      scroll-padding-inline: 16px;
+      scrollbar-width: none;
+      margin: 0 -16px;
+      padding: 8px 16px;
+    }
+    .row > :global(*),
+    .tile {
+      scroll-snap-align: start;
+    }
+    .row {
+      padding-inline: 24px;
+      scroll-padding-inline: 24px;
+    }
   }
   .empty {
     display: flex;

@@ -284,7 +284,13 @@
     text-align: left;
     color: inherit;
   }
-  .toptitle.open:hover,
+  /* Hover only where there's a pointer: after a tap a touchscreen keeps :hover, which left
+     the underline stuck. */
+  @media (hover: hover) {
+    .toptitle.open:hover {
+      text-decoration: underline;
+    }
+  }
   .toptitle.open:focus-visible {
     text-decoration: underline;
   }
@@ -410,7 +416,13 @@
     font: inherit;
     color: inherit;
   }
-  .inline-link:hover,
+  /* Hover only where there's a pointer: after a tap a touchscreen keeps :hover, which left
+     the underline stuck. */
+  @media (hover: hover) {
+    .inline-link:hover {
+      text-decoration: underline;
+    }
+  }
   .inline-link:focus-visible {
     text-decoration: underline;
   }

@@ -33,6 +33,14 @@
     color: var(--text);
     flex: none;
   }
+  /* Phone: 6px under the status bar. A sticky offset counts from inside the page's padding,
+     which already holds the status bar, so the bar keeps top: 0; an offset of the status bar's
+     height here counted it twice and left the button ~50px low. */
+  @media (max-width: 640px) {
+    .back {
+      top: -10px;
+    }
+  }
   .back:hover {
     background: var(--raised-2);
   }

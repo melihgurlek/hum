@@ -1,4 +1,4 @@
-import { api, onSync, onUpdate, type AlbumPage, type ArtistPage, type HomeShelf, type QuickPicks, type SearchResults, type Palette, type PlaylistSummary, type Quality, type Track } from './api'
+import { api, onSync, onUpdate, type AlbumPage, type ArtistPage, type HomeShelf, type QuickPicks, type SearchResults, type Palette, type PlaylistSummary, type Quality, type Repeat, type Track } from './api'
 
 export type View = 'home' | 'search' | 'library' | 'settings' | 'playlist' | 'artist' | 'album'
 export type ThemePref = 'system' | 'dark' | 'light'
@@ -43,11 +43,15 @@ class Player {
 class Ui {
   view = $state<View>(load<View>('hum.view', 'home'))
   nowPlayingOpen = $state(false)
+  /** Phone Now Playing: the Up next and lyrics sheet is pulled up over the player. */
+  npSheet = $state(false)
   query = $state('')
   theme = $state<ThemePref>(load<ThemePref>('hum.theme', 'system'))
   // 'normal' was the same stream as 'high' and is gone from Settings.
   quality = $state<Quality>(load<Quality>('hum.quality', 'auto') === 'normal' ? 'high' : load<Quality>('hum.quality', 'auto'))
   autoplay = $state(load('hum.autoplay', true))
+  repeat = $state<Repeat>(load<Repeat>('hum.repeat', 'off'))
+  shuffle = $state(load('hum.shuffle', false))
   normalize = $state(load('hum.normalize', true))
   accountRadio = $state(load('hum.accountRadio', false))
   toast = $state<string | null>(null)
@@ -59,7 +63,7 @@ class Ui {
   /** Pages visited before this one, for Back (button, Alt+Left, mouse back). */
   history = $state<Place[]>([])
   playlists = $state<PlaylistSummary[]>([])
-  libraryTab = $state<'liked' | 'history'>('liked')
+  libraryTab = $state<'liked' | 'history' | 'playlists'>('liked')
   /** The "Add to playlist" menu: which songs, and where to show it. */
   addMenu = $state<{ tracks: Track[]; x: number; y: number } | null>(null)
   /** Set right after creating a playlist from the sidebar, so its page focuses the name. */
@@ -99,15 +103,19 @@ export async function copyToastDetails() {
   showToast('Copied. Paste it into a bug report.')
 }
 
-interface Place { view: View; playlistId: number | null; artistId: string | null; albumId: string | null }
-const here = (): Place => ({ view: ui.view, playlistId: ui.playlistId, artistId: ui.artistId, albumId: ui.albumId })
+// Library's part (collections, Liked songs, History) is a place too, so Back steps through it.
+interface Place { view: View; playlistId: number | null; artistId: string | null; albumId: string | null; libraryTab: LibraryTab }
+type LibraryTab = 'liked' | 'history' | 'playlists'
+const here = (): Place => ({ view: ui.view, playlistId: ui.playlistId, artistId: ui.artistId, albumId: ui.albumId, libraryTab: ui.libraryTab })
 
 function show(p: Place) {
   ui.view = p.view
+  ui.libraryTab = p.libraryTab
   ui.playlistId = p.playlistId
   ui.artistId = p.artistId
   ui.albumId = p.albumId
   ui.nowPlayingOpen = false
+  ui.npSheet = false
   save('hum.view', p.view)
   save('hum.playlistId', p.playlistId)
   save('hum.artistId', p.artistId)
@@ -117,9 +125,68 @@ function show(p: Place) {
 function navigate(change: Partial<Place>) {
   const from = here()
   const to = { ...from, ...change }
-  const same = to.view === from.view && to.playlistId === from.playlistId && to.artistId === from.artistId && to.albumId === from.albumId
-  if (!same) ui.history = [...ui.history.slice(-49), from]
+  const same = to.view === from.view && to.playlistId === from.playlistId && to.artistId === from.artistId && to.albumId === from.albumId && (to.view !== 'library' || to.libraryTab === from.libraryTab)
+  if (!same) {
+    ui.history = [...ui.history.slice(-49), from]
+    // Leaving Now Playing for a page (an artist, an album): that page reuses Now Playing's
+    // back step, and the sheet's is unwound, so Back then returns to the page before.
+    const open = (ui.nowPlayingOpen ? 1 : 0) + (ui.npSheet ? 1 : 0)
+    if (open) unwind(open - 1)
+    else markBackStep()
+  }
   show(to)
+}
+
+// Android's back gesture goes back in the WebView's own history, and with none left it closes
+// the app. So each step hum can go back (a page, an open Now Playing) leaves a history entry,
+// and going back through one closes Now Playing or returns to the previous page.
+const android = typeof navigator !== 'undefined' && /Android/.test(navigator.userAgent)
+export function markBackStep() {
+  if (android) history.pushState(null, '')
+}
+// Closing from the screen (the chevron, a drag) goes back through those entries itself, so
+// the gesture doesn't later spend a back on a step that's already closed.
+let skipPops = 0
+if (android) {
+  addEventListener('popstate', () => {
+    if (skipPops > 0) skipPops--
+    else if (ui.npSheet) ui.npSheet = false
+    else if (ui.nowPlayingOpen) ui.nowPlayingOpen = false
+    else back()
+  })
+}
+function unwind(steps: number) {
+  if (!android || !steps) return
+  skipPops += steps
+  history.go(-steps)
+}
+
+/** True under 640px, where the phone layout (tab bar, mini player, carousels) takes over. */
+const phoneQuery = typeof matchMedia !== 'undefined' ? matchMedia('(max-width: 640px)') : null
+export const layout = $state({ phone: phoneQuery?.matches ?? false })
+phoneQuery?.addEventListener('change', (e) => (layout.phone = e.matches))
+
+/** Open Now Playing (a back step on Android). */
+export function openNowPlaying() {
+  if (ui.nowPlayingOpen) return
+  ui.nowPlayingOpen = true
+  markBackStep()
+}
+
+/** Close Now Playing from the screen, its Up next sheet with it. */
+export function closeNowPlaying() {
+  if (!ui.nowPlayingOpen) return
+  unwind(1 + (ui.npSheet ? 1 : 0))
+  ui.npSheet = false
+  ui.nowPlayingOpen = false
+}
+
+/** Pull the Up next and lyrics sheet up over phone Now Playing, or put it away. */
+export function setNpSheet(open: boolean) {
+  if (open === ui.npSheet) return
+  ui.npSheet = open
+  if (open) markBackStep()
+  else unwind(1)
 }
 
 export function go(view: View) {
@@ -144,6 +211,12 @@ export function capSet<K, V>(map: Map<K, V>, key: K, value: V, cap: number) {
 // a view's own variables are thrown away whenever you navigate off it.
 export const searchCache = new Map<string, SearchResults>()
 export const quickPicksCache = new Map<string, QuickPicks>()
+/** The last Quick picks, kept across launches so Home opens with them at once. */
+export const savedPicks = {
+  get: () => load<QuickPicks | null>('hum.quickPicks', null),
+  set: (q: QuickPicks) => save('hum.quickPicks', q),
+  clear: () => save('hum.quickPicks', null),
+}
 /** YouTube Music's home page, once per session. */
 export const homeFeed = $state<{ shelves: HomeShelf[] | null }>({ shelves: null })
 const artistCache = new Map<string, Promise<ArtistPage>>()
@@ -162,6 +235,24 @@ export const loadAlbum = (id: string) => cached(albumCache, id, api.album)
 
 export function openArtist(id: string | null | undefined) {
   if (id) navigate({ view: 'artist', artistId: id })
+}
+
+/** An artist we only have the name of (a featured artist on an older saved song): find the
+ *  page by searching for the name. */
+export async function openArtistNamed(name: string) {
+  try {
+    const r = await api.search(name)
+    const same = (n: string) => n.localeCompare(name, undefined, { sensitivity: 'base' }) === 0
+    if (r.top?.kind === 'artist' && same(r.top.name)) return openArtist(r.top.id)
+    for (const s of r.songs) {
+      const i = s.artists.findIndex(same)
+      const id = i >= 0 ? (s.artist_ids?.[i] ?? (i === 0 ? s.artist_id : null)) : null
+      if (id) return openArtist(id)
+    }
+    showToast(`Couldn't find ${name}'s page`)
+  } catch (e) {
+    showToast(String(e))
+  }
 }
 export function openAlbum(id: string | null | undefined) {
   if (id) navigate({ view: 'album', albumId: id })
@@ -183,6 +274,7 @@ export async function blockArtist(track: Track) {
   try {
     await api.blockArtist(track)
     quickPicksCache.clear()
+    savedPicks.clear()
     const cur = player.current
     const same = (t: Track) => (track.artist_id ? t.artist_id === track.artist_id : t.artists[0]?.toLowerCase() === name.toLowerCase())
     if (cur && same(cur)) await api.next()
@@ -246,6 +338,23 @@ export function setAutoplay(on: boolean) {
   ui.autoplay = on
   save('hum.autoplay', on)
   api.setAutoplay(on)
+  // Radio keeps adding songs, so a queue that repeats would never come round again.
+  if (on && ui.repeat === 'all') setRepeat('off')
+}
+
+/** Shuffle mixes what's after the current song, and every queue you start; off restores. */
+export function setShuffle(on: boolean) {
+  ui.shuffle = on
+  save('hum.shuffle', on)
+  api.setShuffle(on)
+}
+
+/** Off, then the whole queue, then this song; the button cycles through them. */
+export function setRepeat(r: Repeat) {
+  ui.repeat = r
+  save('hum.repeat', r)
+  api.setRepeat(r)
+  if (r === 'all' && ui.autoplay) setAutoplay(false)
 }
 
 function isDark(): boolean {
@@ -397,6 +506,8 @@ export async function startListening() {
   applyTheme()
   api.setQuality(ui.quality)
   api.setAutoplay(ui.autoplay)
+  api.setRepeat(ui.repeat)
+  api.setShuffle(ui.shuffle)
   api.setNormalize(ui.normalize)
   api.setAccountRadio(ui.accountRadio)
   refreshRecent()
@@ -577,13 +688,16 @@ export function openPlaylist(id: number) {
 }
 
 export function openLiked() {
-  ui.libraryTab = 'liked'
-  go('library')
+  navigate({ view: 'library', libraryTab: 'liked' })
 }
 
 export function openHistory() {
-  ui.libraryTab = 'history'
-  go('library')
+  navigate({ view: 'library', libraryTab: 'history' })
+}
+
+/** The Library tab: on a phone, always its list of collections. */
+export function openLibrary() {
+  navigate({ view: 'library', libraryTab: layout.phone ? 'playlists' : ui.libraryTab === 'playlists' ? 'liked' : ui.libraryTab })
 }
 
 // ---- recent searches ------------------------------------------------------
