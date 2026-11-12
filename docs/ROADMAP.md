@@ -6,6 +6,7 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #43 | The queue and your place in it come back on launch, paused: the song, its cover color and the position. Nothing loads until you press play (no requests at launch); play resumes where you left off, and seeking first moves that spot |
 | #42 | Even out loudness (Settings → Playback, on by default): songs mastered louder than YouTube's reference are turned down by the difference, as YouTube does (measured 2–7 dB on four songs); quieter ones are left alone. Loudness is saved per song, so cached replays play at the same level |
 | #41 | A song that won't play says why: no connection, YouTube's bot check, age-restricted, not available (with YouTube's reason), or every stream refused, instead of the raw error chain. The toast has Copy details: hum version, OS, song link, quality and the full error, for a bug report |
 | #40 | ytmusic-rs now comes from the fork (`melihgurlek/ytmusic-rs`). A stream link is checked at a byte past 1.2 MB as well as the first, side by side, so a link served at the start and refused later (as iOS links without a token are) falls through to the next client. Resolve time unchanged (median ~115 ms) |
@@ -45,7 +46,7 @@ Status 2026-11-12 (Linux): sign-in, account sync and the song cache (#33) work a
 account. Order below comes from [COMPETITORS.md](COMPETITORS.md): every dead client died of
 playback breaking, so reliability comes first.
 
-1. **Cheap desktop wins**: restore queue and position on launch, sleep timer with fade.
+1. **Cheap desktop wins**: sleep timer with fade.
 2. **Cipher configs from the community registries** (`MetrolistGroup/faraday`,
    `ZemerTeam/zemer-cipher`), refreshed when an unknown player hash appears, so YouTube
    changes are fixed without a hum release.

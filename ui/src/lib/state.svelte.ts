@@ -303,6 +303,47 @@ export function setNormalize(on: boolean) {
   api.setNormalize(on)
 }
 
+// The queue and where you were in it, saved as you listen and put back (paused) on launch.
+interface Session { queue: Track[]; index: number; position: number }
+let sessionSavedAt = 0
+function saveSession(force = false) {
+  if (!player.current || !player.queue.length) return
+  const now = Date.now()
+  if (!force && now - sessionSavedAt < 5000) return
+  sessionSavedAt = now
+  // Keep it small: what came just before and the next 200.
+  const from = Math.max(0, player.index - 20)
+  const queue = player.queue.slice(from, player.index + 200)
+  save('hum.session', { queue, index: player.index - from, position: player.position } satisfies Session)
+}
+
+function restoreSession() {
+  const s = load<Session | null>('hum.session', null)
+  const track = s?.queue[s.index]
+  if (!s || !track || player.current) return
+  api.restoreQueue(s.queue, s.index, s.position).catch(() => {})
+  player.queue = s.queue
+  player.index = s.index
+  player.current = track
+  player.position = s.position
+  player.positionAt = performance.now()
+  player.duration = track.duration ?? 0
+  player.paused = true
+  player.loading = false
+  api.isLiked(track.id).then((l) => (player.liked = l)).catch(() => {})
+  if (track.thumb) {
+    api
+      .coverPalette(track.thumb)
+      .then((p) => {
+        if (player.current?.id === track.id) {
+          player.palette = p
+          applyPalette()
+        }
+      })
+      .catch(() => {})
+  }
+}
+
 export async function startListening() {
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme)
   applyTheme()
@@ -320,6 +361,8 @@ export async function startListening() {
     showToast,
   )
   await onUpdate((u) => {
+    if (u.type === 'now_playing' || u.type === 'queue') queueMicrotask(() => saveSession(true))
+    else if (u.type === 'position' || u.type === 'paused') queueMicrotask(() => saveSession())
     switch (u.type) {
       case 'now_playing': {
         player.current = u.track
@@ -380,6 +423,7 @@ export async function startListening() {
         break
     }
   })
+  restoreSession()
 }
 
 /** Start a list playing from `index`, keeping the list as the queue. */

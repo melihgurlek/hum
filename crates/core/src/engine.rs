@@ -67,6 +67,8 @@ struct State {
     radio_seed: Option<String>,
     position: f64,
     retried: Option<String>,
+    /// Restored from the last session and not loaded yet: play starts the current track here.
+    resume_at: Option<f64>,
     /// The play in progress, recorded to the library when the track changes.
     playing: Option<PlayRecord>,
 }
@@ -189,6 +191,7 @@ impl Engine {
                 autoplay: true,
                 requested_at: None,
                 next_loaded: None,
+                resume_at: None,
                 radio_seed: None,
                 position: 0.0,
                 retried: None,
@@ -401,6 +404,39 @@ impl Engine {
     }
 
     async fn play_index(&self, index: usize) -> Result<()> {
+        self.play_from(index, None).await
+    }
+
+    /// Put back the last session's queue, paused at `position` in the current track. Nothing
+    /// loads until play is pressed, so a launch costs no requests.
+    pub fn restore(&self, tracks: Vec<Track>, index: usize, position: f64) {
+        if tracks.is_empty() {
+            return;
+        }
+        let mut st = self.0.state.lock().unwrap();
+        st.index = index.min(tracks.len() - 1);
+        st.queue = tracks;
+        st.position = position;
+        st.resume_at = Some(position);
+        st.radio_seed = None;
+        st.next_loaded = None;
+    }
+
+    /// Play a restored track from where it was left. True when there was one to resume.
+    fn resume(&self) -> bool {
+        let (index, at) = {
+            let st = self.0.state.lock().unwrap();
+            let Some(at) = st.resume_at else { return false };
+            (st.index, at)
+        };
+        let e = self.clone();
+        self.0.rt.spawn(async move {
+            let _ = e.play_from(index, Some(at)).await;
+        });
+        true
+    }
+
+    async fn play_from(&self, index: usize, start: Option<f64>) -> Result<()> {
         let requested = Instant::now();
         self.finish_play();
         let track = {
@@ -410,7 +446,8 @@ impl Engine {
             };
             st.index = index;
             st.next_loaded = None;
-            st.position = 0.0;
+            st.position = start.unwrap_or(0.0);
+            st.resume_at = None;
             track
         };
         self.emit(Update::NowPlaying { track: track.clone(), index });
@@ -425,7 +462,11 @@ impl Engine {
             }
         };
         self.0.state.lock().unwrap().requested_at = Some((track.id.clone(), requested, cached));
-        self.0.player.send(Command::Play(stream));
+        // A resume a few seconds in starts there; otherwise from the top.
+        match start.filter(|s| *s > 2.0) {
+            Some(at) => self.0.player.send(Command::Reload(stream, at)),
+            None => self.0.player.send(Command::Play(stream)),
+        }
         self.after_track_change();
         Ok(())
     }
@@ -542,6 +583,9 @@ impl Engine {
     }
 
     pub fn set_paused(&self, paused: bool) {
+        if !paused && self.resume() {
+            return;
+        }
         self.0.player.send(Command::SetPaused(paused));
     }
 
@@ -556,10 +600,23 @@ impl Engine {
     }
 
     pub fn toggle_pause(&self) {
+        if self.resume() {
+            return;
+        }
         self.0.player.send(Command::TogglePause);
     }
 
     pub fn seek(&self, secs: f64) {
+        {
+            let mut st = self.0.state.lock().unwrap();
+            if st.resume_at.is_some() {
+                st.resume_at = Some(secs);
+                st.position = secs;
+                drop(st);
+                self.emit(Update::Position { secs });
+                return;
+            }
+        }
         self.0.player.send(Command::Seek(secs));
     }
 

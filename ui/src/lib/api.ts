@@ -63,6 +63,7 @@ export const api = {
   previous: () => invoke<void>('previous'),
   jump: (index: number) => invoke<void>('jump', { index }),
   togglePause: () => invoke<void>('toggle_pause'),
+  restoreQueue: (tracks: Track[], index: number, position: number) => invoke<void>('restore_queue', { tracks, index, position }),
   seek: (secs: number) => invoke<void>('seek', { secs }),
   setVolume: (volume: number) => invoke<void>('set_volume', { volume }),
   prefetch: (id: string) => invoke<void>('prefetch', { id }),

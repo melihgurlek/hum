@@ -426,6 +426,12 @@ fn set_autoplay(app: State<'_, App>, on: bool) {
     app.engine.set_autoplay(on);
 }
 
+/// Put back the last session's queue, paused (the UI saves it).
+#[tauri::command]
+fn restore_queue(app: State<'_, App>, tracks: Vec<Track>, index: usize, position: f64) {
+    app.engine.restore(tracks, index, position);
+}
+
 #[tauri::command]
 fn set_normalize(app: State<'_, App>, on: bool) {
     app.engine.set_normalize(on);
@@ -708,6 +714,7 @@ pub fn run() {
             get_quality,
             set_autoplay,
             set_normalize,
+            restore_queue,
             saved_songs,
             clear_saved_songs,
             set_account_radio,
