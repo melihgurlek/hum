@@ -129,3 +129,11 @@ h3 {
 .trim {
   text-box: trim-both cap alphabetic;
 }
+
+/* Phone: pages use the full width with the usual 16px gutter. Each view sets its own desktop
+   padding; this one rule overrides them all. */
+@media (max-width: 640px) {
+  main .page {
+    padding: 16px 16px 24px !important;
+  }
+}

@@ -118,8 +118,32 @@ function navigate(change: Partial<Place>) {
   const from = here()
   const to = { ...from, ...change }
   const same = to.view === from.view && to.playlistId === from.playlistId && to.artistId === from.artistId && to.albumId === from.albumId
-  if (!same) ui.history = [...ui.history.slice(-49), from]
+  if (!same) {
+    ui.history = [...ui.history.slice(-49), from]
+    markBackStep()
+  }
   show(to)
+}
+
+// Android's back gesture goes back in the WebView's own history, and with none left it closes
+// the app. So each step hum can go back (a page, an open Now Playing) leaves a history entry,
+// and going back through one closes Now Playing or returns to the previous page.
+const android = typeof navigator !== 'undefined' && /Android/.test(navigator.userAgent)
+export function markBackStep() {
+  if (android) history.pushState(null, '')
+}
+if (android) {
+  addEventListener('popstate', () => {
+    if (ui.nowPlayingOpen) ui.nowPlayingOpen = false
+    else back()
+  })
+}
+
+/** Open Now Playing (a back step on Android). */
+export function openNowPlaying() {
+  if (ui.nowPlayingOpen) return
+  ui.nowPlayingOpen = true
+  markBackStep()
 }
 
 export function go(view: View) {

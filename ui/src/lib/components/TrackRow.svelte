@@ -184,4 +184,10 @@
     color: var(--text);
     background: var(--raised-2);
   }
+  /* Touch screens have no hover: keep the row's tools in reach. */
+  @media (hover: none) {
+    .tools {
+      opacity: 1;
+    }
+  }
 </style>

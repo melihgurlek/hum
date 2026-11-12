@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, artistLinks, fmtTime, img } from '../api'
-  import { player, ui, setQuality, setSleep, sleep, toggleLike } from '../state.svelte'
+  import { openNowPlaying, player, ui, setQuality, setSleep, sleep, toggleLike } from '../state.svelte'
   import Icon from './Icon.svelte'
   import ArtistLinks from './ArtistLinks.svelte'
   import Progress from './Progress.svelte'
@@ -24,6 +24,8 @@
 </script>
 
 <footer class="bar" class:tinted={ui.nowPlayingOpen} aria-label="Player">
+  <!-- Phone: a thin progress line along the top of the mini player. -->
+  {#if player.current && player.duration}<span class="mini-progress" style:width={`${Math.min(100, (player.position / player.duration) * 100)}%`}></span>{/if}
   <div class="left">
     {#if player.current}
       <div class="np">
@@ -33,7 +35,7 @@
           <div class="cover art"></div>
         {/if}
         <span class="text">
-          <button class="open title ellipsis" onclick={() => (ui.nowPlayingOpen = true)} aria-label={`Open now playing: ${player.current.title}`}>{player.current.title}</button>
+          <button class="open title ellipsis" onclick={openNowPlaying} aria-label={`Open now playing: ${player.current.title}`}>{player.current.title}</button>
           <span class="sub ellipsis"><ArtistLinks artists={artistLinks(player.current)} /></span>
         </span>
       </div>
@@ -95,7 +97,7 @@
         </div>
       {/if}
     </div>
-    <button class="icon-btn" aria-label="Up next" onclick={() => (ui.nowPlayingOpen = true)}>
+    <button class="icon-btn" aria-label="Up next" onclick={openNowPlaying}>
       <Icon name="queue" size={18} />
     </button>
     <Icon name="volume" size={18} />
@@ -311,6 +313,42 @@
   @keyframes spin {
     to {
       transform: rotate(360deg);
+    }
+  }
+  .mini-progress {
+    display: none;
+  }
+  /* Phone: a mini player. Cover, title and artist open Now Playing; one play button; the
+     phone's own buttons do volume, and Now Playing has the rest. */
+  @media (max-width: 640px) {
+    .bar {
+      position: relative;
+      gap: 12px;
+      padding: 8px 8px 8px 12px;
+      border-top: 0;
+    }
+    .bar.tinted {
+      display: none;
+    }
+    .mini-progress {
+      display: block;
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 2px;
+      background: var(--accent, var(--accent-default));
+      transition: width 1s linear;
+    }
+    .np :global(.cover) {
+      width: 44px;
+      height: 44px;
+    }
+    .controls .icon-btn {
+      display: none;
+    }
+    .play {
+      width: 44px;
+      height: 44px;
     }
   }
   @media (max-width: 860px) {
