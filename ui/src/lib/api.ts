@@ -49,7 +49,7 @@ export interface Rgb { r: number; g: number; b: number }
 export interface Palette { dominant: Rgb; vivid: Rgb }
 
 export type Update =
-  | { type: 'now_playing'; track: Track; index: number }
+  | { type: 'now_playing'; track: Track; index: number; position: number }
   | { type: 'queue'; tracks: Track[]; index: number }
   | { type: 'position'; secs: number }
   | { type: 'duration'; secs: number }
@@ -85,6 +85,7 @@ export const api = {
   setNormalize: (on: boolean) => invoke<void>('set_normalize', { on }),
   setAccountRadio: (on: boolean) => invoke<void>('set_account_radio', { on }),
   queue: () => invoke<{ tracks: Track[]; index: number }>('queue'),
+  session: () => invoke<{ tracks: Track[]; index: number; position: number; playing: boolean }>('session'),
   setLiked: (track: Track, liked: boolean) => invoke<void>('set_liked', { track, liked }),
   isLiked: (id: string) => invoke<boolean>('is_liked', { id }),
   liked: () => invoke<Track[]>('liked'),
