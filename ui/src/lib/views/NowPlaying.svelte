@@ -5,6 +5,7 @@
   import Icon from '../components/Icon.svelte'
   import Progress from '../components/Progress.svelte'
   import Lyrics from '../components/Lyrics.svelte'
+  import SleepTimer from '../components/SleepTimer.svelte'
 
   // Remember which tab you left open.
   let tab = $state<'next' | 'lyrics'>((localStorage.getItem('hum.npTab') as 'next' | 'lyrics') ?? 'lyrics')
@@ -26,6 +27,10 @@
   function close() {
     ui.nowPlayingOpen = false
   }
+
+  // Phone: Up next and lyrics sit below the controls; this button scrolls down to them.
+  let panel = $state<HTMLElement>()
+  const showPanel = () => panel?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && close()} />
@@ -70,15 +75,18 @@
           <div class="times"><span>{fmtTime(player.position)}</span><span>{fmtTime(player.duration)}</span></div>
         </div>
         <div class="controls">
+          <!-- Phone: the player bar is hidden here, so its sleep timer moves into this row. -->
+          <span class="phone-only side-ctl"><SleepTimer size={22} align="left" /></span>
           <button class="ctl" aria-label="Previous" onclick={() => api.previous()}><Icon name="prev" size={28} /></button>
           <button class="big" aria-label={player.paused ? 'Play' : 'Pause'} onclick={() => api.togglePause()}>
             <Icon name={player.paused ? 'play' : 'pause'} size={30} />
           </button>
           <button class="ctl" aria-label="Next" onclick={() => api.next()}><Icon name="next" size={28} /></button>
+          <span class="phone-only side-ctl right"><button class="icon-btn" aria-label="Show up next and lyrics" onclick={showPanel}><Icon name="queue" size={22} /></button></span>
         </div>
       </section>
 
-      <section class="panel" aria-label="Up next and lyrics">
+      <section class="panel" bind:this={panel} aria-label="Up next and lyrics">
         <div class="tabs" role="tablist">
           <button role="tab" aria-selected={tab === 'next'} class:sel={tab === 'next'} onclick={() => (tab = 'next')}><span class="trim">Up next</span></button>
           <button role="tab" aria-selected={tab === 'lyrics'} class:sel={tab === 'lyrics'} onclick={() => (tab = 'lyrics')}><span class="trim">Lyrics</span></button>
@@ -282,17 +290,104 @@
   }
   /* Narrow windows: stack, and let the whole screen scroll instead. */
   @media (max-width: 900px) {
+    /* A flex column, not a one-column grid: with min-height: 0 on the items, the grid's rows
+       shrank to fit the screen and the panel slid over the cover. */
     .body {
-      grid-template-columns: minmax(0, 1fr);
+      display: flex;
+      flex-direction: column;
       overflow-y: auto;
       padding: 4px 24px 24px;
       gap: 24px;
     }
     .left {
+      flex: none;
       max-width: 440px;
     }
     .panel {
+      flex: none;
       height: 70vh;
+    }
+  }
+  .phone-only {
+    display: none;
+  }
+  /* Phone: Now Playing is its own full screen over the tab bar, one scrolling column: cover,
+     song, progress, transport with the sleep timer, then Up next and lyrics below the fold. */
+  @media (max-width: 640px) {
+    .np {
+      position: fixed;
+      z-index: 40;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    header {
+      padding: calc(8px + env(safe-area-inset-top)) 16px 4px;
+    }
+    .body {
+      padding: 8px 24px 24px;
+      gap: 32px;
+    }
+    .left {
+      max-width: none;
+      justify-content: flex-start;
+    }
+    .art {
+      flex: none;
+      width: 100%;
+      height: auto;
+      min-height: 0;
+      align-self: center;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+    }
+    h1 {
+      font-size: 24px;
+    }
+    .artist {
+      font-size: 16px;
+    }
+    .meta .heart {
+      margin-right: -10px;
+    }
+    .meta .heart + .heart {
+      margin-left: -12px;
+    }
+    .controls {
+      gap: 0;
+      justify-content: space-between;
+    }
+    .phone-only {
+      display: flex;
+    }
+    .side-ctl {
+      width: 64px;
+      color: var(--np-muted);
+      --text: var(--np-text);
+      --muted: var(--np-muted);
+    }
+    .side-ctl.right {
+      justify-content: flex-end;
+    }
+    .side-ctl :global(.icon-btn) {
+      color: var(--np-muted);
+    }
+    .side-ctl :global(.icon-btn.on) {
+      color: var(--np-text);
+    }
+    .panel {
+      height: calc(100dvh - 120px);
+      margin: 0 -12px;
+      padding: 14px 12px;
+      scroll-margin-top: 12px;
+    }
+    .tabs {
+      flex-wrap: wrap;
+    }
+    .qd {
+      display: none;
+    }
+    .why {
+      max-width: 38%;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
   }
   :global([data-theme='light']) .panel {

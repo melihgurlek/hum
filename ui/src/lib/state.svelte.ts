@@ -59,7 +59,7 @@ class Ui {
   /** Pages visited before this one, for Back (button, Alt+Left, mouse back). */
   history = $state<Place[]>([])
   playlists = $state<PlaylistSummary[]>([])
-  libraryTab = $state<'liked' | 'history'>('liked')
+  libraryTab = $state<'liked' | 'history' | 'playlists'>('liked')
   /** The "Add to playlist" menu: which songs, and where to show it. */
   addMenu = $state<{ tracks: Track[]; x: number; y: number } | null>(null)
   /** Set right after creating a playlist from the sidebar, so its page focuses the name. */
@@ -138,6 +138,11 @@ if (android) {
     else back()
   })
 }
+
+/** True under 640px, where the phone layout (tab bar, mini player, carousels) takes over. */
+const phoneQuery = typeof matchMedia !== 'undefined' ? matchMedia('(max-width: 640px)') : null
+export const layout = $state({ phone: phoneQuery?.matches ?? false })
+phoneQuery?.addEventListener('change', (e) => (layout.phone = e.matches))
 
 /** Open Now Playing (a back step on Android). */
 export function openNowPlaying() {

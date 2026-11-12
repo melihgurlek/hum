@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, artistLine, type HomeCard, type QuickPicks, type Track, img } from '../api'
-  import { capSet, go, homeFeed, playList, playRadio, playYtPlaylist, prefetchOnHover, quickPicksCache as cache, ui } from '../state.svelte'
+  import { capSet, go, homeFeed, layout, playList, playRadio, playYtPlaylist, prefetchOnHover, quickPicksCache as cache, ui } from '../state.svelte'
   import AlbumCard from '../components/AlbumCard.svelte'
   import Icon from '../components/Icon.svelte'
   import TrackRow from '../components/TrackRow.svelte'
@@ -47,6 +47,8 @@
   // One row of cards per shelf, as many as fit at 150px or wider with 20px gaps.
   let rowWidth = $state(0)
   const cols = $derived(Math.max(2, Math.floor((rowWidth + 20) / 170)))
+  // Phone: two cards a row is too few, so shelves become carousels you swipe through.
+  const shown = $derived(layout.phone ? 12 : cols)
   const asCard = (c: Extract<HomeCard, { type: 'playlist' }>) =>
     ({ id: c.id, title: c.title, kind: 'Playlist', year: null, artists: [], thumb: c.thumb })
 </script>
@@ -129,7 +131,7 @@
         {/if}
         {#if shelf.cards.length}
           <div class="row" style:--cols={cols} bind:clientWidth={rowWidth}>
-            {#each shelf.cards.slice(0, cols) as c (c.id)}
+            {#each shelf.cards.slice(0, shown) as c (c.id)}
               {#if c.type === 'album'}
                 <AlbumCard album={c} showArtist />
               {:else}
@@ -237,6 +239,32 @@
   .ts {
     font-size: 13px;
     margin-top: -4px;
+  }
+  /* Phone: card rows and Recently played scroll sideways, edge to edge past the 16px gutter,
+     with the next card peeking in so it's clear there's more. */
+  @media (max-width: 640px) {
+    .row,
+    .tiles {
+      display: grid;
+      grid-template-columns: none;
+      grid-auto-flow: column;
+      grid-auto-columns: 140px;
+      gap: 16px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      scroll-padding-inline: 16px;
+      scrollbar-width: none;
+      margin: 0 -16px;
+      padding: 8px 16px;
+    }
+    .row > :global(*),
+    .tile {
+      scroll-snap-align: start;
+    }
+    .row {
+      padding-inline: 24px;
+      scroll-padding-inline: 24px;
+    }
   }
   .empty {
     display: flex;

@@ -1,6 +1,8 @@
 <script lang="ts">
   import { api, type HistoryEntry, type Track } from '../api'
-  import { playList, player, ui } from '../state.svelte'
+  import { newPlaylistFromSidebar, openPlaylist, playList, player, ui } from '../state.svelte'
+  import Icon from '../components/Icon.svelte'
+  import Mosaic from '../components/Mosaic.svelte'
   import TrackRow from '../components/TrackRow.svelte'
 
   let liked = $state<Track[]>([])
@@ -40,6 +42,10 @@
 <div class="page scroll">
   <h1>Library</h1>
   <div class="tabs" role="tablist">
+    <!-- Phones have no sidebar, so their playlists live here. -->
+    <button class="phone-only" role="tab" aria-selected={ui.libraryTab === 'playlists'} class:sel={ui.libraryTab === 'playlists'} onclick={() => (ui.libraryTab = 'playlists')}>
+      <span class="trim">Playlists</span>
+    </button>
     <button role="tab" aria-selected={ui.libraryTab === 'liked'} class:sel={ui.libraryTab === 'liked'} onclick={() => (ui.libraryTab = 'liked')}>
       <span class="trim">Liked songs{liked.length ? ` (${liked.length})` : ''}</span>
     </button>
@@ -48,7 +54,20 @@
     </button>
   </div>
 
-  {#if ui.libraryTab === 'liked'}
+  {#if ui.libraryTab === 'playlists'}
+    <div class="list">
+      <button class="pl" onclick={newPlaylistFromSidebar}>
+        <span class="new" aria-hidden="true"><Icon name="plus" size={22} /></span>
+        <span class="t">New playlist</span>
+      </button>
+      {#each ui.playlists as p (p.id)}
+        <button class="pl" onclick={() => openPlaylist(p.id)}>
+          <Mosaic covers={p.covers} size={52} radius={8} />
+          <span class="text"><span class="ellipsis t">{p.name}</span><span class="ellipsis muted s">{p.count} {p.count === 1 ? 'song' : 'songs'}</span></span>
+        </button>
+      {/each}
+    </div>
+  {:else if ui.libraryTab === 'liked'}
     {#if liked.length}
       <div class="list">
         {#each liked as t, i (t.id)}
@@ -99,6 +118,58 @@
   .tabs button.sel {
     background: var(--text);
     color: var(--bg);
+  }
+  .phone-only {
+    display: none;
+  }
+  .pl {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 64px;
+    padding: 6px 8px;
+    margin: 0 -8px;
+    border-radius: var(--r-md);
+    text-align: left;
+  }
+  .pl:hover {
+    background: var(--raised);
+  }
+  .new {
+    width: 52px;
+    height: 52px;
+    flex: none;
+    border-radius: 8px;
+    background: var(--raised);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .t {
+    font-weight: 600;
+  }
+  .s {
+    font-size: 13px;
+  }
+  @media (max-width: 640px) {
+    .phone-only {
+      display: block;
+    }
+    /* Three pills don't fit 360px with desktop padding: tighten, and scroll if they still don't. */
+    .tabs {
+      overflow-x: auto;
+      scrollbar-width: none;
+      flex: none;
+    }
+    .tabs button {
+      flex: none;
+      padding: 0 14px;
+    }
   }
   .list {
     display: flex;

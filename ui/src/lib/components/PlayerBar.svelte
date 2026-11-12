@@ -1,26 +1,10 @@
 <script lang="ts">
   import { api, artistLinks, fmtTime, img } from '../api'
-  import { openNowPlaying, player, ui, setQuality, setSleep, sleep, toggleLike } from '../state.svelte'
+  import { openNowPlaying, player, ui, setQuality, toggleLike } from '../state.svelte'
   import Icon from './Icon.svelte'
   import ArtistLinks from './ArtistLinks.svelte'
   import Progress from './Progress.svelte'
-
-  let sleepOpen = $state(false)
-  // Re-read the clock twice a minute so the minutes left stay current.
-  let now = $state(Date.now())
-  $effect(() => {
-    if (!sleep.until) return
-    const t = setInterval(() => (now = Date.now()), 30_000)
-    return () => clearInterval(t)
-  })
-  const sleepLabel = $derived(
-    sleep.endOfSong ? 'End of song' : sleep.until ? `${Math.max(1, Math.ceil((sleep.until - now) / 60_000))} min` : null,
-  )
-  function pick(c: number | 'song' | null) {
-    setSleep(c)
-    now = Date.now()
-    sleepOpen = false
-  }
+  import SleepTimer from './SleepTimer.svelte'
 </script>
 
 <footer class="bar" class:tinted={ui.nowPlayingOpen} aria-label="Player">
@@ -82,21 +66,7 @@
         <Icon name="leaf" size={14} /><span class="trim">Data saver</span>
       </button>
     {/if}
-    <div class="sleep">
-      <button class="icon-btn" class:on={sleepLabel} aria-label="Sleep timer" aria-expanded={sleepOpen}
-        title={sleepLabel ? `Sleep timer: ${sleepLabel}` : 'Sleep timer'} onclick={() => (sleepOpen = !sleepOpen)}>
-        <Icon name="moon" size={18} />{#if sleepLabel}<span class="left-t">{sleepLabel}</span>{/if}
-      </button>
-      {#if sleepOpen}
-        <button class="backdrop" aria-label="Close" onclick={() => (sleepOpen = false)}></button>
-        <div class="menu" role="menu" aria-label="Sleep timer">
-          <div class="mt">Pause after</div>
-          {#each [15, 30, 45, 60] as m}<button role="menuitem" onclick={() => pick(m)}>{m} minutes</button>{/each}
-          <button role="menuitem" onclick={() => pick('song')}>End of this song</button>
-          {#if sleepLabel}<button role="menuitem" class="off" onclick={() => pick(null)}>Turn off</button>{/if}
-        </div>
-      {/if}
-    </div>
+    <SleepTimer />
     <button class="icon-btn" aria-label="Up next" onclick={openNowPlaying}>
       <Icon name="queue" size={18} />
     </button>
@@ -144,60 +114,6 @@
   .right {
     justify-content: flex-end;
     gap: 4px;
-    color: var(--muted);
-  }
-  .sleep {
-    position: relative;
-  }
-  .sleep .icon-btn {
-    width: auto;
-    min-width: 36px;
-    gap: 6px;
-    padding: 0 8px;
-  }
-  .left-t {
-    font-size: 12px;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 29;
-    cursor: default;
-  }
-  .menu {
-    position: absolute;
-    right: 0;
-    bottom: calc(100% + 10px);
-    z-index: 30;
-    width: 200px;
-    padding: 6px;
-    border-radius: var(--r-lg);
-    background: var(--raised);
-    border: 1px solid var(--line);
-    box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
-    display: flex;
-    flex-direction: column;
-    color: var(--text);
-  }
-  .mt {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--muted);
-    padding: 6px 10px 4px;
-  }
-  .menu button {
-    text-align: left;
-    padding: 0 10px;
-    min-height: 36px;
-    border-radius: var(--r-md);
-    font-weight: 600;
-  }
-  .menu button:hover {
-    background: color-mix(in srgb, var(--text) 8%, transparent);
-  }
-  .menu .off {
     color: var(--muted);
   }
   .np {
