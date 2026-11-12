@@ -66,6 +66,7 @@ export const api = {
   restoreQueue: (tracks: Track[], index: number, position: number) => invoke<void>('restore_queue', { tracks, index, position }),
   seek: (secs: number) => invoke<void>('seek', { secs }),
   setVolume: (volume: number) => invoke<void>('set_volume', { volume }),
+  setPaused: (paused: boolean) => invoke<void>('set_paused', { paused }),
   prefetch: (id: string) => invoke<void>('prefetch', { id }),
   setQuality: (quality: Quality) => invoke<void>('set_quality', { quality }),
   getQuality: () => invoke<Quality>('get_quality'),
