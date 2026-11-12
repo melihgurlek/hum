@@ -197,7 +197,9 @@
     gap: 4px;
     color: var(--muted);
   }
+  /* The song fills its column, so the heart stays in one place whatever the title's length. */
   .np {
+    flex: 1;
     position: relative;
     display: flex;
     align-items: center;
@@ -347,10 +349,7 @@
       width: 44px;
       height: 44px;
     }
-    /* The song fills the row, so the heart stays put beside Play whatever the title's length. */
-    .np {
-      flex: 1;
-    }
+
     .controls :global(.icon-btn) {
       display: none;
     }

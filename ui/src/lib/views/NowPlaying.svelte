@@ -373,6 +373,11 @@
   .meta + .progress {
     margin-top: -8px;
   }
+  /* The bar's own flex: 1 is for the player bar's row; in this column it collapsed the bar
+     to 0px tall, so the times sat on the line and the knob over them. */
+  .progress :global(.track) {
+    flex: none;
+  }
   .times {
     display: flex;
     justify-content: space-between;
@@ -485,17 +490,20 @@
     }
     .body {
       overflow: hidden;
-      padding: 8px 24px calc(var(--peek) + 24px);
+      padding: 8px 24px calc(var(--peek) + 8px);
       gap: 0;
     }
     /* The cover sits centered in the room above; the song, progress and controls stay
        anchored at the bottom, where the thumb is. */
+    /* Fixed, tight steps inside the song block (title, seek bar, times, controls); the spare
+       height goes in three equal parts: above the cover, between cover and title, and under
+       the controls (the auto margins on .art and .controls). */
     .left {
       flex: 1 1 auto;
       min-height: 0;
       max-width: none;
       justify-content: flex-start;
-      gap: 16px;
+      gap: 0;
     }
     /* Square at the full width when there's room; shorter phones shrink it (width follows). */
     .art {
@@ -520,14 +528,15 @@
       display: none;
     }
     .meta + .progress {
-      margin-top: 8px;
+      margin-top: 10px;
     }
     .controls {
-      margin-top: -4px;
+      margin-top: 12px;
+      margin-bottom: auto;
     }
     .times {
       font-size: 12px;
-      margin-top: -2px;
+      margin-top: -4px;
     }
     .meta .heart {
       margin-right: -10px;
