@@ -386,7 +386,16 @@ impl Engine {
     }
 
     pub fn set_autoplay(&self, on: bool) {
-        self.0.state.lock().unwrap().autoplay = on;
+        let was = std::mem::replace(&mut self.0.state.lock().unwrap().autoplay, on);
+        // Turned on mid-song: fetch the radio now, not at the next song (with the queue at its
+        // end there may be no next song to wait for).
+        if on && !was {
+            let e = self.clone();
+            self.0.rt.spawn(async move {
+                e.top_up_radio().await;
+                e.prefetch_next().await;
+            });
+        }
     }
 
     /// Shuffle on mixes the songs after this one (and those of every new queue); off puts
