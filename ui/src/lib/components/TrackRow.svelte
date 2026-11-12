@@ -185,6 +185,13 @@
     background: var(--raised-2);
   }
   /* Touch screens have no hover: keep the row's tools in reach. */
+  /* Phone: covers and durations line up with the page's 16px gutter, not 8px inside it. */
+  @media (max-width: 640px) {
+    .row {
+      padding: 6px 8px;
+      margin: 0 -8px;
+    }
+  }
   @media (hover: none) {
     .tools {
       opacity: 1;
