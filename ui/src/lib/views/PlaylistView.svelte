@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, type Playlist } from '../api'
-  import { go, layout, playList, prefetchOnHover, refreshPlaylists, showToast, ui } from '../state.svelte'
+  import { downloadLabel, downloadOf, go, layout, playList, prefetchOnHover, refreshPlaylists, showToast, ui } from '../state.svelte'
   import BackButton from '../components/BackButton.svelte'
   import DownloadButton from '../components/DownloadButton.svelte'
   import Icon from '../components/Icon.svelte'
@@ -123,6 +123,7 @@
         {/if}
         <p class="muted meta">
           {pl.tracks.length} {pl.tracks.length === 1 ? 'song' : 'songs'}{totalMin ? `, about ${totalMin} min` : ''}
+          {#if layout.phone && downloadOf(`playlist:${pl.id}`)}<br />{downloadLabel(`playlist:${pl.id}`)}{/if}
         </p>
         <div class="actions">
           <button class="primary" disabled={!pl.tracks.length} use:prefetchOnHover={pl.tracks[0]?.id} onclick={() => pl && playList(pl.tracks, 0)}>
@@ -131,7 +132,7 @@
           <button class="secondary" disabled={!pl.tracks.length} onclick={() => playList(shuffled(), 0)}>
             <Icon name="shuffle" size={16} /><span class="trim">Shuffle</span>
           </button>
-          {#if pl.tracks.length}<DownloadButton target={`playlist:${pl.id}`} />{/if}
+          {#if pl.tracks.length}<DownloadButton target={`playlist:${pl.id}`} compact={layout.phone} />{/if}
           {#if confirmDelete}
             <span class="confirm">
               {#if pl.synced}

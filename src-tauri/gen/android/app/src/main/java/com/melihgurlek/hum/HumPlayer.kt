@@ -104,22 +104,26 @@ object HumPlayer {
         controller = null
     }
 
+    /** A string field, or null when it is missing or JSON null (`optString` turns null into "null"). */
+    private fun JSONObject.str(key: String): String? =
+        if (isNull(key)) null else optString(key).ifEmpty { null }
+
     private fun item(s: JSONObject): MediaItem {
         val url = s.getString("url")
         val id = s.getString("id")
-        if (s.optString("userAgent").isNotEmpty()) userAgents[url] = s.getString("userAgent")
-        if (s.optString("recordTo").isNotEmpty()) Recorder.expect(url, s.getString("recordTo"))
+        s.str("userAgent")?.let { userAgents[url] = it }
+        s.str("recordTo")?.let { Recorder.expect(url, it) }
         gains[id] = s.optDouble("gain", 1.0).toFloat()
         val uri = if (s.optBoolean("local")) Uri.fromFile(File(url)) else Uri.parse(url)
         // What the notification and lock screen show; Media3 loads the cover from its URL.
         val meta = MediaMetadata.Builder()
-            .setTitle(s.optString("title").ifEmpty { null })
-            .setArtist(s.optString("artist").ifEmpty { null })
-            .setAlbumTitle(s.optString("album").ifEmpty { null })
+            .setTitle(s.str("title"))
+            .setArtist(s.str("artist"))
+            .setAlbumTitle(s.str("album"))
             // The cached copy when there is one (it shows offline), else the URL.
             .setArtworkUri(
-                s.optString("artworkFile").ifEmpty { null }?.let { Uri.fromFile(File(it)) }
-                    ?: s.optString("artwork").ifEmpty { null }?.let(Uri::parse),
+                s.str("artworkFile")?.let { Uri.fromFile(File(it)) }
+                    ?: s.str("artwork")?.let(Uri::parse),
             )
             .build()
         return MediaItem.Builder().setUri(uri).setMediaId(id).setMediaMetadata(meta).build()

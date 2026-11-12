@@ -59,6 +59,8 @@ pub enum Update {
     Error { message: String, details: Option<String> },
     /// Auto quality stepped down (`low`) because the connection stalled, or back up.
     AutoQuality { low: bool },
+    /// The network changed between Wi-Fi and mobile data, which can start or hold downloads.
+    Network,
 }
 
 /// What plays after the current song: the next one (`Off`), the next one and the first again
@@ -91,6 +93,8 @@ struct State {
     radio_seed: Option<String>,
     position: f64,
     retried: Option<String>,
+    /// Songs skipped for errors since one last started: a run of them stops playback.
+    skipped: u32,
     /// Restored from the last session and not loaded yet: play starts the current track here.
     resume_at: Option<f64>,
     /// The play in progress, recorded to the library when the track changes.
@@ -299,6 +303,7 @@ impl Engine {
                 radio_seed: None,
                 position: 0.0,
                 retried: None,
+                skipped: 0,
                 playing: None,
             }),
             streams: Mutex::new(HashMap::new()),
@@ -1106,6 +1111,7 @@ impl Engine {
                     if was != metered {
                         log::info!("network: {}", if metered { "mobile data" } else { "Wi-Fi" });
                         self.sync_downloads();
+                        self.emit(Update::Network);
                     }
                 }
                 PlayerEvent::Error { video_id, message } => {
@@ -1168,6 +1174,7 @@ impl Engine {
                 None
             };
             st.retried = None;
+            st.skipped = 0;
             if !same {
                 if let Some(track) = st.queue.iter().find(|t| t.id == video_id).cloned() {
                     st.playing = Some(PlayRecord {
@@ -1256,22 +1263,36 @@ impl Engine {
     async fn on_error(&self, video_id: Option<String>, message: String) {
         let Some(id) = video_id else { return };
         self.0.streams.lock().unwrap().remove(&id);
-        let (retry, index) = {
+        let (retry, index, skipped) = {
             let mut st = self.0.state.lock().unwrap();
             let retry = st.retried.as_deref() != Some(&id);
             st.retried = Some(id.clone());
-            (retry, st.index)
+            if !retry {
+                st.skipped += 1;
+            }
+            (retry, st.index, st.skipped)
         };
         if retry {
             let _ = self.play_index(index).await;
-        } else {
-            let title = self.current().map(|t| t.title).unwrap_or_default();
-            self.emit(Update::Error {
-                message: "That song stopped playing twice, so hum skipped it.".into(),
-                details: Some(self.report(&id, &title, &format!("playback: {message}"))),
-            });
-            let _ = self.next().await;
+            return;
         }
+        let title = self.current().map(|t| t.title).unwrap_or_default();
+        let details = Some(self.report(&id, &title, &format!("playback: {message}")));
+        // Every song failing (offline, or a broken player) must not spin through the queue.
+        if skipped >= 3 {
+            self.0.state.lock().unwrap().skipped = 0;
+            self.set_paused(true);
+            self.emit(Update::Error {
+                message: "Several songs in a row wouldn't play, so hum stopped.".into(),
+                details,
+            });
+            return;
+        }
+        self.emit(Update::Error {
+            message: "That song stopped playing twice, so hum skipped it.".into(),
+            details,
+        });
+        let _ = self.next().await;
     }
 }
 
@@ -1358,6 +1379,7 @@ mod tests {
             radio_seed: None,
             position: 0.0,
             retried: None,
+            skipped: 0,
             resume_at: None,
             playing: None,
         };
@@ -1405,6 +1427,7 @@ mod tests {
             radio_seed: None,
             position: 0.0,
             retried: None,
+            skipped: 0,
             resume_at: None,
             playing: None,
         };

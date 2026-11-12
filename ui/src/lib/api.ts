@@ -57,6 +57,7 @@ export type Update =
   | { type: 'timing'; video_id: string; ms: number; cached: boolean }
   | { type: 'error'; message: string; details: string | null }
   | { type: 'auto_quality'; low: boolean }
+  | { type: 'network' }
 
 export const api = {
   search: (query: string) => invoke<SearchResults>('search', { query }),

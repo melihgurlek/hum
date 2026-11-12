@@ -375,6 +375,12 @@ export async function refreshDownloads() {
   if (downloads.status.active && !downloads.status.waiting_for_wifi) downloadPoll = setTimeout(refreshDownloads, 2000)
 }
 export const downloadOf = (target: string) => downloads.status?.targets.find((t) => t.target === target) ?? null
+export function downloadLabel(target: string) {
+  const d = downloadOf(target)
+  if (!d) return 'Download'
+  if (d.done >= d.total) return 'Downloaded'
+  return downloads.status?.waiting_for_wifi ? `Waiting for Wi-Fi, ${d.done} of ${d.total}` : `Downloading ${d.done} of ${d.total}`
+}
 export async function setDownload(target: string, on: boolean) {
   try {
     await api.setDownload(target, on)
@@ -620,6 +626,9 @@ export async function startListening() {
       case 'auto_quality':
         player.autoLow = u.low
         if (u.low) showToast('Slow connection: switched to lower sound quality')
+        break
+      case 'network':
+        refreshDownloads()
         break
       case 'error':
         showToast(u.message, u.details)
