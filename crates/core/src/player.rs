@@ -208,6 +208,7 @@ fn run(
                         Command::Volume(v) => mpv
                             .set_property("volume", v.clamp(0.0, 100.0))
                             .map_err(|e| anyhow!("{e}")),
+                        Command::QueryNetwork => Ok(()),
                         Command::Stop => {
                             ids.clear();
                             current = None;

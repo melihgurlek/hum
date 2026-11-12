@@ -10,7 +10,6 @@ mod android;
 #[cfg(not(target_os = "android"))]
 mod media;
 
-use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -33,11 +32,13 @@ impl App {
     }
 }
 
-struct SyncEvents(tauri::AppHandle);
+struct SyncEvents(tauri::AppHandle, Engine);
 
 impl hum_core::sync::Events for SyncEvents {
     fn changed(&self) {
         let _ = self.0.emit("hum://library", ());
+        // The account may have added or dropped songs of a playlist kept for offline.
+        self.1.sync_downloads();
     }
     fn failed(&self, what: &str, error: &anyhow::Error) {
         let _ = self.0.emit("hum://sync-error", format!("Failed {what}: {error:#}"));
@@ -165,7 +166,9 @@ async fn set_playlist_shown(app: State<'_, App>, id: String, name: String, shown
 
 #[tauri::command]
 async fn set_liked(app: State<'_, App>, track: Track, liked: bool) -> Res<()> {
-    synced(&app, move |s| s.set_liked(&track, liked)).await
+    synced(&app, move |s| s.set_liked(&track, liked)).await?;
+    app.engine.sync_downloads();
+    Ok(())
 }
 
 #[tauri::command]
@@ -354,18 +357,24 @@ async fn rename_playlist(app: State<'_, App>, id: i64, name: String) -> Res<()> 
 
 #[tauri::command]
 async fn delete_playlist(app: State<'_, App>, id: i64) -> Res<()> {
-    synced(&app, move |s| s.delete_playlist(id)).await
+    synced(&app, move |s| s.delete_playlist(id)).await?;
+    app.engine.sync_downloads();
+    Ok(())
 }
 
 /// Returns how many songs were new to the playlist.
 #[tauri::command]
 async fn add_to_playlist(app: State<'_, App>, id: i64, tracks: Vec<Track>) -> Res<usize> {
-    synced(&app, move |s| s.add_to_playlist(id, &tracks)).await
+    let added = synced(&app, move |s| s.add_to_playlist(id, &tracks)).await?;
+    app.engine.sync_downloads();
+    Ok(added)
 }
 
 #[tauri::command]
 async fn remove_from_playlist(app: State<'_, App>, id: i64, index: usize) -> Res<()> {
-    synced(&app, move |s| s.remove_from_playlist(id, index)).await
+    synced(&app, move |s| s.remove_from_playlist(id, index)).await?;
+    app.engine.sync_downloads();
+    Ok(())
 }
 
 #[tauri::command]
@@ -439,6 +448,34 @@ async fn clear_saved_songs(app: State<'_, App>) -> Res<()> {
     })
     .await
     .map_err(err)
+}
+
+/// How many bytes of played songs to keep; 0 keeps none (kept ones still play).
+#[tauri::command]
+fn set_song_cache_limit(app: State<'_, App>, bytes: u64) {
+    app.engine.set_song_cache_limit(bytes);
+}
+
+/// Whether downloads may use mobile data (Android); otherwise they wait for Wi-Fi.
+#[tauri::command]
+fn set_metered_downloads(app: State<'_, App>, on: bool) {
+    app.engine.set_metered_downloads(on);
+}
+
+/// Keep a playlist (`playlist:<id>`) or `liked` for offline, or stop.
+#[tauri::command]
+async fn set_download(app: State<'_, App>, target: String, on: bool) -> Res<()> {
+    app.engine.set_download(target, on).await.map_err(err)
+}
+
+#[tauri::command]
+async fn downloads(app: State<'_, App>) -> Res<hum_core::downloads::DownloadStatus> {
+    app.engine.download_status().await.map_err(err)
+}
+
+#[tauri::command]
+async fn remove_all_downloads(app: State<'_, App>) -> Res<()> {
+    app.engine.remove_all_downloads().await.map_err(err)
 }
 
 #[tauri::command]
@@ -575,6 +612,14 @@ fn ui_log(message: String) {
 /// Cover art goes through Rust: cached on disk (no data spent twice, works offline) and fetched
 /// by reqwest, since WebKitGTK's own network stack failed to load googleusercontent images.
 /// The page asks for `img://localhost/<percent-encoded original URL>`.
+/// Where cover art is cached, shared with the system media controls (`images::cached`).
+fn image_dir(app: &tauri::AppHandle) -> PathBuf {
+    app.path()
+        .app_cache_dir()
+        .map(|d| d.join("images"))
+        .unwrap_or_else(|_| std::env::temp_dir().join("hum-images"))
+}
+
 async fn serve_image(http: reqwest::Client, dir: PathBuf, path: String) -> Response<Vec<u8>> {
     let not_found = || {
         Response::builder()
@@ -587,9 +632,7 @@ async fn serve_image(http: reqwest::Client, dir: PathBuf, path: String) -> Respo
     if !url.starts_with("https://") {
         return not_found();
     }
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    url.hash(&mut h);
-    let file = dir.join(format!("{:016x}", h.finish()));
+    let file = hum_core::source::images::path_in(&dir, &url);
     let ok = |bytes: Vec<u8>| {
         Response::builder()
             .header("Content-Type", sniff(&bytes))
@@ -654,11 +697,7 @@ pub fn run() {
         .register_asynchronous_uri_scheme_protocol("img", |ctx, request, responder| {
             let app = ctx.app_handle();
             let http = app.state::<App>().http.clone();
-            let dir = app
-                .path()
-                .app_cache_dir()
-                .map(|d| d.join("images"))
-                .unwrap_or_else(|_| std::env::temp_dir().join("hum-images"));
+            let dir = image_dir(app);
             let path = request.uri().path().to_string();
             tauri::async_runtime::spawn(async move {
                 responder.respond(serve_image(http, dir, path).await);
@@ -677,8 +716,11 @@ pub fn run() {
             };
             // Engine::start spawns tokio tasks, so it must run inside the runtime.
             let engine = tauri::async_runtime::block_on(async { Engine::start(source, library) })?;
+            hum_core::source::images::set_dir(image_dir(app.handle()));
             // About 250 songs at High.
             engine.set_song_cache(hum_core::cache::SongCache::new(app.path().app_cache_dir()?.join("songs"), 1 << 30));
+            // In the data dir: the system may wipe the cache dir.
+            engine.set_downloads(hum_core::downloads::Downloads::new(app.path().app_data_dir()?.join("downloads")));
             let mut updates = engine.subscribe();
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -709,7 +751,7 @@ pub fn run() {
                     tokio::time::sleep(std::time::Duration::from_secs(10 * 60)).await;
                 }
             });
-            let events = Arc::new(SyncEvents(app.handle().clone()));
+            let events = Arc::new(SyncEvents(app.handle().clone(), engine.clone()));
             let sync = engine.library().cloned().map(|lib| {
                 tauri::async_runtime::block_on(async { Sync::start(lib, account.clone(), events) })
             });
@@ -753,6 +795,11 @@ pub fn run() {
             restore_queue,
             saved_songs,
             clear_saved_songs,
+            set_song_cache_limit,
+            set_download,
+            set_metered_downloads,
+            downloads,
+            remove_all_downloads,
             set_account_radio,
             queue,
             cover_palette,

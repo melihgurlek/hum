@@ -1,4 +1,4 @@
-import { api, onSync, onUpdate, type AlbumPage, type ArtistPage, type HomeShelf, type QuickPicks, type SearchResults, type Palette, type PlaylistSummary, type Quality, type Repeat, type Track } from './api'
+import { api, onSync, onUpdate, type AlbumPage, type ArtistPage, type HomeShelf, type QuickPicks, type SearchResults, type Palette, type PlaylistSummary, type DownloadStatus, type Quality, type Repeat, type Track } from './api'
 
 export type View = 'home' | 'search' | 'library' | 'settings' | 'playlist' | 'artist' | 'album'
 export type ThemePref = 'system' | 'dark' | 'light'
@@ -52,6 +52,10 @@ class Ui {
   autoplay = $state(load('hum.autoplay', true))
   repeat = $state<Repeat>(load<Repeat>('hum.repeat', 'off'))
   shuffle = $state(load('hum.shuffle', false))
+  /** How much the automatic song cache may keep, in bytes; 0 is off. */
+  songCacheLimit = $state(load('hum.songCacheLimit', 2 ** 30))
+  /** Downloads may use mobile data; otherwise they wait for Wi-Fi. */
+  meteredDownloads = $state(load('hum.meteredDownloads', false))
   normalize = $state(load('hum.normalize', true))
   accountRadio = $state(load('hum.accountRadio', false))
   toast = $state<string | null>(null)
@@ -342,6 +346,50 @@ export function setAutoplay(on: boolean) {
   if (on && ui.repeat === 'all') setRepeat('off')
 }
 
+export function setSongCacheLimit(bytes: number) {
+  ui.songCacheLimit = bytes
+  save('hum.songCacheLimit', bytes)
+  api.setSongCacheLimit(bytes).catch((e) => showToast(String(e)))
+}
+
+// ---- downloads ------------------------------------------------------------
+
+export function setMeteredDownloads(on: boolean) {
+  ui.meteredDownloads = on
+  save('hum.meteredDownloads', on)
+  api.setMeteredDownloads(on).catch((e) => showToast(String(e)))
+  refreshDownloads()
+}
+
+/** What's marked for download and how far along it is; polled while a pass runs. */
+export const downloads = $state<{ status: DownloadStatus | null }>({ status: null })
+let downloadPoll: ReturnType<typeof setTimeout> | undefined
+export async function refreshDownloads() {
+  clearTimeout(downloadPoll)
+  try {
+    downloads.status = await api.downloads()
+  } catch {
+    return
+  }
+  // Only while songs are actually coming in: not while waiting for Wi-Fi, which can be hours.
+  if (downloads.status.active && !downloads.status.waiting_for_wifi) downloadPoll = setTimeout(refreshDownloads, 2000)
+}
+export const downloadOf = (target: string) => downloads.status?.targets.find((t) => t.target === target) ?? null
+export function downloadLabel(target: string) {
+  const d = downloadOf(target)
+  if (!d) return 'Download'
+  if (d.done >= d.total) return 'Downloaded'
+  return downloads.status?.waiting_for_wifi ? `Waiting for Wi-Fi, ${d.done} of ${d.total}` : `Downloading ${d.done} of ${d.total}`
+}
+export async function setDownload(target: string, on: boolean) {
+  try {
+    await api.setDownload(target, on)
+  } catch (e) {
+    showToast(String(e))
+  }
+  refreshDownloads()
+}
+
 /** Shuffle mixes what's after the current song, and every queue you start; off restores. */
 export function setShuffle(on: boolean) {
   ui.shuffle = on
@@ -508,6 +556,9 @@ export async function startListening() {
   api.setAutoplay(ui.autoplay)
   api.setRepeat(ui.repeat)
   api.setShuffle(ui.shuffle)
+  api.setSongCacheLimit(ui.songCacheLimit).catch(() => {})
+  api.setMeteredDownloads(ui.meteredDownloads).catch(() => {})
+  refreshDownloads()
   api.setNormalize(ui.normalize)
   api.setAccountRadio(ui.accountRadio)
   refreshRecent()
@@ -575,6 +626,9 @@ export async function startListening() {
       case 'auto_quality':
         player.autoLow = u.low
         if (u.low) showToast('Slow connection: switched to lower sound quality')
+        break
+      case 'network':
+        refreshDownloads()
         break
       case 'error':
         showToast(u.message, u.details)
@@ -690,6 +744,8 @@ export async function refreshPlaylists() {
   } catch {
     /* library unavailable */
   }
+  // A downloaded playlist that changed has songs to fetch or drop.
+  refreshDownloads()
 }
 
 export function openPlaylist(id: number) {

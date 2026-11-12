@@ -249,15 +249,68 @@ pub struct TrackMeta {
     pub artist: String,
     pub album: Option<String>,
     pub artwork: Option<String>,
+    /// The cover's copy in the app's image cache, when there is one: it shows offline too.
+    pub artwork_file: Option<String>,
 }
 
 impl From<&Track> for TrackMeta {
     fn from(t: &Track) -> Self {
+        let artwork_file = [&t.cover, &t.thumb]
+            .into_iter()
+            .flatten()
+            .find_map(|u| images::cached(u))
+            .map(|p| p.to_string_lossy().into_owned());
         TrackMeta {
             title: t.title.clone(),
             artist: t.artists.join(", "),
             album: t.album.clone(),
             artwork: t.cover.clone().or_else(|| t.thumb.clone()),
+            artwork_file,
+        }
+    }
+}
+
+/// The app's cover cache: one file per image URL, written by the app's image handler and read
+/// by it and by the system's media controls (which can't reach the network offline).
+pub mod images {
+    use std::hash::{Hash, Hasher};
+    use std::path::PathBuf;
+    use std::sync::OnceLock;
+
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+
+    pub fn set_dir(dir: PathBuf) {
+        let _ = DIR.set(dir);
+    }
+
+    /// Where `url`'s copy lives (or would), in `dir`.
+    pub fn path_in(dir: &std::path::Path, url: &str) -> PathBuf {
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        url.hash(&mut h);
+        dir.join(format!("{:016x}", h.finish()))
+    }
+
+    /// `url`'s copy, if it has been cached.
+    pub fn cached(url: &str) -> Option<PathBuf> {
+        let p = path_in(DIR.get()?, url);
+        p.is_file().then_some(p)
+    }
+
+    /// Fetch `url` into the cache unless it's there (a downloaded song's covers, so they show
+    /// offline even if the app never displayed them).
+    pub async fn fetch(url: &str) {
+        let Some(dir) = DIR.get() else { return };
+        let p = path_in(dir, url);
+        if p.is_file() || !url.starts_with("https://") {
+            return;
+        }
+        static HTTP: OnceLock<reqwest::Client> = OnceLock::new();
+        let http = HTTP.get_or_init(reqwest::Client::new);
+        if let Ok(r) = http.get(url).send().await.and_then(|r| r.error_for_status()) {
+            if let Ok(bytes) = r.bytes().await {
+                let _ = tokio::fs::create_dir_all(dir).await;
+                let _ = tokio::fs::write(&p, &bytes).await;
+            }
         }
     }
 }
@@ -484,6 +537,12 @@ impl Source {
             .and_then(|t| t.as_str())
             .map(str::to_string);
         Ok(text)
+    }
+
+    /// The song's best stream, already arriving, to save to disk (offline downloads). Reads it a
+    /// range at a time: the stream host serves a plain GET at a trickle.
+    pub async fn open_audio(&self, video_id: &str) -> Result<(ytmusic::AudioFormat, ytmusic::AudioStream)> {
+        self.ytm.open_audio(video_id).await
     }
 
     pub async fn resolve(&self, video_id: &str, quality: Quality) -> Result<Stream> {

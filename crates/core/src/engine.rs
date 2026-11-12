@@ -5,8 +5,9 @@
 //! - The next track is resolved and handed to mpv ahead of time, so advancing is gapless.
 //! - No lock is held across an `.await`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -14,9 +15,14 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, mpsc};
 
+use crate::cache::SongCache;
+use crate::downloads::{DownloadStatus, Downloads};
 use crate::library::{self, Library};
 use crate::player::{Command, Player, PlayerEvent};
 use crate::source::{Quality, Source, Stream, Track};
+
+/// How long a download pass waits after the network fails.
+const DOWNLOAD_RETRY: Duration = Duration::from_secs(60);
 
 /// Fetch more radio when fewer than this many tracks are left after the current one.
 const RADIO_LOOKAHEAD: usize = 10;
@@ -53,6 +59,8 @@ pub enum Update {
     Error { message: String, details: Option<String> },
     /// Auto quality stepped down (`low`) because the connection stalled, or back up.
     AutoQuality { low: bool },
+    /// The network changed between Wi-Fi and mobile data, which can start or hold downloads.
+    Network,
 }
 
 /// What plays after the current song: the next one (`Off`), the next one and the first again
@@ -85,6 +93,8 @@ struct State {
     radio_seed: Option<String>,
     position: f64,
     retried: Option<String>,
+    /// Songs skipped for errors since one last started: a run of them stops playback.
+    skipped: u32,
     /// Restored from the last session and not loaded yet: play starts the current track here.
     resume_at: Option<f64>,
     /// The play in progress, recorded to the library when the track changes.
@@ -158,8 +168,24 @@ struct Inner {
     rt: tokio::runtime::Handle,
     library: Option<Library>,
     songs: std::sync::RwLock<Option<Arc<crate::cache::SongCache>>>,
+    downloads: std::sync::RwLock<Option<Arc<Downloads>>>,
+    /// The download pass: whether one runs, and whether to go round again when it ends.
+    pass: Mutex<Pass>,
+    /// Wakes a pass waiting to retry the network.
+    pass_wake: tokio::sync::Notify,
+    /// On mobile data (Android reports it; assumed until it does, so nothing downloads on
+    /// mobile data by surprise). Never set on the desktop.
+    metered: std::sync::atomic::AtomicBool,
+    /// Downloads may use mobile data (off unless turned on in Settings).
+    metered_downloads: std::sync::atomic::AtomicBool,
     /// Loudness normalization (on unless turned off in Settings).
     normalize: std::sync::atomic::AtomicBool,
+}
+
+#[derive(Default)]
+struct Pass {
+    running: bool,
+    again: bool,
 }
 
 /// What Auto quality has learned about the connection this session.
@@ -231,6 +257,20 @@ fn now_unix() -> i64 {
         .unwrap_or(0)
 }
 
+/// A copy of the song on disk: kept for offline first, then the song cache.
+fn local_copy(downloads: Option<&Downloads>, songs: Option<&SongCache>, id: &str, quality: Quality) -> Option<Stream> {
+    downloads.and_then(|d| d.lookup(id)).or_else(|| songs.and_then(|c| c.lookup(id, quality)))
+}
+
+/// A failure of the connection, as opposed to the song (unavailable, refused).
+fn is_network_error(e: &anyhow::Error) -> bool {
+    e.chain().any(|c| {
+        c.is::<reqwest::Error>()
+            || c.is::<tokio::time::error::Elapsed>()
+            || c.to_string().contains("did not answer")
+    })
+}
+
 fn quality_from(v: u8) -> Quality {
     match v {
         0 => Quality::DataSaver,
@@ -263,6 +303,7 @@ impl Engine {
                 radio_seed: None,
                 position: 0.0,
                 retried: None,
+                skipped: 0,
                 playing: None,
             }),
             streams: Mutex::new(HashMap::new()),
@@ -275,6 +316,11 @@ impl Engine {
             rt: tokio::runtime::Handle::current(),
             library,
             songs: Default::default(),
+            downloads: Default::default(),
+            pass: Default::default(),
+            pass_wake: Default::default(),
+            metered: std::sync::atomic::AtomicBool::new(cfg!(target_os = "android")),
+            metered_downloads: std::sync::atomic::AtomicBool::new(false),
         }));
         let e = engine.clone();
         engine.0.rt.spawn(async move { e.player_events(prx).await });
@@ -290,6 +336,200 @@ impl Engine {
 
     pub fn song_cache(&self) -> Option<Arc<crate::cache::SongCache>> {
         self.0.songs.read().unwrap().clone()
+    }
+
+    /// How many bytes of songs to keep after playing them; 0 stops keeping new ones (what is
+    /// kept still plays). A lower limit trims at once.
+    pub fn set_song_cache_limit(&self, bytes: u64) {
+        let Some(cache) = self.song_cache() else { return };
+        self.0.rt.spawn_blocking(move || cache.set_cap(bytes));
+    }
+
+    /// Where songs kept for offline live. Starts a download pass.
+    pub fn set_downloads(&self, downloads: Downloads) {
+        *self.0.downloads.write().unwrap() = Some(Arc::new(downloads));
+        self.sync_downloads();
+    }
+
+    pub fn downloads(&self) -> Option<Arc<Downloads>> {
+        self.0.downloads.read().unwrap().clone()
+    }
+
+    /// Keep (or stop keeping) a playlist (`playlist:<id>`) or `liked` for offline.
+    pub async fn set_download(&self, target: String, on: bool) -> Result<()> {
+        let lib = self.library().ok_or_else(|| anyhow::anyhow!("library unavailable"))?;
+        lib.run(move |l| l.set_download(&target, on)).await?;
+        self.sync_downloads();
+        Ok(())
+    }
+
+    /// Stop keeping anything for offline and delete the files.
+    pub async fn remove_all_downloads(&self) -> Result<()> {
+        let lib = self.library().ok_or_else(|| anyhow::anyhow!("library unavailable"))?;
+        lib.run(|l| l.clear_downloads()).await?;
+        if let Some(d) = self.downloads() {
+            tokio::task::spawn_blocking(move || d.clear()).await?;
+        }
+        // A song in flight lands first; the pass's next sweep removes it.
+        self.sync_downloads();
+        Ok(())
+    }
+
+    pub async fn download_status(&self) -> Result<DownloadStatus> {
+        let lib = self.library().ok_or_else(|| anyhow::anyhow!("library unavailable"))?;
+        let sets = lib.run(|l| l.download_sets()).await?;
+        let d = self.downloads().ok_or_else(|| anyhow::anyhow!("downloads unavailable"))?;
+        let active = self.0.pass.lock().unwrap().running;
+        let held = self.held_for_wifi();
+        let mut s = tokio::task::spawn_blocking(move || DownloadStatus::new(sets, &d, active)).await?;
+        s.waiting_for_wifi = held && s.targets.iter().any(|t| t.done < t.total);
+        Ok(s)
+    }
+
+    /// Downloads may use mobile data. Turning it on starts any that were waiting.
+    pub fn set_metered_downloads(&self, on: bool) {
+        self.0.metered_downloads.store(on, Ordering::Relaxed);
+        self.sync_downloads();
+    }
+
+    fn held_for_wifi(&self) -> bool {
+        self.0.metered.load(Ordering::Relaxed) && !self.0.metered_downloads.load(Ordering::Relaxed)
+    }
+
+    /// Bring the downloads in line with what is marked: delete what no collection holds, fetch
+    /// what is missing. Cheap to call; one pass runs at a time and a call during a pass makes it
+    /// go round once more.
+    pub fn sync_downloads(&self) {
+        // Ask the player what network this is (Android answers with a Network event, which
+        // calls back here when it changes).
+        self.0.player.send(Command::QueryNetwork);
+        {
+            let mut pass = self.0.pass.lock().unwrap();
+            if pass.running {
+                pass.again = true;
+                self.0.pass_wake.notify_one();
+                return;
+            }
+            pass.running = true;
+        }
+        let e = self.clone();
+        self.0.rt.spawn(async move { e.download_passes().await });
+    }
+
+    async fn download_passes(&self) {
+        loop {
+            self.0.pass.lock().unwrap().again = false;
+            let offline = self.download_pass().await;
+            {
+                // Under the lock, so a trigger can't slip in between the check and the exit.
+                let mut pass = self.0.pass.lock().unwrap();
+                if pass.again {
+                    continue;
+                }
+                if !offline {
+                    pass.running = false;
+                    return;
+                }
+            }
+            // No network: try again in a minute, or sooner if something changed.
+            let _ = tokio::time::timeout(DOWNLOAD_RETRY, self.0.pass_wake.notified()).await;
+        }
+    }
+
+    /// One go over the wanted songs. True if it stopped because the network failed.
+    async fn download_pass(&self) -> bool {
+        let (Some(lib), Some(dl)) = (self.library().cloned(), self.downloads()) else { return false };
+        let mut failures: HashMap<String, u8> = HashMap::new();
+        loop {
+            // Asked again each round, so a collection unmarked meanwhile stops the pass.
+            let wanted = match lib.run(|l| l.download_wanted()).await {
+                Ok(w) => w,
+                Err(e) => {
+                    log::warn!("downloads: {e:#}");
+                    return false;
+                }
+            };
+            let set: HashSet<String> = wanted.iter().cloned().collect();
+            let d = dl.clone();
+            let Ok(have) = tokio::task::spawn_blocking(move || {
+                d.sweep(&set);
+                d.have()
+            })
+            .await
+            else {
+                return false;
+            };
+            let next = wanted.iter().find(|id| !have.contains(*id) && failures.get(*id).copied().unwrap_or(0) < 2);
+            let Some(id) = next else { return false };
+            // On mobile data without leave: wait (a switch to Wi-Fi wakes the pass).
+            if self.held_for_wifi() {
+                return true;
+            }
+            match self.download_song(&dl, id).await {
+                Ok(()) => {
+                    // Its covers too, so Now Playing and the lock screen show them offline.
+                    if let Ok(Some(t)) = lib.run({
+                        let id = id.clone();
+                        move |l| l.track(&id)
+                    })
+                    .await
+                    {
+                        for url in [&t.cover, &t.thumb].into_iter().flatten() {
+                            crate::source::images::fetch(url).await;
+                        }
+                    }
+                }
+                Err(e) if is_network_error(&e) => {
+                    log::warn!("downloads: {id}: {e:#}; trying again in a minute");
+                    return true;
+                }
+                Err(e) => {
+                    log::warn!("downloads: {id}: {e:#}");
+                    *failures.entry(id.clone()).or_default() += 1;
+                }
+            }
+        }
+    }
+
+    /// A copy from the song cache, else a fetch. Whole file or none.
+    async fn download_song(&self, dl: &Arc<Downloads>, id: &str) -> Result<()> {
+        if let Some(s) = self.song_cache().and_then(|c| c.lookup(id, Quality::High)) {
+            let (d, id, from) = (dl.clone(), id.to_string(), s.url);
+            tokio::task::spawn_blocking(move || d.adopt(Path::new(&from), &id, s.itag)).await??;
+            return Ok(());
+        }
+        let (format, mut body) = self.0.source.open_audio(id).await?;
+        let part = dl.part_path(id, format.itag);
+        let res = self.write_body(&part, &mut body, format.content_length).await;
+        self.flush_data(1);
+        match res {
+            Ok(()) => {
+                let (d, part) = (dl.clone(), part.clone());
+                tokio::task::spawn_blocking(move || d.finish(&part)).await?
+            }
+            Err(e) => {
+                let _ = tokio::fs::remove_file(&part).await;
+                Err(e)
+            }
+        }
+    }
+
+    async fn write_body(&self, part: &Path, body: &mut ytmusic::AudioStream, expected: Option<u64>) -> Result<()> {
+        use tokio::io::AsyncWriteExt;
+        let mut file = tokio::fs::File::create(part).await?;
+        let mut got = 0u64;
+        while let Some(chunk) = body.chunk().await? {
+            file.write_all(&chunk).await?;
+            got += chunk.len() as u64;
+            // Counted as it comes, so a song that fails partway still shows in Data used.
+            let pending = self.0.data_pending.fetch_add(chunk.len() as u64, Ordering::Relaxed) + chunk.len() as u64;
+            if pending >= DATA_FLUSH_BYTES {
+                self.flush_data(DATA_FLUSH_BYTES);
+            }
+        }
+        file.flush().await?;
+        anyhow::ensure!(expected.is_none_or(|e| e == got), "got {got} of {expected:?} bytes");
+        Ok(())
     }
 
     pub fn library(&self) -> Option<&Library> {
@@ -444,11 +684,12 @@ impl Engine {
         self.0.rt.spawn(async move { e.prefetch_next().await });
     }
 
-    /// The song from disk, a cached unexpired stream URL, or one resolved now. A network
+    /// The song from disk (downloads, then the song cache), a cached unexpired stream URL, or one resolved now. A network
     /// stream records itself for the song cache.
     async fn stream(&self, id: &str) -> Result<(Stream, bool)> {
         let songs = self.song_cache();
-        let (mut s, cached) = match songs.as_ref().and_then(|c| c.lookup(id, self.effective_quality())) {
+        let local = local_copy(self.downloads().as_deref(), songs.as_deref(), id, self.effective_quality());
+        let (mut s, cached) = match local {
             Some(s) => (s, true),
             None => {
                 let (mut s, cached) = self.url(id).await?;
@@ -865,6 +1106,14 @@ impl Engine {
                         let _ = self.play_index(i).await;
                     }
                 }
+                PlayerEvent::Network { metered } => {
+                    let was = self.0.metered.swap(metered, Ordering::Relaxed);
+                    if was != metered {
+                        log::info!("network: {}", if metered { "mobile data" } else { "Wi-Fi" });
+                        self.sync_downloads();
+                        self.emit(Update::Network);
+                    }
+                }
                 PlayerEvent::Error { video_id, message } => {
                     log::warn!("playback error {video_id:?}: {message}");
                     self.on_error(video_id, message).await;
@@ -925,6 +1174,7 @@ impl Engine {
                 None
             };
             st.retried = None;
+            st.skipped = 0;
             if !same {
                 if let Some(track) = st.queue.iter().find(|t| t.id == video_id).cloned() {
                     st.playing = Some(PlayRecord {
@@ -1013,22 +1263,36 @@ impl Engine {
     async fn on_error(&self, video_id: Option<String>, message: String) {
         let Some(id) = video_id else { return };
         self.0.streams.lock().unwrap().remove(&id);
-        let (retry, index) = {
+        let (retry, index, skipped) = {
             let mut st = self.0.state.lock().unwrap();
             let retry = st.retried.as_deref() != Some(&id);
             st.retried = Some(id.clone());
-            (retry, st.index)
+            if !retry {
+                st.skipped += 1;
+            }
+            (retry, st.index, st.skipped)
         };
         if retry {
             let _ = self.play_index(index).await;
-        } else {
-            let title = self.current().map(|t| t.title).unwrap_or_default();
-            self.emit(Update::Error {
-                message: "That song stopped playing twice, so hum skipped it.".into(),
-                details: Some(self.report(&id, &title, &format!("playback: {message}"))),
-            });
-            let _ = self.next().await;
+            return;
         }
+        let title = self.current().map(|t| t.title).unwrap_or_default();
+        let details = Some(self.report(&id, &title, &format!("playback: {message}")));
+        // Every song failing (offline, or a broken player) must not spin through the queue.
+        if skipped >= 3 {
+            self.0.state.lock().unwrap().skipped = 0;
+            self.set_paused(true);
+            self.emit(Update::Error {
+                message: "Several songs in a row wouldn't play, so hum stopped.".into(),
+                details,
+            });
+            return;
+        }
+        self.emit(Update::Error {
+            message: "That song stopped playing twice, so hum skipped it.".into(),
+            details,
+        });
+        let _ = self.next().await;
     }
 }
 
@@ -1067,6 +1331,27 @@ fn explain(title: &str, e: &anyhow::Error) -> String {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn plays_downloads_before_the_song_cache() {
+        use crate::cache::SongCache;
+        use crate::downloads::Downloads;
+        let dir = std::env::temp_dir().join(format!("hum-engine-local-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let songs = SongCache::new(dir.join("songs"), 1 << 20);
+        let downloads = Downloads::new(dir.join("downloads"));
+        std::fs::write(dir.join("songs/a.140.m4a"), b"cached").unwrap();
+        std::fs::write(dir.join("songs/b.140.m4a"), b"cached").unwrap();
+        std::fs::write(dir.join("downloads/a.140.m4a"), b"downloaded").unwrap();
+        let q = super::Quality::High;
+        let a = super::local_copy(Some(&downloads), Some(&songs), "a", q).unwrap();
+        assert!(a.local && a.url.contains("downloads"), "a download wins over the cache");
+        let b = super::local_copy(Some(&downloads), Some(&songs), "b", q).unwrap();
+        assert!(b.url.contains("songs"), "the cache covers what is not downloaded");
+        assert!(super::local_copy(Some(&downloads), Some(&songs), "c", q).is_none());
+        assert!(super::local_copy(None, None, "a", q).is_none());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn unshuffle_puts_the_order_back() {
         let t = |id: &str| super::Track {
             id: id.into(),
@@ -1094,6 +1379,7 @@ mod tests {
             radio_seed: None,
             position: 0.0,
             retried: None,
+            skipped: 0,
             resume_at: None,
             playing: None,
         };
@@ -1141,6 +1427,7 @@ mod tests {
             radio_seed: None,
             position: 0.0,
             retried: None,
+            skipped: 0,
             resume_at: None,
             playing: None,
         };

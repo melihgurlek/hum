@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
+import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
@@ -24,14 +25,19 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
-        val http = DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)
+        // Downloads counts network bytes for Data used; Recorder copies them into the song cache.
+        val http = DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true).setTransferListener(Downloads)
         // Each YouTube client's urls want that client's User-Agent.
         val withAgent = ResolvingDataSource.Factory(http) { spec ->
             HumPlayer.userAgents[spec.uri.toString()]
                 ?.let { spec.withAdditionalHeaders(mapOf("User-Agent" to it)) } ?: spec
         }
         val player = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(this, withAgent)))
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(
+                    DataSource.Factory { RecordingDataSource(DefaultDataSource.Factory(this, withAgent).createDataSource()) },
+                ),
+            )
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(),
                 true,

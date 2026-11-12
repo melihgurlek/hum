@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, img, onAccount, type AccountPlaylist, type Profile, type Quality } from '../api'
-  import { player, quickPicksCache, refreshPlaylists, setAccountRadio, setQuality, setTheme, setAutoplay, setNormalize, showToast, ui, type ThemePref } from '../state.svelte'
+  import { downloads, layout, player, setMeteredDownloads, quickPicksCache, refreshDownloads, refreshPlaylists, setAccountRadio, setQuality, setSongCacheLimit, setTheme, setAutoplay, setNormalize, showToast, ui, type ThemePref } from '../state.svelte'
 
   let lists = $state<AccountPlaylist[] | null>(null)
   $effect(() => {
@@ -49,6 +49,24 @@
   async function clearSaved() {
     await api.clearSavedSongs()
     saved = await api.savedSongs()
+  }
+  // The automatic cache's size; Off keeps nothing new (what's kept stays until Clear).
+  const limits = [
+    { v: 0, label: 'Off' },
+    { v: 2 ** 29, label: '500 MB' },
+    { v: 2 ** 30, label: '1 GB' },
+    { v: 2 ** 31, label: '2 GB' },
+    { v: 5 * 2 ** 30, label: '5 GB' },
+  ]
+  $effect(() => {
+    refreshDownloads()
+  })
+  // Removing every download takes two taps: the songs come back only by downloading again.
+  let confirmRemove = $state(false)
+  async function removeDownloads() {
+    confirmRemove = false
+    await api.removeAllDownloads().catch((e) => showToast(String(e)))
+    refreshDownloads()
   }
   function size(bytes: number): string {
     if (bytes < 1e6) return `${Math.round(bytes / 1e3)} KB`
@@ -138,14 +156,51 @@
         <div><span class="num">{size(used.month)}</span><span class="od">in {month}</span></div>
         <div><span class="num">{size(used.total)}</span><span class="od">in all</span></div>
       </div>
+    </section>
+  {/if}
+
+  <section>
+    <h2>Storage</h2>
+    <div class="account lists col">
+      <span class="who">
+        <span class="ol">Keep songs I play</span>
+        <span class="od">Songs you play to the end stay on this device, so replays use no data and play offline. The oldest go first once this fills up.</span>
+      </span>
+      <div class="pills" role="radiogroup" aria-label="Space for songs you play">
+        {#each limits as l}
+          <button role="radio" aria-checked={ui.songCacheLimit === l.v} class:sel={ui.songCacheLimit === l.v} onclick={() => setSongCacheLimit(l.v)}>
+            <span class="trim">{l.label}</span>
+          </button>
+        {/each}
+      </div>
       {#if saved}
-        <div class="account lists">
-          <span class="who"><span class="ol">Saved songs: {saved.count} {saved.count === 1 ? 'song' : 'songs'}, {size(saved.bytes)}</span><span class="od">Songs you play to the end are kept on this device (up to 1 GB), so replays use no data</span></span>
+        <div class="line">
+          <span class="od">{saved.count} {saved.count === 1 ? 'song' : 'songs'} kept, {size(saved.bytes)}</span>
           {#if saved.count}<button class="quiet" onclick={clearSaved}>Clear</button>{/if}
         </div>
       {/if}
-    </section>
-  {/if}
+    </div>
+    {#if layout.phone}
+      <label class="opt">
+        <span><span class="ol">Download over mobile data</span><span class="od">Off: downloads wait for Wi-Fi</span></span>
+        <input class="switch" type="checkbox" checked={ui.meteredDownloads} onchange={(e) => setMeteredDownloads(e.currentTarget.checked)} />
+      </label>
+    {/if}
+    <div class="account lists">
+      <span class="who">
+        <span class="ol">Downloads</span>
+        <span class="od">{downloads.status?.count ?? 0} {downloads.status?.count === 1 ? 'song' : 'songs'}, {size(downloads.status?.bytes ?? 0)}. Playlists you download stay on this device until you remove them; download one from its page.</span>
+      </span>
+      {#if downloads.status?.count || downloads.status?.targets.length}
+        {#if confirmRemove}
+          <button class="quiet" onclick={() => (confirmRemove = false)}>Keep</button>
+          <button class="danger" onclick={removeDownloads}>Remove all</button>
+        {:else}
+          <button class="quiet" onclick={() => (confirmRemove = true)}>Remove all</button>
+        {/if}
+      {/if}
+    </div>
+  </section>
 
   <section>
     <h2>Appearance</h2>
@@ -263,6 +318,44 @@
   }
   .lists {
     margin-top: 6px;
+  }
+  /* A setting with its choices under it, not beside. */
+  .account.col {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+  .pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .pills button {
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 999px;
+    font-weight: 600;
+    background: var(--raised);
+  }
+  .pills button.sel {
+    background: var(--text);
+    color: var(--bg);
+  }
+  .line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .danger {
+    flex: none;
+    height: 40px;
+    padding: 0 18px;
+    border-radius: 999px;
+    font-weight: 700;
+    background: #c43c3c;
+    color: #fff;
   }
   .picker {
     margin-top: 6px;

@@ -1,11 +1,14 @@
 <script lang="ts">
   import { api, type Playlist } from '../api'
-  import { go, playList, prefetchOnHover, refreshPlaylists, showToast, ui } from '../state.svelte'
+  import { downloadLabel, downloadOf, go, layout, playList, prefetchOnHover, refreshPlaylists, showToast, ui } from '../state.svelte'
+  import BackButton from '../components/BackButton.svelte'
+  import DownloadButton from '../components/DownloadButton.svelte'
   import Icon from '../components/Icon.svelte'
   import Mosaic from '../components/Mosaic.svelte'
   import TrackRow from '../components/TrackRow.svelte'
 
   let pl = $state<Playlist | null>(null)
+  const dl = $derived(pl ? downloadOf(`playlist:${pl.id}`) : null)
   let missing = $state(false)
   let editing = $state(false)
   let draft = $state('')
@@ -101,11 +104,13 @@
 </script>
 
 <div class="page scroll">
+  <!-- Phones reach playlists from the Library list, so they get Back; the desktop has the sidebar. -->
+  {#if layout.phone}<BackButton />{/if}
   {#if missing}
     <p class="muted">This playlist no longer exists.</p>
   {:else if pl}
     <header>
-      <Mosaic covers={summary?.covers ?? []} size={168} radius={14} />
+      <Mosaic covers={summary?.covers ?? []} size={layout.phone ? 240 : 168} radius={14} />
       <div class="info">
         {#if editing}
           <label for="pl-name" class="sr">Playlist name</label>
@@ -120,6 +125,13 @@
         <p class="muted meta">
           {pl.tracks.length} {pl.tracks.length === 1 ? 'song' : 'songs'}{totalMin ? `, about ${totalMin} min` : ''}
         </p>
+        {#if layout.phone && dl}
+          {@const whole = dl.done >= dl.total}
+          <div class="dlstatus" class:whole>
+            <span class="trim">{downloadLabel(`playlist:${pl.id}`)}</span>
+            {#if !whole}<span class="bar"><span style:width="{(dl.done / Math.max(dl.total, 1)) * 100}%"></span></span>{/if}
+          </div>
+        {/if}
         <div class="actions">
           <button class="primary" disabled={!pl.tracks.length} use:prefetchOnHover={pl.tracks[0]?.id} onclick={() => pl && playList(pl.tracks, 0)}>
             <Icon name="play" size={16} /><span class="trim">Play</span>
@@ -127,6 +139,7 @@
           <button class="secondary" disabled={!pl.tracks.length} onclick={() => playList(shuffled(), 0)}>
             <Icon name="shuffle" size={16} /><span class="trim">Shuffle</span>
           </button>
+          {#if pl.tracks.length}<DownloadButton target={`playlist:${pl.id}`} compact={layout.phone} />{/if}
           {#if confirmDelete}
             <span class="confirm">
               {#if pl.synced}
@@ -221,6 +234,35 @@
     min-width: 0;
     flex: 1;
   }
+  /* Phone: the cover centered and large under the back button, the name and buttons below
+     at full width (side by side, they were squeezed into a narrow column). */
+  @media (max-width: 640px) {
+    header {
+      flex-direction: column;
+      align-items: stretch;
+      margin-top: 36px;
+      gap: 20px;
+    }
+    header > :global(.mosaic) {
+      align-self: center;
+    }
+    .info {
+      flex: none;
+      gap: 14px;
+    }
+    /* Trimmed to the letters: the title's line box left more room under it than the song
+       count had above the buttons, so the count sat low. */
+    .name,
+    .meta,
+    .dlstatus > span {
+      text-box: trim-both cap alphabetic;
+    }
+    /* .info: the desktop size below comes later in the file and won over a plain .name. */
+    .info .name,
+    .info .name-input {
+      font-size: 32px;
+    }
+  }
   .name,
   .name-input {
     font-size: 40px;
@@ -244,6 +286,29 @@
   }
   .meta {
     margin: 0;
+  }
+  /* The phone's download status (the button there is an icon): in the accent, with a bar while
+     songs come in, so it doesn't read as one more line of plain text. */
+  .dlstatus {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--accent, var(--accent-default));
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .dlstatus .bar {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--raised-2);
+    overflow: hidden;
+  }
+  .dlstatus .bar > span {
+    display: block;
+    height: 100%;
+    background: currentColor;
+    border-radius: 2px;
+    transition: width 0.3s;
   }
   .actions {
     display: flex;
