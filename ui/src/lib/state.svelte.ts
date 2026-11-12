@@ -43,6 +43,8 @@ class Player {
 class Ui {
   view = $state<View>(load<View>('hum.view', 'home'))
   nowPlayingOpen = $state(false)
+  /** Phone Now Playing: the Up next and lyrics sheet is pulled up over the player. */
+  npSheet = $state(false)
   query = $state('')
   theme = $state<ThemePref>(load<ThemePref>('hum.theme', 'system'))
   // 'normal' was the same stream as 'high' and is gone from Settings.
@@ -110,6 +112,7 @@ function show(p: Place) {
   ui.artistId = p.artistId
   ui.albumId = p.albumId
   ui.nowPlayingOpen = false
+  ui.npSheet = false
   save('hum.view', p.view)
   save('hum.playlistId', p.playlistId)
   save('hum.artistId', p.artistId)
@@ -134,11 +137,21 @@ const android = typeof navigator !== 'undefined' && /Android/.test(navigator.use
 export function markBackStep() {
   if (android) history.pushState(null, '')
 }
+// Closing from the screen (the chevron, a drag) goes back through those entries itself, so
+// the gesture doesn't later spend a back on a step that's already closed.
+let skipPops = 0
 if (android) {
   addEventListener('popstate', () => {
-    if (ui.nowPlayingOpen) ui.nowPlayingOpen = false
+    if (skipPops > 0) skipPops--
+    else if (ui.npSheet) ui.npSheet = false
+    else if (ui.nowPlayingOpen) ui.nowPlayingOpen = false
     else back()
   })
+}
+function unwind(steps: number) {
+  if (!android || !steps) return
+  skipPops += steps
+  history.go(-steps)
 }
 
 /** True under 640px, where the phone layout (tab bar, mini player, carousels) takes over. */
@@ -151,6 +164,22 @@ export function openNowPlaying() {
   if (ui.nowPlayingOpen) return
   ui.nowPlayingOpen = true
   markBackStep()
+}
+
+/** Close Now Playing from the screen, its Up next sheet with it. */
+export function closeNowPlaying() {
+  if (!ui.nowPlayingOpen) return
+  unwind(1 + (ui.npSheet ? 1 : 0))
+  ui.npSheet = false
+  ui.nowPlayingOpen = false
+}
+
+/** Pull the Up next and lyrics sheet up over phone Now Playing, or put it away. */
+export function setNpSheet(open: boolean) {
+  if (open === ui.npSheet) return
+  ui.npSheet = open
+  if (open) markBackStep()
+  else unwind(1)
 }
 
 export function go(view: View) {

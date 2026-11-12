@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api, artistLine, artistLinks, fmtTime, img, type TrackNote } from '../api'
-  import { player, ui, setAutoplay, toggleLike, reason, openAddMenu, openAlbum, prefetchOnHover } from '../state.svelte'
+  import { cubicOut } from 'svelte/easing'
+  import { closeNowPlaying, layout, player, ui, setAutoplay, setNpSheet, toggleLike, reason, openAddMenu, openAlbum, prefetchOnHover } from '../state.svelte'
   import ArtistLinks from '../components/ArtistLinks.svelte'
   import Icon from '../components/Icon.svelte'
   import Progress from '../components/Progress.svelte'
@@ -26,14 +27,123 @@
   })
   const why = (id: string) => reason(notes[id])
 
+  // Whether this song is in any playlist, so + can show a check like the heart shows a like.
+  // Re-asked when the add menu closes or the playlists change.
+  let inPlaylist = $state(false)
+  let askedFor: string | undefined
+  $effect(() => {
+    const id = player.current?.id
+    void ui.playlists
+    if (id !== askedFor) inPlaylist = false
+    askedFor = id
+    if (!id || ui.addMenu) return
+    api.playlistsWith(id).then((r) => (inPlaylist = r.length > 0 && player.current?.id === id)).catch(() => {})
+  })
+
   function close() {
-    ui.nowPlayingOpen = false
+    closeNowPlaying()
+  }
+
+  // Opening and closing: on a phone the screen slides up from the mini player and back down
+  // (from wherever a drag left it); on desktop it rises a little and fades.
+  function sheet(node: HTMLElement, { out = false } = {}) {
+    if (!layout.phone) {
+      return { duration: 200, easing: cubicOut, css: (t: number, u: number) => `opacity: ${t}; transform: translateY(${u * 24}px)` }
+    }
+    const h = node.clientHeight || innerHeight
+    const from = out ? dragY : 0
+    return {
+      duration: out ? 240 : 320,
+      easing: cubicOut,
+      css: (_t: number, u: number) => `transform: translateY(${out ? from + u * (h - from) : u * h}px)`,
+    }
+  }
+
+  // Phone gestures. Drag the player down to close it; drag the Up next bar up to open its
+  // sheet, and the sheet's top down to put it away. The first 10px pick the direction, so taps,
+  // the progress bar and the sheet's own scrolling keep working.
+  let dragY = $state(0) // the whole screen, while closing it
+  let sheetDy = $state(0) // the sheet, while moving it
+  let dragging = $state(false)
+  let g: { x: number; y: number; t: number; mode: 'np' | 'sheet' } | null = null
+  let axis: 'x' | 'y' | null = null
+  let dragged = false
+  function down(e: PointerEvent) {
+    if (!layout.phone || e.pointerType === 'mouse') return
+    const el = e.target as HTMLElement
+    if (el.closest('.progress, .menu, .backdrop')) return
+    const onSheetTop = !!el.closest('.grab, .panel .tabs')
+    if (el.closest('.panel') && !onSheetTop) return
+    g = { x: e.clientX, y: e.clientY, t: performance.now(), mode: onSheetTop ? 'sheet' : ui.npSheet ? 'sheet' : 'np' }
+    if (g.mode === 'np' && ui.npSheet) g = null
+    axis = null
+    dragged = false
+  }
+  function move(e: PointerEvent) {
+    if (!g) return
+    const mx = e.clientX - g.x
+    const my = e.clientY - g.y
+    if (!axis && Math.hypot(mx, my) > 10) {
+      axis = Math.abs(my) > Math.abs(mx) ? 'y' : 'x'
+      if (axis === 'y') {
+        try {
+          ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+        } catch {}
+      }
+    }
+    if (axis !== 'y') return
+    dragging = true
+    if (g.mode === 'np') dragY = Math.max(0, my)
+    else sheetDy = ui.npSheet ? Math.max(0, my) : Math.min(0, my)
+  }
+  function up(e: PointerEvent) {
+    if (!g) return
+    const my = e.clientY - g.y
+    const speed = my / Math.max(1, performance.now() - g.t) // px/ms, down is positive
+    if (axis) dragged = true
+    if (axis === 'y') {
+      if (g.mode === 'np') {
+        if (my > 140 || speed > 0.6) close()
+        else settle()
+      } else if (ui.npSheet && (my > 100 || speed > 0.6)) {
+        setNpSheet(false)
+        settle()
+      } else if (!ui.npSheet && (my < -60 || speed < -0.6)) {
+        setNpSheet(true)
+        settle()
+      } else settle()
+    }
+    g = null
+    axis = null
+  }
+  function settle() {
+    dragging = false
+    if (ui.nowPlayingOpen) dragY = 0
+    sheetDy = 0
+  }
+  function cancel() {
+    g = null
+    axis = null
+    settle()
+  }
+  function click(e: MouseEvent) {
+    if (dragged) {
+      e.stopPropagation()
+      e.preventDefault()
+      dragged = false
+    }
+  }
+  function pickTab(t: 'next' | 'lyrics') {
+    tab = t
+    if (layout.phone) setNpSheet(true)
   }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && close()} />
+<svelte:window onkeydown={(e) => e.key === 'Escape' && (ui.npSheet ? setNpSheet(false) : close())} />
 
-<div class="np" role="dialog" aria-label="Now playing">
+<div class="np" class:dragging role="dialog" aria-label="Now playing" in:sheet|global out:sheet|global={{ out: true }}
+  style:transform={dragY ? `translateY(${dragY}px)` : undefined}
+  onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={cancel} onclickcapture={click}>
   <header>
     <button class="round" onclick={close} aria-label="Close now playing"><Icon name="chevronDown" /></button>
     <div class="from">
@@ -66,8 +176,9 @@
             aria-label={player.liked ? 'Remove from Liked songs' : 'Add to Liked songs'} onclick={toggleLike}>
             <Icon name={player.liked ? 'heart' : 'heartOutline'} size={24} />
           </button>
-          <button class="heart" aria-label="Add to playlist" title="Add to playlist" onclick={(e) => openAddMenu([t], e)}>
-            <Icon name="plus" size={24} />
+          <button class="heart" class:on={inPlaylist} aria-label={inPlaylist ? 'In a playlist. Add to another' : 'Add to playlist'}
+            title={inPlaylist ? 'In a playlist' : 'Add to playlist'} onclick={(e) => openAddMenu([t], e)}>
+            <Icon name={inPlaylist ? 'check' : 'plus'} size={24} />
           </button>
         </div>
         <div class="progress">
@@ -86,14 +197,17 @@
         </div>
       </section>
 
-      <section class="panel" aria-label="Up next and lyrics">
+      <section class="panel" class:open={ui.npSheet} class:dragging aria-label="Up next and lyrics" style:--drag={`${sheetDy}px`}>
+        <!-- Phone: the sheet's handle. Tap or drag it to pull the sheet up or put it away. -->
+        <button class="grab phone-only" aria-label={ui.npSheet ? 'Hide up next and lyrics' : 'Show up next and lyrics'}
+          aria-expanded={ui.npSheet} onclick={() => setNpSheet(!ui.npSheet)}><span></span></button>
         <div class="tabs" role="tablist">
-          <button role="tab" aria-selected={tab === 'next'} class:sel={tab === 'next'} onclick={() => (tab = 'next')}><span class="trim">Up next</span></button>
-          <button role="tab" aria-selected={tab === 'lyrics'} class:sel={tab === 'lyrics'} onclick={() => (tab = 'lyrics')}><span class="trim">Lyrics</span></button>
+          <button role="tab" aria-selected={tab === 'next'} class:sel={tab === 'next' && (ui.npSheet || !layout.phone)} onclick={() => pickTab('next')}><span class="trim">Up next</span></button>
+          <button role="tab" aria-selected={tab === 'lyrics'} class:sel={tab === 'lyrics' && (ui.npSheet || !layout.phone)} onclick={() => pickTab('lyrics')}><span class="trim">Lyrics</span></button>
           <span class="spacer"></span>
           <label class="auto">
-            Autoplay radio
-            <input type="checkbox" checked={ui.autoplay} onchange={(e) => setAutoplay(e.currentTarget.checked)} />
+            Autoplay
+            <input class="switch" type="checkbox" checked={ui.autoplay} onchange={(e) => setAutoplay(e.currentTarget.checked)} />
           </label>
         </div>
 
@@ -314,10 +428,17 @@
   /* Phone: Now Playing is its own full screen over the tab bar, one scrolling column: cover,
      song, progress, transport with the sleep timer, then Up next and lyrics below the fold. */
   @media (max-width: 640px) {
+    /* One screen, no scrolling: the cover gives way on short phones, and Up next and lyrics
+       wait in a sheet whose bar is pinned at the bottom. */
     .np {
       position: fixed;
       z-index: 40;
-      padding-bottom: env(safe-area-inset-bottom);
+      overflow: hidden;
+      touch-action: none;
+      --peek: calc(64px + env(safe-area-inset-bottom));
+    }
+    .np:not(.dragging) {
+      transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
     }
     /* Everything sits on one 24px gutter: the close button, cover, titles and the icons at
        both ends of the transport row (their buttons pulled out by their padding). */
@@ -325,18 +446,21 @@
       padding: calc(8px + env(safe-area-inset-top)) 24px 4px;
     }
     .body {
-      padding: 8px 24px 24px;
-      gap: 32px;
+      overflow: hidden;
+      padding: 8px 24px calc(var(--peek) + 16px);
+      gap: 0;
     }
     .left {
-      max-width: none;
-      justify-content: flex-start;
-    }
-    .art {
-      flex: none;
-      width: 100%;
-      height: auto;
+      flex: 1 1 auto;
       min-height: 0;
+      max-width: none;
+      justify-content: safe center;
+    }
+    /* Square at the full width when there's room; shorter phones shrink it (width follows). */
+    .art {
+      flex: 0 1 calc(100vw - 48px);
+      width: auto;
+      min-height: 120px;
       align-self: center;
       box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
     }
@@ -380,13 +504,48 @@
     .side-ctl :global(.icon-btn.on) {
       color: var(--np-text);
     }
+    /* The sheet: parked with only its handle and tabs showing, pulled up to just under the
+       header. --drag follows a finger. */
     .panel {
-      height: calc(100dvh - 120px);
-      margin: 0 -12px;
-      padding: 14px 12px;
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      top: calc(64px + env(safe-area-inset-top));
+      height: auto;
+      flex: none;
+      gap: 10px;
+      z-index: 2;
+      padding: 0 16px env(safe-area-inset-bottom);
+      border-radius: 20px 20px 0 0;
+      background: color-mix(in srgb, var(--np-bg-2, var(--np-bg-2-default)) 92%, black);
+      box-shadow: 0 -8px 24px rgb(0 0 0 / 0.25);
+      transform: translateY(calc(100% - var(--peek) + var(--drag, 0px)));
+    }
+    .panel.open {
+      transform: translateY(var(--drag, 0px));
+    }
+    .panel:not(.dragging) {
+      transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .grab {
+      flex: none;
+      height: 20px;
+      justify-content: center;
+      align-items: center;
+    }
+    .grab span {
+      width: 36px;
+      height: 4px;
+      border-radius: 2px;
+      background: color-mix(in srgb, var(--np-text) 35%, transparent);
     }
     .tabs {
-      flex-wrap: wrap;
+      flex: none;
+      margin-top: -6px;
+    }
+    .panel :global(.scroll) {
+      touch-action: pan-y;
     }
     .qd {
       display: none;
@@ -424,10 +583,9 @@
     color: var(--np-muted);
     cursor: pointer;
   }
-  .auto input {
-    accent-color: var(--accent, var(--accent-default));
-    width: 18px;
-    height: 18px;
+  .auto {
+    font-weight: 600;
+    padding-right: 4px;
   }
   .queue {
     flex: 1;

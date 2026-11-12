@@ -320,6 +320,11 @@ async fn lyrics(app: State<'_, App>, track: Track) -> Res<Option<hum_core::lyric
 }
 
 #[tauri::command]
+async fn playlists_with(app: State<'_, App>, track_id: String) -> Res<Vec<(i64, usize)>> {
+    lib(&app)?.run(move |l| l.playlists_with(&track_id)).await.map_err(err)
+}
+
+#[tauri::command]
 async fn playlists(app: State<'_, App>) -> Res<Vec<PlaylistSummary>> {
     lib(&app)?.run(|l| l.playlists()).await.map_err(err)
 }
@@ -735,6 +740,7 @@ pub fn run() {
             set_autoplay,
             set_repeat,
             set_shuffle,
+            playlists_with,
             set_normalize,
             restore_queue,
             saved_songs,

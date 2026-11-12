@@ -1,18 +1,90 @@
 <script lang="ts">
   import { api, artistLinks, fmtTime, img } from '../api'
-  import { openNowPlaying, player, ui, setQuality, toggleLike } from '../state.svelte'
+  import { layout, openNowPlaying, player, ui, setQuality, toggleLike } from '../state.svelte'
   import Icon from './Icon.svelte'
   import ArtistLinks from './ArtistLinks.svelte'
   import Progress from './Progress.svelte'
   import SleepTimer from './SleepTimer.svelte'
   import RepeatButton from './RepeatButton.svelte'
   import ShuffleButton from './ShuffleButton.svelte'
+
+  // Phone mini player: swipe the song sideways to skip (left for next, right for previous),
+  // or up to open Now Playing. The first 10px decide the direction, so taps still work.
+  let dx = $state(0)
+  let settling = $state(false)
+  let start: { x: number; y: number; t: number } | null = null
+  let axis: 'x' | 'y' | null = null
+  let swiped = false
+  function down(e: PointerEvent) {
+    if (!layout.phone || e.pointerType === 'mouse' || !player.current) return
+    start = { x: e.clientX, y: e.clientY, t: performance.now() }
+    axis = null
+    swiped = false
+  }
+  function move(e: PointerEvent) {
+    if (!start) return
+    const mx = e.clientX - start.x
+    const my = e.clientY - start.y
+    if (!axis && Math.hypot(mx, my) > 10) {
+      axis = Math.abs(mx) > Math.abs(my) ? 'x' : 'y'
+      try {
+        ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+      } catch {}
+    }
+    if (axis === 'x') {
+      settling = false
+      dx = mx
+    }
+  }
+  function up(e: PointerEvent) {
+    if (!start) return
+    const mx = e.clientX - start.x
+    const my = e.clientY - start.y
+    const fast = Math.abs(mx) / Math.max(1, performance.now() - start.t) > 0.5
+    const width = (e.currentTarget as HTMLElement).clientWidth
+    if (axis) swiped = true
+    if (axis === 'x' && (Math.abs(mx) > width * 0.3 || fast)) {
+      // Slide the song off that side, change track, and bring the new one in from the other.
+      const dir = Math.sign(mx)
+      settling = true
+      dx = dir * width
+      setTimeout(() => {
+        if (dir < 0) api.next()
+        else api.previous()
+        settling = false
+        dx = -dir * width * 0.4
+        requestAnimationFrame(() => requestAnimationFrame(() => ((settling = true), (dx = 0))))
+      }, 160)
+    } else {
+      if (axis === 'y' && my < -40) openNowPlaying()
+      settling = true
+      dx = 0
+    }
+    start = null
+    axis = null
+  }
+  function cancel() {
+    start = null
+    axis = null
+    settling = true
+    dx = 0
+  }
+  // A swipe ends with a click on whatever it started on; don't let that open Now Playing.
+  function click(e: MouseEvent) {
+    if (swiped) {
+      e.stopPropagation()
+      e.preventDefault()
+      swiped = false
+    }
+  }
 </script>
 
-<footer class="bar" class:tinted={ui.nowPlayingOpen} aria-label="Player">
+<footer class="bar" class:tinted={ui.nowPlayingOpen} aria-label="Player"
+  onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={cancel} onclickcapture={click}>
   <!-- Phone: a thin progress line along the top of the mini player. -->
   {#if player.current && player.duration}<span class="mini-progress" style:width={`${Math.min(100, (player.position / player.duration) * 100)}%`}></span>{/if}
-  <div class="left">
+  <div class="left" class:settling style:transform={dx ? `translateX(${dx}px)` : undefined}
+    style:opacity={dx ? Math.max(0.2, 1 - Math.abs(dx) / 300) : undefined}>
     {#if player.current}
       <div class="np">
         {#if player.current.thumb}
@@ -249,6 +321,13 @@
     }
     .bar.tinted {
       display: none;
+    }
+    /* The bar handles its own swipes (nothing in it scrolls). */
+    .bar {
+      touch-action: none;
+    }
+    .left.settling {
+      transition: transform 0.16s ease-out, opacity 0.16s ease-out;
     }
     .mini-progress {
       display: block;

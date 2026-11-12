@@ -29,6 +29,10 @@
   })
   const seed = $derived(ui.recent[0] ?? qp?.seeds[0] ?? null)
   const picks = $derived(qp?.picks ?? [])
+  // Desktop shows the first 12 (about four rows) so the sections below stay in sight; phones
+  // swipe through all of them four rows at a time.
+  let allPicks = $state(false)
+  const shownPicks = $derived(layout.phone || allPicks ? picks : picks.slice(0, 12))
 
   let forgotten = $state<{ track: Track; last_played: number }[]>([])
   $effect(() => {
@@ -71,10 +75,13 @@
         <p class="muted">Finding songs like {seed.title}…</p>
       {:else}
         <div class="picks">
-          {#each picks as t, i (t.id)}
+          {#each shownPicks as t, i (t.id)}
             <TrackRow track={t} onplay={() => playList(picks, i)} />
           {/each}
         </div>
+        {#if !layout.phone && picks.length > 12}
+          <button class="link more" onclick={() => (allPicks = !allPicks)}>{allPicks ? 'Show fewer' : `Show all ${picks.length}`}</button>
+        {/if}
       {/if}
     </section>
 
@@ -239,6 +246,31 @@
   .ts {
     font-size: 13px;
     margin-top: -4px;
+  }
+  .more {
+    margin-top: 4px;
+  }
+  /* Phone: song lists swipe sideways in columns of four rows, each column a little narrower
+     than the screen so the next one peeks in; long lists no longer bury the sections below. */
+  @media (max-width: 640px) {
+    .picks {
+      grid-template-columns: none;
+      grid-template-rows: repeat(4, auto);
+      grid-auto-flow: column;
+      grid-auto-columns: calc(100% - 48px);
+      gap: 0 8px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      scroll-padding-inline: 8px;
+      scrollbar-width: none;
+      margin: 0 -16px;
+      padding: 0 8px;
+    }
+    /* Each row's own 8px padding puts its cover on the 16px gutter. */
+    .picks > :global(*) {
+      margin: 0;
+      scroll-snap-align: start;
+    }
   }
   /* Phone: card rows and Recently played scroll sideways, edge to edge past the 16px gutter,
      with the next card peeking in so it's clear there's more. */

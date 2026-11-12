@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { addToNewPlaylist, addToPlaylist, blockArtist, ui } from '../state.svelte'
+  import { api } from '../api'
+  import { addToNewPlaylist, addToPlaylist, blockArtist, layout, refreshPlaylists, showToast, ui } from '../state.svelte'
+  import Icon from './Icon.svelte'
   import Mosaic from './Mosaic.svelte'
 
   let name = $state('')
@@ -20,9 +22,34 @@
   $effect(() => {
     if (ui.addMenu) {
       name = ''
-      menu?.querySelector<HTMLInputElement>('input')?.focus()
+      // Not on a phone: focusing would throw the keyboard over the list.
+      if (!layout.phone) menu?.querySelector<HTMLInputElement>('input')?.focus()
     }
   })
+
+  // For one song: the playlists it's already in (and where), checked; tapping one takes it out.
+  let holding = $state<Map<number, number>>(new Map())
+  $effect(() => {
+    holding = new Map()
+    const t = ui.addMenu?.tracks.length === 1 ? ui.addMenu.tracks[0] : null
+    if (!t) return
+    api.playlistsWith(t.id).then((r) => (holding = new Map(r))).catch(() => {})
+  })
+  async function pick(id: number) {
+    const m = ui.addMenu
+    if (!m) return
+    const at = holding.get(id)
+    if (at === undefined) return addToPlaylist(id, m.tracks)
+    ui.addMenu = null
+    const name = ui.playlists.find((p) => p.id === id)?.name ?? 'playlist'
+    try {
+      await api.removeFromPlaylist(id, at)
+      showToast(`Removed from ${name}`)
+      refreshPlaylists()
+    } catch (e) {
+      showToast(String(e))
+    }
+  }
 
   function close() {
     ui.addMenu = null
@@ -48,9 +75,11 @@
     </form>
     <div class="list scroll">
       {#each ui.playlists as p (p.id)}
-        <button class="item" onclick={() => ui.addMenu && addToPlaylist(p.id, ui.addMenu.tracks)}>
+        {@const has = holding.has(p.id)}
+        <button class="item" aria-pressed={has} onclick={() => pick(p.id)} title={has ? `In ${p.name}. Tap to remove it.` : undefined}>
           <Mosaic covers={p.covers} size={36} radius={5} />
-          <span class="text"><span class="ellipsis">{p.name}</span><span class="muted n">{p.count} {p.count === 1 ? 'song' : 'songs'}</span></span>
+          <span class="text"><span class="ellipsis">{p.name}</span><span class="muted n">{has ? 'Added. Tap to remove' : `${p.count} ${p.count === 1 ? 'song' : 'songs'}`}</span></span>
+          {#if has}<span class="check" aria-hidden="true"><Icon name="check" size={16} /></span>{/if}
         </button>
       {:else}
         <p class="muted empty">No playlists yet. Name one above.</p>
@@ -68,12 +97,12 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    z-index: 30;
+    z-index: 50;
     cursor: default;
   }
   .menu {
     position: fixed;
-    z-index: 31;
+    z-index: 51;
     width: 280px;
     max-height: 420px;
     display: flex;
@@ -137,6 +166,18 @@
   }
   .item:hover {
     background: var(--raised);
+  }
+  .check {
+    margin-left: auto;
+    width: 24px;
+    height: 24px;
+    flex: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent, var(--accent-default));
+    color: var(--on-accent);
   }
   .text {
     display: flex;

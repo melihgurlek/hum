@@ -449,6 +449,22 @@ impl Library {
         Ok(added)
     }
 
+    /// Each playlist that holds the song, with the song's place in it (0-based), so the add
+    /// menu can show where it already is and take it out again.
+    pub fn playlists_with(&self, track_id: &str) -> Result<Vec<(i64, usize)>> {
+        let db = self.db.lock().unwrap();
+        let mut st = db.prepare(
+            "SELECT pt.playlist_id,
+                    (SELECT COUNT(*) FROM playlist_tracks o WHERE o.playlist_id = pt.playlist_id AND o.pos < pt.pos)
+             FROM playlist_tracks pt WHERE pt.track_id = ?1",
+        )?;
+        let v = st
+            .query_map(params![track_id], |r| Ok((r.get(0)?, r.get::<_, i64>(1)? as usize)))?
+            .flatten()
+            .collect();
+        Ok(v)
+    }
+
     /// Remove the song at `index` (0-based, in playlist order).
     pub fn remove_from_playlist(&self, id: i64, index: usize) -> Result<()> {
         let mut ids = self.track_ids(id)?;
@@ -1152,6 +1168,8 @@ mod tests {
         assert_eq!(ids(&lib), ["c", "a", "b"]);
         lib.remove_from_playlist(id, 1).unwrap();
         assert_eq!(ids(&lib), ["c", "b"]);
+        assert_eq!(lib.playlists_with("b").unwrap(), [(id, 1)]);
+        assert!(lib.playlists_with("a").unwrap().is_empty());
         let list = lib.playlists().unwrap();
         assert_eq!((list[0].name.as_str(), list[0].count), ("Night drive", 2));
         lib.rename_playlist(id, "").unwrap();

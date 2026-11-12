@@ -99,6 +99,8 @@ export const api = {
   deletePlaylist: (id: number) => invoke<void>('delete_playlist', { id }),
   addToPlaylist: (id: number, tracks: Track[]) => invoke<number>('add_to_playlist', { id, tracks }),
   removeFromPlaylist: (id: number, index: number) => invoke<void>('remove_from_playlist', { id, index }),
+  /** Playlists holding the song, each with the song's place in it. */
+  playlistsWith: (trackId: string) => invoke<[number, number][]>('playlists_with', { trackId }),
   moveInPlaylist: (id: number, from: number, to: number) => invoke<void>('move_in_playlist', { id, from, to }),
   savedSongs: () => invoke<{ count: number; bytes: number }>('saved_songs'),
   clearSavedSongs: () => invoke<void>('clear_saved_songs'),
