@@ -730,10 +730,22 @@ pub fn run() {
             engine.set_session_file(app.path().app_data_dir()?.join("session.json"));
             let mut updates = engine.subscribe();
             let handle = app.handle().clone();
+            #[cfg(target_os = "android")]
+            {
+                let (handle, engine) = (handle.clone(), engine.clone());
+                android::on_shown(move || {
+                    let u = hum_core::engine::Update::Position { secs: engine.position() };
+                    let _ = handle.emit("hum://update", u);
+                });
+            }
             tauri::async_runtime::spawn(async move {
                 loop {
                     match updates.recv().await {
                         Ok(u) => {
+                            #[cfg(target_os = "android")]
+                            if matches!(u, hum_core::engine::Update::Position { .. }) && !android::ui_visible() {
+                                continue;
+                            }
                             let _ = handle.emit("hum://update", u);
                         }
                         Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,

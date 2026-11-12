@@ -4,12 +4,41 @@
 //! through `nativeEvent(json)`.
 
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use jni::objects::{GlobalRef, JClass, JString};
 use jni::{JNIEnv, JavaVM};
 
 static VM: OnceLock<JavaVM> = OnceLock::new();
 static CLASS: OnceLock<GlobalRef> = OnceLock::new();
+static VISIBLE: AtomicBool = AtomicBool::new(true);
+static ON_SHOWN: OnceLock<Box<dyn Fn() + Send + Sync>> = OnceLock::new();
+
+/// Whether the app's screen is showing. While it isn't (another app, or the screen off), the
+/// page isn't sent the once-a-second position: each one woke the WebView's renderer to redraw a
+/// progress bar nobody could see (1.8 % of a core, screen off, playing).
+pub fn ui_visible() -> bool {
+    VISIBLE.load(Ordering::Relaxed)
+}
+
+/// Run when the screen shows again, to bring the page up to date.
+pub fn on_shown(f: impl Fn() + Send + Sync + 'static) {
+    let _ = ON_SHOWN.set(Box::new(f));
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_melihgurlek_hum_MainActivity_nativeVisible(
+    _env: JNIEnv,
+    _class: JClass,
+    visible: jni::sys::jboolean,
+) {
+    let visible = visible != 0;
+    if !VISIBLE.swap(visible, Ordering::Relaxed) && visible {
+        if let Some(f) = ON_SHOWN.get() {
+            f();
+        }
+    }
+}
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_melihgurlek_hum_HumPlayer_nativeInit(env: JNIEnv, class: JClass) {
