@@ -10,7 +10,8 @@ anyhow = "1"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
-ytmusic = { git = "https://github.com/sonorahq/ytmusic-rs", rev = "db4ab87" }
+# Fork of sonorahq/ytmusic-rs: upstream plus our fixes, offered back as PRs.
+ytmusic = { git = "https://github.com/melihgurlek/ytmusic-rs", rev = "453365d" }
 libmpv2 = "7"
 # Only for mpv_wakeup, which libmpv2 doesn't wrap. Same version libmpv2 7 uses.
 libmpv2-sys = "4"
