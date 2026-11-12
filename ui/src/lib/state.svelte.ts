@@ -617,6 +617,12 @@ export function hoverPrefetch(id: string) {
   clearTimeout(hoverTimer)
   hoverTimer = setTimeout(() => api.prefetch(id), 60)
 }
+/** A finger came down on something that plays: resolve it now. A tap lasts ~100 ms before
+ *  the click, and the engine shares the lookup with the play that follows. */
+export function touchPrefetch(id: string) {
+  if (ui.quality === 'data_saver') return
+  api.prefetch(id)
+}
 export function hoverCancel() {
   clearTimeout(hoverTimer)
 }
@@ -625,8 +631,10 @@ export function hoverCancel() {
 export function prefetchOnHover(node: HTMLElement, id: string | null | undefined) {
   let current = id
   const enter = () => current && hoverPrefetch(current)
+  const touch = () => current && touchPrefetch(current)
   node.addEventListener('mouseenter', enter)
   node.addEventListener('mouseleave', hoverCancel)
+  node.addEventListener('touchstart', touch, { passive: true })
   return {
     update(next: string | null | undefined) {
       current = next
@@ -634,6 +642,7 @@ export function prefetchOnHover(node: HTMLElement, id: string | null | undefined
     destroy() {
       node.removeEventListener('mouseenter', enter)
       node.removeEventListener('mouseleave', hoverCancel)
+      node.removeEventListener('touchstart', touch)
     },
   }
 }

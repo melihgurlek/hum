@@ -5,6 +5,8 @@ import android.content.Context
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
@@ -38,6 +40,8 @@ object HumPlayer {
     private var userVolume = 1f
     private var startedId: String? = null
     private var lastDuration = -1L
+    /** When the last play command arrived, to log how long the player took to sound. */
+    private var playAt = 0L
 
     fun init(context: Context) {
         app = context.applicationContext
@@ -106,6 +110,8 @@ object HumPlayer {
         }
         when (c.getString("cmd")) {
             "play" -> {
+                playAt = SystemClock.elapsedRealtime()
+                Log.i("HumPlayer", "play command")
                 startedId = null
                 lastDuration = -1
                 p.setMediaItem(item(c.getJSONObject("stream")))
@@ -146,6 +152,10 @@ object HumPlayer {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             val p = player ?: return
             if (isPlaying) {
+                if (playAt > 0) {
+                    Log.i("HumPlayer", "playing ${SystemClock.elapsedRealtime() - playAt} ms after the play command")
+                    playAt = 0
+                }
                 val id = p.currentMediaItem?.mediaId
                 if (id != null && id != startedId) {
                     startedId = id
@@ -173,6 +183,9 @@ object HumPlayer {
 
         override fun onPlaybackStateChanged(state: Int) {
             val p = player ?: return
+            if (state == Player.STATE_READY && playAt > 0) {
+                Log.i("HumPlayer", "ready ${SystemClock.elapsedRealtime() - playAt} ms after the play command")
+            }
             when (state) {
                 Player.STATE_BUFFERING -> if (p.playWhenReady && startedId != null && p.currentPosition > 0) send(ev("stalled"))
                 Player.STATE_ENDED -> send(ev("idle"))
