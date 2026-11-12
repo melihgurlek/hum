@@ -510,6 +510,12 @@ struct QueueView {
     index: usize,
 }
 
+/// What the player should show on launch: the live queue, or the one saved last time.
+#[tauri::command]
+fn session(app: State<'_, App>) -> hum_core::engine::Session {
+    app.engine.session()
+}
+
 #[tauri::command]
 fn queue(app: State<'_, App>) -> QueueView {
     let (tracks, index) = app.engine.queue();
@@ -721,6 +727,7 @@ pub fn run() {
             engine.set_song_cache(hum_core::cache::SongCache::new(app.path().app_cache_dir()?.join("songs"), 1 << 30));
             // In the data dir: the system may wipe the cache dir.
             engine.set_downloads(hum_core::downloads::Downloads::new(app.path().app_data_dir()?.join("downloads")));
+            engine.set_session_file(app.path().app_data_dir()?.join("session.json"));
             let mut updates = engine.subscribe();
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -793,6 +800,7 @@ pub fn run() {
             playlists_with,
             set_normalize,
             restore_queue,
+            session,
             saved_songs,
             clear_saved_songs,
             set_song_cache_limit,

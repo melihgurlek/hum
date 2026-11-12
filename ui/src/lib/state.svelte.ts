@@ -508,32 +508,38 @@ function sleepStep() {
   }
 }
 
-// The queue and where you were in it, saved as you listen and put back (paused) on launch.
+// The queue and where you were in it. The engine saves it as you listen (session.json) and
+// holds it on launch: the one saved last time, paused, or the live one if the process outlived
+// the page (Android recreating the activity while music plays).
 interface Session { queue: Track[]; index: number; position: number }
-let sessionSavedAt = 0
-function saveSession(force = false) {
-  if (!player.current || !player.queue.length) return
-  const now = Date.now()
-  if (!force && now - sessionSavedAt < 5000) return
-  sessionSavedAt = now
-  // Keep it small: what came just before and the next 200.
-  const from = Math.max(0, player.index - 20)
-  const queue = player.queue.slice(from, player.index + 200)
-  save('hum.session', { queue, index: player.index - from, position: player.position } satisfies Session)
-}
 
-function restoreSession() {
-  const s = load<Session | null>('hum.session', null)
+async function restoreSession() {
+  let s: Session | null = null
+  let playing = false
+  try {
+    const e = await api.session()
+    if (e.tracks.length) {
+      s = { queue: e.tracks, index: e.index, position: e.position }
+      playing = e.playing
+    }
+  } catch {}
+  // Saved by the page before the engine did it (once, on the first launch after the update).
+  if (!s) {
+    s = load<Session | null>('hum.session', null)
+    if (s?.queue[s.index]) api.restoreQueue(s.queue, s.index, s.position).catch(() => {})
+  }
+  try {
+    localStorage.removeItem('hum.session')
+  } catch {}
   const track = s?.queue[s.index]
   if (!s || !track || player.current) return
-  api.restoreQueue(s.queue, s.index, s.position).catch(() => {})
   player.queue = s.queue
   player.index = s.index
   player.current = track
   player.position = s.position
   player.positionAt = performance.now()
   player.duration = track.duration ?? 0
-  player.paused = true
+  player.paused = !playing
   player.loading = false
   api.isLiked(track.id).then((l) => (player.liked = l)).catch(() => {})
   if (track.thumb) {
@@ -571,13 +577,11 @@ export async function startListening() {
     showToast,
   )
   await onUpdate((u) => {
-    if (u.type === 'now_playing' || u.type === 'queue') queueMicrotask(() => saveSession(true))
-    else if (u.type === 'position' || u.type === 'paused') queueMicrotask(() => saveSession())
     switch (u.type) {
       case 'now_playing': {
         player.current = u.track
         player.index = u.index
-        player.position = 0
+        player.position = u.position
         player.positionAt = performance.now()
         player.duration = u.track.duration ?? 0
         player.loading = true

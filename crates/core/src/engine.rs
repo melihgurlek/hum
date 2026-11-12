@@ -6,8 +6,8 @@
 //! - No lock is held across an `.await`.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
-use std::path::Path;
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -47,7 +47,8 @@ const DATA_FLUSH_BYTES: u64 = 1 << 20;
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Update {
-    NowPlaying { track: Track, index: usize },
+    /// `position`: where it starts, in seconds (a resumed song doesn't start at 0).
+    NowPlaying { track: Track, index: usize, position: f64 },
     Queue { tracks: Vec<Track>, index: usize },
     Position { secs: f64 },
     Duration { secs: f64 },
@@ -180,6 +181,27 @@ struct Inner {
     metered_downloads: std::sync::atomic::AtomicBool,
     /// Loudness normalization (on unless turned off in Settings).
     normalize: std::sync::atomic::AtomicBool,
+    /// Paused, or nothing playing; the player's last word.
+    paused: AtomicBool,
+    /// Where the queue is saved as you listen, and when it last was.
+    session: Mutex<SessionFile>,
+}
+
+#[derive(Default)]
+struct SessionFile {
+    path: Option<PathBuf>,
+    saved_at: Option<Instant>,
+}
+
+/// The queue and where you were in it, as saved to disk and as the UI reads it on launch.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Session {
+    pub tracks: Vec<Track>,
+    pub index: usize,
+    pub position: f64,
+    /// Playing right now (the process outlived the UI); a restored session is paused.
+    #[serde(default)]
+    pub playing: bool,
 }
 
 #[derive(Default)]
@@ -321,6 +343,8 @@ impl Engine {
             pass_wake: Default::default(),
             metered: std::sync::atomic::AtomicBool::new(cfg!(target_os = "android")),
             metered_downloads: std::sync::atomic::AtomicBool::new(false),
+            paused: AtomicBool::new(true),
+            session: Default::default(),
         }));
         let e = engine.clone();
         engine.0.rt.spawn(async move { e.player_events(prx).await });
@@ -563,7 +587,74 @@ impl Engine {
     }
 
     fn emit(&self, u: Update) {
+        let save = match &u {
+            Update::NowPlaying { .. } | Update::Queue { .. } | Update::Paused { .. } => Some(true),
+            Update::Position { .. } => Some(false),
+            _ => None,
+        };
         let _ = self.0.updates.send(u);
+        if let Some(force) = save {
+            // On the runtime: a caller may still hold the state lock.
+            let e = self.clone();
+            self.0.rt.spawn(async move { e.save_session(force) });
+        }
+    }
+
+    /// Save the queue to `path` as you listen, and put back what was saved there (paused).
+    /// Saved here rather than by the UI: on Android the page isn't told the position while
+    /// it's hidden, and the process can be killed then.
+    pub fn set_session_file(&self, path: PathBuf) {
+        match std::fs::read(&path).map(|b| serde_json::from_slice::<Session>(&b)) {
+            Ok(Ok(s)) => self.restore(s.tracks, s.index, s.position),
+            Ok(Err(e)) => log::warn!("saved queue at {}: {e}", path.display()),
+            Err(_) => {}
+        }
+        self.0.session.lock().unwrap().path = Some(path);
+    }
+
+    /// The queue as it stands: a live one if something plays, else the restored one.
+    pub fn session(&self) -> Session {
+        let st = self.0.state.lock().unwrap();
+        Session {
+            tracks: st.queue.clone(),
+            index: st.index,
+            position: st.resume_at.unwrap_or(st.position),
+            playing: !self.0.paused.load(Ordering::Relaxed) && st.resume_at.is_none(),
+        }
+    }
+
+    /// At most every 5 s while the position ticks; at once when the song, queue or pause changes.
+    fn save_session(&self, force: bool) {
+        let path = {
+            let mut f = self.0.session.lock().unwrap();
+            let Some(path) = f.path.clone() else { return };
+            if !force && f.saved_at.is_some_and(|t| t.elapsed() < Duration::from_secs(5)) {
+                return;
+            }
+            f.saved_at = Some(Instant::now());
+            path
+        };
+        let s = {
+            let st = self.0.state.lock().unwrap();
+            if st.queue.is_empty() {
+                return;
+            }
+            // Keep it small: what came just before and the next 200.
+            let from = st.index.saturating_sub(20);
+            let to = (st.index + 201).min(st.queue.len());
+            Session {
+                tracks: st.queue[from..to].to_vec(),
+                index: st.index - from,
+                position: st.resume_at.unwrap_or(st.position),
+                playing: false,
+            }
+        };
+        let Ok(bytes) = serde_json::to_vec(&s) else { return };
+        // Whole or not at all: a kill mid-write leaves the last good copy.
+        let tmp = path.with_extension("json.part");
+        if let Err(e) = std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, &path)) {
+            log::warn!("saving the queue: {e}");
+        }
     }
 
     pub fn quality(&self) -> Quality {
@@ -812,6 +903,8 @@ impl Engine {
         st.resume_at = Some(position);
         st.radio_seed = None;
         st.next_loaded = None;
+        drop(st);
+        self.save_session(true);
     }
 
     /// Play a restored track from where it was left. True when there was one to resume.
@@ -842,7 +935,7 @@ impl Engine {
             st.resume_at = None;
             track
         };
-        self.emit(Update::NowPlaying { track: track.clone(), index });
+        self.emit(Update::NowPlaying { track: track.clone(), index, position: start.unwrap_or(0.0) });
         let resolving = Instant::now();
         let (mut stream, cached) = match self.stream(&track.id).await {
             Ok(s) => s,
@@ -1072,7 +1165,10 @@ impl Engine {
                     }
                     self.emit(Update::Duration { secs });
                 }
-                PlayerEvent::Paused(paused) => self.emit(Update::Paused { paused }),
+                PlayerEvent::Paused(paused) => {
+                    self.0.paused.store(paused, Ordering::Relaxed);
+                    self.emit(Update::Paused { paused });
+                }
                 PlayerEvent::Stalled => self.on_stall().await,
                 PlayerEvent::Downloaded { bytes, rate } => {
                     self.0.auto.lock().unwrap().sample(Instant::now(), rate);
@@ -1096,6 +1192,7 @@ impl Engine {
                     }
                 }
                 PlayerEvent::Idle => {
+                    self.0.paused.store(true, Ordering::Relaxed);
                     self.finish_play();
                     // Reached the end with nothing prefetched: try the next item.
                     let upcoming = {
@@ -1192,7 +1289,7 @@ impl Engine {
             self.emit(Update::Timing { video_id, ms, cached });
         }
         if let Some((track, index)) = advanced {
-            self.emit(Update::NowPlaying { track, index });
+            self.emit(Update::NowPlaying { track, index, position: 0.0 });
             self.after_track_change();
         } else if repeated {
             // Queue it again for the next time round.
