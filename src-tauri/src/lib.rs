@@ -364,6 +364,11 @@ fn toggle_pause(app: State<'_, App>) {
 }
 
 #[tauri::command]
+fn set_paused(app: State<'_, App>, paused: bool) {
+    app.engine.set_paused(paused);
+}
+
+#[tauri::command]
 fn seek(app: State<'_, App>, secs: f64) {
     app.engine.seek(secs);
 }
@@ -707,6 +712,7 @@ pub fn run() {
             previous,
             jump,
             toggle_pause,
+            set_paused,
             seek,
             set_volume,
             prefetch,

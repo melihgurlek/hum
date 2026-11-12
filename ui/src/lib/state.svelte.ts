@@ -26,6 +26,8 @@ class Player {
   position = $state(0)
   duration = $state(0)
   paused = $state(true)
+  /** 0-100, the player bar's slider. */
+  volume = $state(100)
   /** Wall-clock ms when `position` was last reported, for the progress bar's transition. */
   positionAt = $state(0)
   lastTiming = $state<{ ms: number; cached: boolean } | null>(null)
@@ -301,6 +303,52 @@ export function setNormalize(on: boolean) {
   ui.normalize = on
   save('hum.normalize', on)
   api.setNormalize(on)
+}
+
+// Sleep timer: pause after some minutes or at the end of this song, fading out over the last
+// 30 s (10 s for end of song), then put the volume back so the next play isn't silent.
+export const sleep = $state<{ until: number | null; endOfSong: boolean }>({ until: null, endOfSong: false })
+let sleepTick: ReturnType<typeof setInterval> | undefined
+let fading = false
+
+function stopSleep() {
+  clearInterval(sleepTick)
+  sleepTick = undefined
+  sleep.until = null
+  sleep.endOfSong = false
+  if (fading) api.setVolume(player.volume)
+  fading = false
+}
+
+/** Minutes, 'song' for the end of this song, or null to turn it off. */
+export function setSleep(choice: number | 'song' | null) {
+  stopSleep()
+  if (choice === null) return
+  if (choice === 'song') sleep.endOfSong = true
+  else sleep.until = Date.now() + choice * 60_000
+  sleepTick = setInterval(sleepStep, 500)
+}
+
+function sleepStep() {
+  let left: number // seconds until the pause
+  let fadeFor: number
+  if (sleep.endOfSong) {
+    if (!player.duration) return
+    const pos = player.position + (player.paused ? 0 : (performance.now() - player.positionAt) / 1000)
+    left = player.duration - pos - 1 // pause just before mpv moves on to the next song
+    fadeFor = 10
+  } else if (sleep.until) {
+    left = (sleep.until - Date.now()) / 1000
+    fadeFor = 30
+  } else return
+  if (left <= 0) {
+    api.setPaused(true)
+    stopSleep()
+    showToast('Sleep timer: paused')
+  } else if (left <= fadeFor && !player.paused) {
+    fading = true
+    api.setVolume(Math.round(player.volume * (left / fadeFor)))
+  }
 }
 
 // The queue and where you were in it, saved as you listen and put back (paused) on launch.

@@ -6,6 +6,7 @@ Updated in every PR. Newest done items at the top of each section.
 
 | PR | What |
 |---|---|
+| #44 | Sleep timer (moon in the player bar): pause after 15, 30, 45 or 60 minutes or at the end of this song, fading out over the last 30 s (10 s at a song's end), then the volume goes back for next time. The button shows the minutes left |
 | #43 | The queue and your place in it come back on launch, paused: the song, its cover color and the position. Nothing loads until you press play (no requests at launch); play resumes where you left off, and seeking first moves that spot |
 | #42 | Even out loudness (Settings → Playback, on by default): songs mastered louder than YouTube's reference are turned down by the difference, as YouTube does (measured 2–7 dB on four songs); quieter ones are left alone. Loudness is saved per song, so cached replays play at the same level |
 | #41 | A song that won't play says why: no connection, YouTube's bot check, age-restricted, not available (with YouTube's reason), or every stream refused, instead of the raw error chain. The toast has Copy details: hum version, OS, song link, quality and the full error, for a bug report |
@@ -46,14 +47,13 @@ Status 2026-11-12 (Linux): sign-in, account sync and the song cache (#33) work a
 account. Order below comes from [COMPETITORS.md](COMPETITORS.md): every dead client died of
 playback breaking, so reliability comes first.
 
-1. **Cheap desktop wins**: sleep timer with fade.
-2. **Cipher configs from the community registries** (`MetrolistGroup/faraday`,
+1. **Cipher configs from the community registries** (`MetrolistGroup/faraday`,
    `ZemerTeam/zemer-cipher`), refreshed when an unknown player hash appears, so YouTube
    changes are fixed without a hum release.
-3. **Test on Windows** (WebView2): sign-in, account sync, the song cache, account radio.
-4. **Test the song cache by hand**: seeking or skipping mid-song must discard the recording; a
+2. **Test on Windows** (WebView2): sign-in, account sync, the song cache, account radio.
+3. **Test the song cache by hand**: seeking or skipping mid-song must discard the recording; a
    song played to the end shows up under Settings → Saved songs.
-5. **Android spike** ([MOBILE.md](MOBILE.md)): the Rust engine playing from a Media3 foreground
+4. **Android spike** ([MOBILE.md](MOBILE.md)): the Rust engine playing from a Media3 foreground
    service after the WebView is gone.
 
 ## Later
