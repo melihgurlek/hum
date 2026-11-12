@@ -163,16 +163,16 @@
     <h2>Playback</h2>
     <div class="options">
       <label class="opt" class:sel={ui.autoplay}>
-        <input type="checkbox" checked={ui.autoplay} onchange={(e) => setAutoplay(e.currentTarget.checked)} />
+        <input class="switch" type="checkbox" checked={ui.autoplay} onchange={(e) => setAutoplay(e.currentTarget.checked)} />
         <span><span class="ol">Autoplay radio</span><span class="od">When your queue runs out, keep going with songs like the last one</span></span>
       </label>
       <label class="opt" class:sel={ui.normalize}>
-        <input type="checkbox" checked={ui.normalize} onchange={(e) => setNormalize(e.currentTarget.checked)} />
+        <input class="switch" type="checkbox" checked={ui.normalize} onchange={(e) => setNormalize(e.currentTarget.checked)} />
         <span><span class="ol">Even out loudness</span><span class="od">Turns down songs mastered louder than most, as YouTube does, so you don't reach for the volume</span></span>
       </label>
       {#if profile}
         <label class="opt" class:sel={ui.accountRadio}>
-          <input type="checkbox" checked={ui.accountRadio} onchange={(e) => setAccountRadio(e.currentTarget.checked)} />
+          <input class="switch" type="checkbox" checked={ui.accountRadio} onchange={(e) => setAccountRadio(e.currentTarget.checked)} />
           <span><span class="ol">Radio from my YouTube Music account</span><span class="od">About half the songs change, picked for your account; off gives the radio everyone gets</span></span>
         </label>
       {/if}
@@ -225,10 +225,17 @@
     cursor: pointer;
     min-height: 52px;
   }
+  /* Switches sit at the end of their row, as on a phone's settings. */
+  .opt:has(.switch) > span {
+    flex: 1;
+  }
+  .opt .switch {
+    order: 2;
+  }
   .opt.sel {
     border-color: var(--accent, var(--accent-default));
   }
-  .opt input {
+  .opt input:not(.switch) {
     accent-color: var(--accent, var(--accent-default));
     width: 18px;
     height: 18px;
@@ -326,13 +333,13 @@
     display: flex;
     flex-direction: column;
   }
-  .filled,
   .blocked {
     display: flex;
     flex-direction: column;
     gap: 8px;
     margin-top: 16px;
   }
+  .filled,
   .quiet {
     flex: none;
     height: 40px;

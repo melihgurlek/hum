@@ -88,7 +88,7 @@
     border-radius: var(--r-md);
     font-weight: 600;
     max-width: min(90vw, 640px);
-    z-index: 20;
+    z-index: 60;
     display: flex;
     align-items: center;
     gap: 16px;
