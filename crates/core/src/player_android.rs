@@ -64,6 +64,11 @@ fn stream_json(s: &Stream) -> Value {
         "local": s.local,
         // Media3 takes a linear volume for the item; the engine decides it in dB.
         "gain": s.gain_db.map_or(1.0, |db| 10f64.powf(db / 20.0)),
+        // For the notification and lock screen.
+        "title": s.meta.as_ref().map(|m| m.title.as_str()),
+        "artist": s.meta.as_ref().map(|m| m.artist.as_str()),
+        "album": s.meta.as_ref().and_then(|m| m.album.as_deref()),
+        "artwork": s.meta.as_ref().and_then(|m| m.artwork.as_deref()),
     })
 }
 

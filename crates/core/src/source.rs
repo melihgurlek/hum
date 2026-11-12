@@ -236,6 +236,30 @@ pub struct Stream {
     /// Volume change to play it at, in dB, decided by the engine (loudness normalization).
     #[serde(skip)]
     pub gain_db: Option<f64>,
+    /// What the system shows for it (Android's notification and lock screen), set by the
+    /// engine as it hands the stream to the player.
+    #[serde(skip)]
+    pub meta: Option<TrackMeta>,
+}
+
+/// A song's title, artists, album and cover, for the system's media controls.
+#[derive(Clone, Debug, Default)]
+pub struct TrackMeta {
+    pub title: String,
+    pub artist: String,
+    pub album: Option<String>,
+    pub artwork: Option<String>,
+}
+
+impl From<&Track> for TrackMeta {
+    fn from(t: &Track) -> Self {
+        TrackMeta {
+            title: t.title.clone(),
+            artist: t.artists.join(", "),
+            album: t.album.clone(),
+            artwork: t.cover.clone().or_else(|| t.thumb.clone()),
+        }
+    }
 }
 
 pub struct Source {
@@ -487,6 +511,7 @@ impl Source {
             local: false,
             loudness_db: fmt.loudness_db,
             gain_db: None,
+            meta: None,
         };
         log::debug!(
             "resolved {video_id} itag {} {}k in {:?}",

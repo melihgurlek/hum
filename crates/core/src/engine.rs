@@ -370,7 +370,8 @@ impl Engine {
         let e = self.clone();
         self.0.rt.spawn(async move {
             match e.stream(&track.id).await {
-                Ok((s, _)) => {
+                Ok((mut s, _)) => {
+                    s.meta = Some((&track).into());
                     // Only if the user hasn't moved on while this resolved.
                     let still = e.current().is_some_and(|t| t.id == track.id);
                     if still {
@@ -576,7 +577,7 @@ impl Engine {
             track
         };
         self.emit(Update::NowPlaying { track: track.clone(), index });
-        let (stream, cached) = match self.stream(&track.id).await {
+        let (mut stream, cached) = match self.stream(&track.id).await {
             Ok(s) => s,
             Err(e) => {
                 self.emit(Update::Error {
@@ -586,6 +587,7 @@ impl Engine {
                 return Err(e);
             }
         };
+        stream.meta = Some((&track).into());
         self.0.state.lock().unwrap().requested_at = Some((track.id.clone(), requested, cached));
         // A resume a few seconds in starts there; otherwise from the top.
         match start.filter(|s| *s > 2.0) {
@@ -670,7 +672,8 @@ impl Engine {
         };
         let Some(next) = next else { return };
         match self.stream(&next.id).await {
-            Ok((s, _)) => {
+            Ok((mut s, _)) => {
+                s.meta = Some((&next).into());
                 let mut st = self.0.state.lock().unwrap();
                 // Still the right next track?
                 if st.upcoming().and_then(|i| st.queue.get(i)).map(|t| &t.id) == Some(&next.id) {
