@@ -10,13 +10,6 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Linux-supported-2b2b30?style=flat-square" alt="Linux" />
-  <img src="https://img.shields.io/badge/Windows-supported-2b2b30?style=flat-square" alt="Windows" />
-  <img src="https://img.shields.io/badge/Android-supported-2b2b30?style=flat-square" alt="Android" />
-  <img src="https://img.shields.io/badge/license-GPL--3.0-2b2b30?style=flat-square" alt="License: GPL-3.0" />
-</p>
-
-<p align="center">
   <img src="docs/screenshots/desktop-np.webp" width="860" alt="hum on Linux: Now Playing, tinted from the album cover, with the songs up next" />
 </p>
 
@@ -31,24 +24,16 @@
 - **No account needed.** Search and play straight away. Sign in only if you want your YouTube
   Music likes and playlists.
 
-## A look around
+## On your phone
 
-<table>
-  <tr>
-    <td width="64%" valign="top">
-      <img src="docs/screenshots/desktop-home.webp" alt="Home on Linux: quick picks and recently played" />
-      <p align="center"><sub>Home on Linux: quick picks from what you listen to</sub></p>
-    </td>
-    <td width="18%" valign="top">
-      <img src="docs/screenshots/phone-np.webp" alt="Now Playing on Android" />
-      <p align="center"><sub>Now Playing on Android</sub></p>
-    </td>
-    <td width="18%" valign="top">
-      <img src="docs/screenshots/phone-home.webp" alt="Home on Android" />
-      <p align="center"><sub>Home on Android</sub></p>
-    </td>
-  </tr>
-</table>
+The same app, laid out for one hand: the player sits where your thumb is, and lists scroll
+sideways so the next section is always in reach.
+
+<p align="center">
+  <img src="docs/screenshots/phone-np.webp" width="260" alt="Now Playing on Android" />
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/phone-home.webp" width="260" alt="Home on Android: quick picks and recently played" />
+</p>
 
 ## What it does
 
