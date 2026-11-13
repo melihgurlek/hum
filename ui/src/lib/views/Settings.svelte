@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, img, onAccount, type AccountPlaylist, type Profile, type Quality } from '../api'
-  import { downloads, layout, player, setMeteredDownloads, quickPicksCache, refreshDownloads, refreshPlaylists, setAccountRadio, setQuality, setSongCacheLimit, setTheme, setAutoplay, setNormalize, showToast, ui, type ThemePref } from '../state.svelte'
+  import { downloads, layout, player, setMeteredDownloads, quickPicksCache, refreshDownloads, refreshRecent, savedPicks, refreshPlaylists, setAccountRadio, setQuality, setSongCacheLimit, setTheme, setAutoplay, setNormalize, showToast, ui, type ThemePref } from '../state.svelte'
 
   let lists = $state<AccountPlaylist[] | null>(null)
   $effect(() => {
@@ -67,6 +67,20 @@
     confirmRemove = false
     await api.removeAllDownloads().catch((e) => showToast(String(e)))
     refreshDownloads()
+  }
+  // Clearing the history takes two taps too: what radio and Quick picks learned can't come back.
+  let confirmClear = $state(false)
+  async function clearHistory() {
+    confirmClear = false
+    try {
+      await api.clearHistory()
+      quickPicksCache.clear()
+      savedPicks.clear()
+      await refreshRecent()
+      showToast('History cleared. Quick picks and radio start fresh.')
+    } catch (e) {
+      showToast(String(e))
+    }
   }
   function size(bytes: number): string {
     if (bytes < 1e6) return `${Math.round(bytes / 1e3)} KB`
@@ -230,6 +244,18 @@
           <input class="switch" type="checkbox" checked={ui.accountRadio} onchange={(e) => setAccountRadio(e.currentTarget.checked)} />
           <span><span class="ol">Radio from my YouTube Music account</span><span class="od">About half the songs change, picked for your account; off gives the radio everyone gets</span></span>
         </label>
+      {/if}
+    </div>
+    <div class="account lists">
+      <span class="who">
+        <span class="ol">Listening history</span>
+        <span class="od">Quick picks and radio learn from what you play and skip. Clearing starts them fresh; likes, playlists and saved songs stay.{#if profile && ui.accountRadio}{' '}Radio from your YouTube Music account isn't affected.{/if}</span>
+      </span>
+      {#if confirmClear}
+        <button class="quiet" onclick={() => (confirmClear = false)}>Keep</button>
+        <button class="danger" onclick={clearHistory}>Clear history</button>
+      {:else}
+        <button class="quiet" onclick={() => (confirmClear = true)}>Clear</button>
       {/if}
     </div>
     {#if blocked.length}
