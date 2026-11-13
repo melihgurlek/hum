@@ -3,6 +3,8 @@
 An ad-free YouTube Music player for Linux, Windows and Android, made for listening, not
 tinkering. No account needed, no subscription, no ads.
 
+![hum on Linux: Now Playing, colored from the album cover, with Up next](docs/screenshots/desktop-np.webp)
+
 ![hum on Linux: Home with quick picks and recently played](docs/screenshots/desktop-home.webp)
 
 <p>
