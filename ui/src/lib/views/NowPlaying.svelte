@@ -106,6 +106,11 @@
   let artDx = $state(0) // the cover, while swiping to another song
   let artSettling = $state(false)
   let dragging = $state(false)
+  // Set as the sheet's own transform, not a CSS variable: a variable is inherited, so each
+  // finger move restyled every row of Up next, and dragging the sheet lagged.
+  const sheetTransform = $derived(
+    sheetDy ? (ui.npSheet ? `translateY(${sheetDy}px)` : `translateY(calc(100% - var(--peek) + ${sheetDy}px))`) : undefined,
+  )
   let g: { x: number; y: number; t: number; mode: 'np' | 'sheet' } | null = null
   let axis: 'x' | 'y' | null = null
   let dragged = false
@@ -327,7 +332,7 @@
         {/if}
       </section>
 
-      <section class="panel" use:sheetPull class:open={ui.npSheet} class:dragging aria-label="Up next and lyrics" style:--drag={`${sheetDy}px`}>
+      <section class="panel" use:sheetPull class:open={ui.npSheet} class:dragging aria-label="Up next and lyrics" style:transform={sheetTransform}>
         <!-- Phone: the sheet's handle. Tap or drag it to pull the sheet up or put it away. -->
         <button class="grab phone-only" aria-label={ui.npSheet ? 'Hide up next and lyrics' : 'Show up next and lyrics'}
           aria-expanded={ui.npSheet} onclick={() => setNpSheet(!ui.npSheet)}><span></span></button>
@@ -722,7 +727,7 @@
       color: var(--np-text);
     }
     /* The sheet: parked with only its handle and tabs showing, pulled up to just under the
-       header. --drag follows a finger. */
+       header. A drag sets its transform inline (sheetTransform). */
     .panel {
       position: absolute;
       left: 0;
@@ -737,10 +742,13 @@
       border-radius: 20px 20px 0 0;
       background: color-mix(in srgb, var(--np-bg-2, var(--np-bg-2-default)) 92%, black);
       box-shadow: 0 -8px 24px rgb(0 0 0 / 0.25);
-      transform: translateY(calc(100% - var(--peek) + var(--drag, 0px)));
+      transform: translateY(calc(100% - var(--peek)));
     }
     .panel.open {
-      transform: translateY(var(--drag, 0px));
+      transform: translateY(0);
+    }
+    .panel.dragging {
+      will-change: transform;
     }
     /* Parked, only the handle and the tabs show; the list under them stays hidden instead of
        peeking out as a sliver (it fades in as the sheet comes up). */
