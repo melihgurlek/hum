@@ -3,7 +3,9 @@
  * pressed, clipped to its shape, and fades when the finger lifts.
  *
  * Started on pointerdown rather than through CSS :active, which the WebView holds back while it
- * decides between a tap and a scroll (the press looked late). A scroll cancels it. The ripple is
+ * decides between a tap and a scroll (the press looked late). A scroll cancels it. Inside a
+ * scrolling list it waits 100 ms first, as Android does, so a touch that turns into a scroll
+ * shows none (the ripple stays where it was drawn while the list moves away). The ripple is
  * drawn in a fixed layer over the page, so no control needs `position` or `overflow` for it.
  * Buttons stretched over a row or card through an absolute ::after ripple over that row.
  */
@@ -21,6 +23,24 @@ interface Live {
 
 let layer: HTMLElement | null = null
 let live: Live | null = null
+// A press inside a scrolling list, waiting to see whether it becomes a scroll.
+let pending: { timer: number; start: () => void } | null = null
+const TAP_TIMEOUT = 100 // ms, Android's ViewConfiguration.getTapTimeout()
+
+function inScroller(el: HTMLElement): boolean {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const s = getComputedStyle(p)
+    if (/(auto|scroll)/.test(s.overflowY) && p.scrollHeight > p.clientHeight) return true
+    if (/(auto|scroll)/.test(s.overflowX) && p.scrollWidth > p.clientWidth) return true
+  }
+  return false
+}
+
+function cancel() {
+  if (pending) clearTimeout(pending.timer)
+  pending = null
+  release(true)
+}
 
 function surface(el: HTMLElement): HTMLElement {
   const after = getComputedStyle(el, '::after')
@@ -34,10 +54,15 @@ function release(fast = false) {
   const r = live
   if (!r) return
   live = null
+  // Cut off by a scroll: gone at once, not left fading where the row used to be.
+  if (fast) {
+    r.clip.remove()
+    return
+  }
   // A quick tap still lets the circle finish growing, so it is seen at all.
-  const wait = fast ? 0 : Math.max(0, 200 - (performance.now() - r.born))
+  const wait = Math.max(0, 200 - (performance.now() - r.born))
   setTimeout(() => {
-    r.dot.style.transition = `opacity ${fast ? 100 : 250}ms ease-out, transform 200ms ease-out`
+    r.dot.style.transition = 'opacity 250ms ease-out, transform 200ms ease-out'
     r.dot.style.opacity = '0'
     setTimeout(() => r.clip.remove(), 300)
   }, wait)
@@ -47,8 +72,15 @@ function down(e: PointerEvent) {
   if (e.pointerType !== 'touch' || !e.isPrimary) return
   const hit = (e.target as Element | null)?.closest?.(SELECTOR) as HTMLElement | null
   if (!hit || (hit as HTMLButtonElement).disabled || hit.closest('[data-no-ripple]')) return
-  release(true)
+  cancel()
   const el = surface(hit)
+  const at = { x: e.clientX, y: e.clientY }
+  const start = () => show(hit, el, at)
+  if (inScroller(el)) pending = { timer: window.setTimeout(() => ((pending = null), start()), TAP_TIMEOUT), start }
+  else start()
+}
+
+function show(hit: HTMLElement, el: HTMLElement, at: { x: number; y: number }) {
   const box = el.getBoundingClientRect()
   if (!box.width || !box.height) return
   const style = getComputedStyle(el)
@@ -74,8 +106,8 @@ function down(e: PointerEvent) {
     overflow: 'hidden',
   })
   // Big enough to reach the farthest corner from the finger.
-  const x = e.clientX - box.left
-  const y = e.clientY - box.top
+  const x = at.x - box.left
+  const y = at.y - box.top
   const size = 2 * Math.hypot(Math.max(x, box.width - x), Math.max(y, box.height - y))
   const dot = document.createElement('div')
   Object.assign(dot.style, {
@@ -92,19 +124,32 @@ function down(e: PointerEvent) {
   })
   clip.append(dot)
   layer.append(clip)
-  live = { clip, dot, x: e.clientX, y: e.clientY, born: performance.now() }
+  live = { clip, dot, x: at.x, y: at.y, born: performance.now() }
   requestAnimationFrame(() => (dot.style.transform = 'scale(1)'))
 }
 
+let downAt = { x: 0, y: 0 }
 function move(e: PointerEvent) {
-  if (live && Math.hypot(e.clientX - live.x, e.clientY - live.y) > SLOP) release(true)
+  if (!live && !pending) return
+  if (Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > SLOP) cancel()
+}
+
+// A tap shorter than the wait still gets its ripple, drawn as the finger lifts.
+function up() {
+  if (pending) {
+    clearTimeout(pending.timer)
+    const { start } = pending
+    pending = null
+    start()
+  }
+  release()
 }
 
 export function ripples() {
-  addEventListener('pointerdown', down, { passive: true, capture: true })
+  addEventListener('pointerdown', (e) => ((downAt = { x: e.clientX, y: e.clientY }), down(e)), { passive: true, capture: true })
   addEventListener('pointermove', move, { passive: true, capture: true })
-  addEventListener('pointerup', () => release(), { passive: true, capture: true })
-  addEventListener('pointercancel', () => release(true), { passive: true, capture: true })
+  addEventListener('pointerup', up, { passive: true, capture: true })
+  addEventListener('pointercancel', cancel, { passive: true, capture: true })
   // A scroll inside a list doesn't always cancel the pointer first.
-  addEventListener('scroll', () => release(true), { passive: true, capture: true })
+  addEventListener('scroll', cancel, { passive: true, capture: true })
 }
