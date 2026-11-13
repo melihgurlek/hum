@@ -33,7 +33,7 @@
   {#if album}
     {@const a = album.card}
     <header>
-      {#if album.cover}<img class="cover art" src={img(album.cover)} alt={`${a.title} cover`} />{:else}<div class="cover art"></div>{/if}
+      {#if album.cover}<img class="cover art" src={img(album.cover, true)} alt={`${a.title} cover`} />{:else}<div class="cover art"></div>{/if}
       <div class="info">
         <p class="kind">{a.kind}{a.year ? ` · ${a.year}` : ''}</p>
         <h1>{a.title}</h1>

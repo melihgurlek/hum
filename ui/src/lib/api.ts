@@ -164,8 +164,9 @@ export function fmtTime(secs: number | null | undefined): string {
 // Cover art is served by the Rust side (disk cache). Windows and Android expose custom
 // protocols as http://<scheme>.localhost, Linux and macOS as <scheme>://localhost.
 const imgBase = /Windows|Android/.test(navigator.userAgent) ? 'http://img.localhost/' : 'img://localhost/'
-export function img(url: string | null | undefined): string | undefined {
-  return url ? imgBase + encodeURIComponent(url) : undefined
+/** `large`: the big version of a cover, for Now Playing and the album page (sized in Rust). */
+export function img(url: string | null | undefined, large = false): string | undefined {
+  return url ? imgBase + (large ? 'large/' : '') + encodeURIComponent(url) : undefined
 }
 
 /** A track's artists as links. Only the first artist's id is known for a track. */
