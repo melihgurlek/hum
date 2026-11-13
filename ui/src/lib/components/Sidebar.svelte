@@ -12,7 +12,7 @@
 <nav class="side" aria-label="Main">
   <div class="logo">
     <span class="mark" aria-hidden="true">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M4 10v4M8 6v12M12 9v6M16 4v16M20 10v4" /></svg>
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.85"><path d="M-7.6 16.5C-3.67 16.5-.73 11.5 3.2 11.5S10.07 16.5 14 16.5 20.87 11.5 24.8 11.5 31.67 16.5 35.6 16.5" /></svg>
     </span>
     hum
   </div>
@@ -75,6 +75,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
     transition: background 0.4s;
   }
   .link {
