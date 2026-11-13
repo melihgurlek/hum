@@ -253,7 +253,9 @@
     display: flex;
     flex-direction: column;
     gap: 28px;
-    max-width: 720px;
+    /* The column stays 720px wide, but the page fills the window, so the scrollbar sits at the
+       window's edge and the wheel scrolls anywhere over it, not only over the column. */
+    padding-right: max(32px, calc(100% - 688px));
   }
   h1 {
     font-size: 24px;

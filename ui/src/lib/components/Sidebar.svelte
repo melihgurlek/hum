@@ -1,12 +1,11 @@
 <script lang="ts">
-  import { go, newPlaylistFromSidebar, openHistory, openLibrary, openLiked, openPlaylist, ui, type View } from '../state.svelte'
+  import { go, newPlaylistFromSidebar, openHistory, openLiked, openPlaylist, ui, type View } from '../state.svelte'
   import Icon from './Icon.svelte'
   import Mosaic from './Mosaic.svelte'
 
   const items: { view: View; label: string; icon: string }[] = [
     { view: 'home', label: 'Home', icon: 'home' },
     { view: 'search', label: 'Search', icon: 'search' },
-    { view: 'library', label: 'Library', icon: 'library' },
   ]
 </script>
 
@@ -18,14 +17,13 @@
     hum
   </div>
   {#each items as it}
-    <button class="link" class:active={ui.view === it.view && (it.view !== 'library' || ui.libraryTab === 'playlists') && !ui.nowPlayingOpen}
-      onclick={() => (it.view === 'library' ? openLibrary() : go(it.view))}>
+    <button class="link" class:active={ui.view === it.view && !ui.nowPlayingOpen} onclick={() => go(it.view)}>
       <Icon name={it.icon} />{it.label}
     </button>
   {/each}
 
   <div class="head">
-    <h2 class="label">Playlists</h2>
+    <h2 class="label">Library</h2>
     <button class="add" aria-label="New playlist" title="New playlist" onclick={newPlaylistFromSidebar}><Icon name="plus" size={18} /></button>
   </div>
   <div class="recent scroll">
