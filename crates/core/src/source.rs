@@ -255,16 +255,13 @@ pub struct TrackMeta {
 
 impl From<&Track> for TrackMeta {
     fn from(t: &Track) -> Self {
-        let artwork_file = [&t.cover, &t.thumb]
-            .into_iter()
-            .flatten()
-            .find_map(|u| images::cached(u))
+        let artwork_file = images::best_cached(t.cover.as_deref(), t.thumb.as_deref())
             .map(|p| p.to_string_lossy().into_owned());
         TrackMeta {
             title: t.title.clone(),
             artist: t.artists.join(", "),
             album: t.album.clone(),
-            artwork: t.cover.clone().or_else(|| t.thumb.clone()),
+            artwork: t.cover.as_deref().map(images::large_sure).or_else(|| t.thumb.clone()),
             artwork_file,
         }
     }
@@ -312,6 +309,19 @@ pub mod images {
     /// is still bigger than what the API lists.
     fn fallback(url: &str) -> Option<String> {
         url.strip_suffix("/hq720.jpg").map(|base| format!("{base}/hqdefault.jpg"))
+    }
+
+    /// A big cover URL that always exists, for the system's media controls (they fetch it
+    /// themselves, with no fallback): album art at 1024 px, a video's 480x360 thumbnail.
+    pub fn large_sure(url: &str) -> String {
+        let l = large(url);
+        fallback(&l).unwrap_or(l)
+    }
+
+    /// The best copy of a cover in the cache: the large one when it's there.
+    pub fn best_cached(cover: Option<&str>, thumb: Option<&str>) -> Option<PathBuf> {
+        let large = cover.map(large);
+        [large.as_deref(), cover, thumb].into_iter().flatten().find_map(cached)
     }
 
     /// Download `url`, or its fallback when it doesn't exist.
@@ -364,6 +374,10 @@ pub mod images {
                 Some("https://i.ytimg.com/vi/x/hqdefault.jpg")
             );
             assert_eq!(fallback("https://lh3.googleusercontent.com/abc=w1024-h1024"), None);
+            assert_eq!(
+                large_sure("https://i.ytimg.com/vi/x/hqdefault.jpg?sqp=a"),
+                "https://i.ytimg.com/vi/x/hqdefault.jpg"
+            );
         }
     }
 }

@@ -1035,6 +1035,10 @@ impl Engine {
         let Some(next) = next else { return };
         match self.stream(&next.id).await {
             Ok((mut s, _)) => {
+                // Its big cover first, so the lock screen shows it sharp when the song starts.
+                if let Some(c) = &next.cover {
+                    crate::source::images::fetch(&crate::source::images::large(c)).await;
+                }
                 s.meta = Some((&next).into());
                 let mut st = self.0.state.lock().unwrap();
                 // Still the right next track?

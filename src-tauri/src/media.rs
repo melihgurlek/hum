@@ -6,6 +6,7 @@
 
 use std::time::Duration;
 
+use hum_core::source::images;
 use hum_core::{Engine, Update};
 use souvlaki::{
     MediaControlEvent, MediaControls, MediaMetadata, MediaPlayback, MediaPosition, PlatformConfig,
@@ -61,11 +62,16 @@ fn run(
                 has_track = true;
                 position = 0.0;
                 let artist = track.artists.join(", ");
+                // The cached big cover when there is one, else a big URL that always exists.
+                let cover = images::best_cached(track.cover.as_deref(), track.thumb.as_deref())
+                    .and_then(|p| reqwest::Url::from_file_path(p).ok())
+                    .map(|u| u.to_string())
+                    .or_else(|| track.cover.as_deref().map(images::large_sure));
                 let _ = controls.set_metadata(MediaMetadata {
                     title: Some(&track.title),
                     artist: Some(&artist),
                     album: track.album.as_deref(),
-                    cover_url: track.cover.as_deref(),
+                    cover_url: cover.as_deref(),
                     duration: track.duration.map(|d| Duration::from_secs(d as u64)),
                 });
                 let _ = controls.set_playback(playback(paused, position));
