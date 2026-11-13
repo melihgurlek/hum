@@ -957,10 +957,30 @@ impl Engine {
             None => self.0.player.send(Command::Play(stream)),
         }
         self.after_track_change();
+        self.send_large_artwork(&track);
         Ok(())
     }
 
     /// Background work once a track is (about to be) playing: radio top-up and prefetch.
+    /// A tapped song starts with whatever cover is at hand, not waiting for the big one; once
+    /// that is downloaded, the lock screen switches to it. (A song that follows another had its
+    /// big cover fetched with its prefetch.)
+    fn send_large_artwork(&self, track: &Track) {
+        use crate::source::images;
+        let Some(large) = track.cover.as_deref().map(images::large) else { return };
+        if images::cached(&large).is_some() {
+            return;
+        }
+        let (e, id) = (self.clone(), track.id.clone());
+        self.0.rt.spawn(async move {
+            images::fetch(&large).await;
+            let Some(file) = images::cached(&large) else { return };
+            if e.current().is_some_and(|t| t.id == id) {
+                e.0.player.send(Command::Artwork { video_id: id, file });
+            }
+        });
+    }
+
     fn after_track_change(&self) {
         self.maybe_step_up();
         let e = self.clone();

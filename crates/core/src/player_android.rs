@@ -97,6 +97,9 @@ fn to_json(cmd: &Command) -> Value {
         Command::Volume(v) => json!({ "cmd": "volume", "volume": v / 100.0 }),
         Command::Stop => json!({ "cmd": "stop" }),
         Command::QueryNetwork => json!({ "cmd": "network" }),
+        Command::Artwork { video_id, file } => {
+            json!({ "cmd": "artwork", "id": video_id, "file": file.to_string_lossy() })
+        }
     }
 }
 
