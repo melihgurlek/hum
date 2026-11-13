@@ -67,7 +67,7 @@ class Ui {
   /** Pages visited before this one, for Back (button, Alt+Left, mouse back). */
   history = $state<Place[]>([])
   playlists = $state<PlaylistSummary[]>([])
-  libraryTab = $state<'liked' | 'history' | 'playlists'>('liked')
+  libraryTab = $state<'liked' | 'history' | 'playlists'>('playlists')
   /** The "Add to playlist" menu: which songs, and where to show it. */
   addMenu = $state<{ tracks: Track[]; x: number; y: number } | null>(null)
   /** Set right after creating a playlist from the sidebar, so its page focuses the name. */
@@ -442,13 +442,16 @@ function applyPalette() {
   const dark = isDark()
   const [vh, vs] = toHsl(p.vivid)
   const [dh, ds] = toHsl(p.dominant)
-  // Accent: the cover's vivid hue, at a lightness that reads on the theme background.
-  const accent: Hsl = [vh, Math.max(vs, 0.45), dark ? 0.66 : 0.4]
+  // Accent: the hue the Now Playing background is made of, so the two match (a pink cover
+  // with a lime detail had a lime logo over a pink screen). A dull main color (beige, brown,
+  // a grey-blue sky) would make a dull accent, so the cover's most vivid hue stands in then.
+  const [ah, as] = ds >= 0.35 ? [dh, ds] : [vh, vs]
+  const accent: Hsl = [ah, Math.max(as, 0.45), dark ? 0.66 : 0.4]
   // Now Playing: a deep (or pale) shade of the cover's dominant color.
   const bg: Hsl = dark ? [dh, Math.min(ds, 0.5), 0.17] : [dh, Math.min(ds, 0.45), 0.9]
   const bg2: Hsl = dark ? [dh, Math.min(ds, 0.5), 0.1] : [dh, Math.min(ds, 0.4), 0.82]
   // A colorless cover (black and white, grey) has no hue worth amplifying: stay neutral.
-  if (vs < 0.18) root.removeProperty('--accent')
+  if (as < 0.18) root.removeProperty('--accent')
   else root.setProperty('--accent', hsl(accent))
   root.setProperty('--np-bg', hsl(bg))
   root.setProperty('--np-bg-2', hsl(bg2))
@@ -764,9 +767,9 @@ export function openHistory() {
   navigate({ view: 'library', libraryTab: 'history' })
 }
 
-/** The Library tab: on a phone, always its list of collections. */
+/** Library opens on its list of playlists, on desktop as on a phone. */
 export function openLibrary() {
-  navigate({ view: 'library', libraryTab: layout.phone ? 'playlists' : ui.libraryTab === 'playlists' ? 'liked' : ui.libraryTab })
+  navigate({ view: 'library', libraryTab: 'playlists' })
 }
 
 // ---- recent searches ------------------------------------------------------

@@ -285,6 +285,13 @@ async fn block_artist(app: State<'_, App>, track: Track) -> Res<()> {
     Ok(())
 }
 
+/// Forget the play history, so Quick picks and radio ranking start over.
+#[tauri::command]
+async fn clear_history(app: State<'_, App>) -> Res<()> {
+    lib(&app)?.run(|l| l.clear_history()).await.map_err(err)?;
+    Ok(())
+}
+
 #[tauri::command]
 async fn unblock_artist(app: State<'_, App>, key: String) -> Res<()> {
     lib(&app)?.run(move |l| l.unblock_artist(&key)).await.map_err(err)
@@ -730,10 +737,22 @@ pub fn run() {
             engine.set_session_file(app.path().app_data_dir()?.join("session.json"));
             let mut updates = engine.subscribe();
             let handle = app.handle().clone();
+            #[cfg(target_os = "android")]
+            {
+                let (handle, engine) = (handle.clone(), engine.clone());
+                android::on_shown(move || {
+                    let u = hum_core::engine::Update::Position { secs: engine.position() };
+                    let _ = handle.emit("hum://update", u);
+                });
+            }
             tauri::async_runtime::spawn(async move {
                 loop {
                     match updates.recv().await {
                         Ok(u) => {
+                            #[cfg(target_os = "android")]
+                            if matches!(u, hum_core::engine::Update::Position { .. }) && !android::ui_visible() {
+                                continue;
+                            }
                             let _ = handle.emit("hum://update", u);
                         }
                         Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
@@ -822,6 +841,7 @@ pub fn run() {
             home_feed,
             block_artist,
             unblock_artist,
+            clear_history,
             blocked_artists,
             yt_playlist,
             lyrics,

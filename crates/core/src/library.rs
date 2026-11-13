@@ -1018,6 +1018,12 @@ impl Library {
         Ok(())
     }
 
+    /// Forget every play: History, Quick picks and radio ranking start over. Likes, playlists,
+    /// blocked artists and saved songs stay. Returns how many plays were removed.
+    pub fn clear_history(&self) -> Result<usize> {
+        Ok(self.db.lock().unwrap().execute("DELETE FROM plays", [])?)
+    }
+
     /// Blocked artists as (key, name), most recent first.
     pub fn blocked_artists(&self) -> Result<Vec<(String, String)>> {
         let db = self.db.lock().unwrap();
@@ -1307,5 +1313,18 @@ mod tests {
         l.add_data_used(500).unwrap();
         l.db.lock().unwrap().execute("INSERT INTO data_used VALUES ('2001-01', 7)", []).unwrap();
         assert_eq!(l.data_used().unwrap(), DataUsed { month: 1_500, total: 1_507 });
+    }
+
+    #[test]
+    fn clearing_history_forgets_plays_but_keeps_likes() {
+        let l = Library::memory().unwrap();
+        l.record_play(&track("a", "x"), now() - DAY, 200.0, 200.0).unwrap();
+        l.record_play(&track("b", "y"), now() - DAY, 5.0, 200.0).unwrap();
+        l.set_liked(&track("a", "x"), true).unwrap();
+        assert_eq!(l.clear_history().unwrap(), 2);
+        assert!(l.history(10).unwrap().is_empty());
+        assert!(l.recent_tracks(10).unwrap().is_empty());
+        assert!(!l.notes(&["b".into()]).unwrap()["b"].skipped_recently, "the skip is forgotten too");
+        assert_eq!(l.liked().unwrap().len(), 1);
     }
 }

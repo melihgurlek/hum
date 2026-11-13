@@ -269,6 +269,9 @@
             <Icon name={inPlaylist ? 'check' : 'plus'} size={24} />
           </button>
         </div>
+        <!-- Desktop: the player bar below is part of this screen and has the seek bar and every
+             control, so they aren't repeated here. -->
+        {#if layout.phone}
         <div class="progress">
           <Progress tone="np" />
           <div class="times"><span>{fmtTime(player.position)}</span><span>{fmtTime(player.duration)}</span></div>
@@ -283,6 +286,7 @@
           <button class="ctl" aria-label="Next" onclick={() => api.next()}><Icon name="next" size={28} /></button>
           <span class="phone-only side-ctl right"><RepeatButton size={22} /></span>
         </div>
+        {/if}
       </section>
 
       <section class="panel" use:sheetPull class:open={ui.npSheet} class:dragging aria-label="Up next and lyrics" style:--drag={`${sheetDy}px`}>

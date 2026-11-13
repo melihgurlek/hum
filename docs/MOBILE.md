@@ -53,8 +53,8 @@ clang include dir in `BINDGEN_EXTRA_CLANG_ARGS`); R8 strips `HumPlayer.command` 
 | APK | **16 MB** | 26 MB | 27 MB |
 | Cold start, first frame | **281–395 ms** | 301–372 ms | 479–627 ms |
 | Tap to sound, median of 3 | **1.34 s** (now ~0.5 s, below) | 2.1 s | 2.4 s |
-| Memory, idle after launch | **86 MB** | 188 MB | 132 MB |
-| Memory, screen off, playing | **131 MB** | 299 MB | 156 MB |
+| Memory, idle after launch | 86 MB, app process only (see below) | 188 MB | 132 MB |
+| Memory, screen off, playing | 131 MB, app process only (see below) | 299 MB | 156 MB |
 | CPU, screen off, playing | **16.9 %** | 34.8 % | 25.9 % |
 
 Tap to sound is timed from the finger lifting (getevent) to the media session turning PLAYING,
@@ -108,6 +108,36 @@ PLAYING). Same phone, Wi-Fi, an app already running:
   for the first bytes; starting its service at launch saved nothing (it cost ~80 ms).
 - The Activity and WebView stay in memory after a swipe-away (Samsung keeps them); fine at
   131 MB, but the renderer could be released when the UI is gone.
+
+### Memory, measured again with the WebView renderer counted (2026-11-12, evening)
+
+The memory rows above counted hum's app process only. hum's UI runs in the WebView, whose
+renderer is a separate process (`com.google.android.webview:sandboxed_process…`, started with
+the app); SimpMusic draws natively and has none. Same phone, same session, apps alternated,
+fresh launch:
+
+| | hum (app + renderer) | SimpMusic 2.5.0 FOSS |
+|---|---|---|
+| Idle after launch, 15 s, three runs | 150-153 + 58 = **~208 MB** | 146-163 MB |
+| Screen off, playing, after 2 min | 100 + 61 = **161 MB** | 158 MB |
+| CPU, screen off, playing (app, renderer, audio path) | 2.4 + 1.8 + 0.5 = **4.7 %** | 31.6 + 39.8 = **71.4 %** |
+
+The app process alone grew from 86 MB to ~150 MB at launch without a code change: the same
+build (main at a34f34a) measured 107 MB in the morning and 153 MB now, with the WebView
+unchanged since 2026-10-24. What changed was the phone's state (library, saved queue, covers).
+
+So: on memory, a WebView UI costs ~50 MB more than a native one while the app is open, and
+it's level with the screen off. On CPU, which is what costs battery, hum uses ~15x less.
+
+Releasing the renderer while hidden would take ~60 MB off the screen-off figure, but it isn't
+worth doing: a playing app keeps a foreground service, so Android wouldn't kill hum sooner
+either way; 60 MB is under 1 % of this phone's RAM; and reopening would cost a UI cold start
+(~0.4 s) and the page's state.
+
+The renderer's CPU was worth cutting: the page was sent the playing position every second
+while nobody could see it. Now it isn't while the app is in the background or the screen is
+off, and it gets the current position when it shows again. Screen off, playing: renderer
+1.8 % to 0.6 %, app 2.4 % to 1.7 %, **4.7 % to 2.8 %** with the audio path.
 
 ### Still to do for a real port
 - Phone layouts: today it's the desktop design squeezed onto a phone.
