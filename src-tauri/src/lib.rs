@@ -285,6 +285,13 @@ async fn block_artist(app: State<'_, App>, track: Track) -> Res<()> {
     Ok(())
 }
 
+/// Forget the play history, so Quick picks and radio ranking start over.
+#[tauri::command]
+async fn clear_history(app: State<'_, App>) -> Res<()> {
+    lib(&app)?.run(|l| l.clear_history()).await.map_err(err)?;
+    Ok(())
+}
+
 #[tauri::command]
 async fn unblock_artist(app: State<'_, App>, key: String) -> Res<()> {
     lib(&app)?.run(move |l| l.unblock_artist(&key)).await.map_err(err)
@@ -834,6 +841,7 @@ pub fn run() {
             home_feed,
             block_artist,
             unblock_artist,
+            clear_history,
             blocked_artists,
             yt_playlist,
             lyrics,

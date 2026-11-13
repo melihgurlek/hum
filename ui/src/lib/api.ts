@@ -97,6 +97,8 @@ export const api = {
   homeFeed: () => invoke<HomeShelf[]>('home_feed'),
   blockArtist: (track: Track) => invoke<void>('block_artist', { track }),
   unblockArtist: (key: string) => invoke<void>('unblock_artist', { key }),
+  /** Forget every play; likes, playlists and saved songs stay. */
+  clearHistory: () => invoke<void>('clear_history'),
   blockedArtists: () => invoke<{ key: string; name: string }[]>('blocked_artists'),
   ytPlaylist: (id: string) => invoke<Track[]>('yt_playlist', { id }),
   lyrics: (track: Track) => invoke<Lyrics | null>('lyrics', { track }),
