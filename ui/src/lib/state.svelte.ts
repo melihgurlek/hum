@@ -591,7 +591,7 @@ export async function startListening() {
         // Loading a song always unpauses mpv, and mpv only reports pause when it changes, so
         // the first song after startup would otherwise keep showing the play triangle.
         player.paused = false
-        ui.recent = [u.track, ...ui.recent.filter((t) => t.id !== u.track.id)].slice(0, 30)
+        ui.recent = oncePerSong([u.track, ...ui.recent]).slice(0, 30)
         player.liked = false
         setTimeout(refreshRecent, 1500)
         api.isLiked(u.track.id).then((l) => {
@@ -708,11 +708,23 @@ export function prefetchOnHover(node: HTMLElement, id: string | null | undefined
   }
 }
 
+/** The same song released twice (an album and its deluxe edition) has two ids; Recently played
+ *  shows it once, the most recent first. */
+function oncePerSong(tracks: Track[]): Track[] {
+  const seen = new Set<string>()
+  return tracks.filter((t) => {
+    const key = `${t.title.toLowerCase()}|${(t.artists[0] ?? '').toLowerCase()}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 export async function refreshRecent() {
   try {
     const fromDb = await api.recent(30)
     const cur = player.current
-    ui.recent = cur ? [cur, ...fromDb.filter((t) => t.id !== cur.id)] : fromDb
+    ui.recent = oncePerSong(cur ? [cur, ...fromDb] : fromDb)
   } catch {
     /* library unavailable: keep what we have */
   }
