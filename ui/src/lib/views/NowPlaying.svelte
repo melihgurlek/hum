@@ -245,7 +245,7 @@
     <div class="body">
       <section class="left" aria-label="Song">
         {#if t.cover}
-          <img class="art" class:settling={artSettling} src={img(t.cover)} alt={`${t.album ?? t.title} cover`}
+          <img class="art" class:settling={artSettling} src={img(t.cover, true)} alt={`${t.album ?? t.title} cover`}
             style:transform={artDx ? `translateX(${artDx}px)` : undefined} style:opacity={artDx ? Math.max(0.3, 1 - Math.abs(artDx) / 500) : undefined} />
         {:else}
           <div class="art" class:settling={artSettling} style:transform={artDx ? `translateX(${artDx}px)` : undefined}></div>

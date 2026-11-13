@@ -641,7 +641,13 @@ async fn serve_image(http: reqwest::Client, dir: PathBuf, path: String) -> Respo
             .unwrap()
     };
     let encoded = path.trim_start_matches('/');
+    // `large/<url>`: the big version of a cover (`images::large`).
+    let (large, encoded) = match encoded.strip_prefix("large/") {
+        Some(rest) => (true, rest),
+        None => (false, encoded),
+    };
     let Ok(url) = percent_decode(encoded) else { return not_found() };
+    let url = if large { hum_core::source::images::large(&url) } else { url };
     if !url.starts_with("https://") {
         return not_found();
     }
@@ -656,16 +662,12 @@ async fn serve_image(http: reqwest::Client, dir: PathBuf, path: String) -> Respo
     if let Ok(bytes) = tokio::fs::read(&file).await {
         return ok(bytes);
     }
-    match http.get(&url).send().await.and_then(|r| r.error_for_status()) {
-        Ok(r) => match r.bytes().await {
-            Ok(b) => {
-                let bytes = b.to_vec();
-                let _ = tokio::fs::create_dir_all(&dir).await;
-                let _ = tokio::fs::write(&file, &bytes).await;
-                ok(bytes)
-            }
-            Err(_) => not_found(),
-        },
+    match hum_core::source::images::download(&http, &url).await {
+        Ok(bytes) => {
+            let _ = tokio::fs::create_dir_all(&dir).await;
+            let _ = tokio::fs::write(&file, &bytes).await;
+            ok(bytes)
+        }
         Err(e) => {
             log::warn!("image {url}: {e}");
             not_found()

@@ -296,6 +296,39 @@ pub mod images {
         p.is_file().then_some(p)
     }
 
+    /// The big version of a cover, for Now Playing and the album page, which show it at up to
+    /// ~950 device px: album art at 1024 px, and a video's 1280x720 thumbnail instead of the
+    /// 400x225 one the API lists (most songs without an album are videos).
+    pub fn large(url: &str) -> String {
+        if let Some(rest) = url.strip_prefix("https://i.ytimg.com/vi/") {
+            if let Some(id) = rest.split('/').next().filter(|id| !id.is_empty()) {
+                return format!("https://i.ytimg.com/vi/{id}/hq720.jpg");
+            }
+        }
+        super::sized(url, 1024)
+    }
+
+    /// A fifth of videos (old 4:3 uploads) have no 1280x720 thumbnail; their full 480x360 one
+    /// is still bigger than what the API lists.
+    fn fallback(url: &str) -> Option<String> {
+        url.strip_suffix("/hq720.jpg").map(|base| format!("{base}/hqdefault.jpg"))
+    }
+
+    /// Download `url`, or its fallback when it doesn't exist.
+    pub async fn download(http: &reqwest::Client, url: &str) -> Result<Vec<u8>, reqwest::Error> {
+        let get = |u: String| async move {
+            let r = http.get(&u).send().await?.error_for_status()?;
+            Ok::<_, reqwest::Error>(r.bytes().await?.to_vec())
+        };
+        match get(url.to_string()).await {
+            Err(e) if e.status().is_some() => match fallback(url) {
+                Some(f) => get(f).await,
+                None => Err(e),
+            },
+            r => r,
+        }
+    }
+
     /// Fetch `url` into the cache unless it's there (a downloaded song's covers, so they show
     /// offline even if the app never displayed them).
     pub async fn fetch(url: &str) {
@@ -306,11 +339,31 @@ pub mod images {
         }
         static HTTP: OnceLock<reqwest::Client> = OnceLock::new();
         let http = HTTP.get_or_init(reqwest::Client::new);
-        if let Ok(r) = http.get(url).send().await.and_then(|r| r.error_for_status()) {
-            if let Ok(bytes) = r.bytes().await {
-                let _ = tokio::fs::create_dir_all(dir).await;
-                let _ = tokio::fs::write(&p, &bytes).await;
-            }
+        if let Ok(bytes) = download(http, url).await {
+            let _ = tokio::fs::create_dir_all(dir).await;
+            let _ = tokio::fs::write(&p, &bytes).await;
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn large_covers() {
+            assert_eq!(
+                large("https://i.ytimg.com/vi/CP26mUeCaBQ/hqdefault.jpg?sqp=-oaymwEW&rs=AMzJ"),
+                "https://i.ytimg.com/vi/CP26mUeCaBQ/hq720.jpg"
+            );
+            assert_eq!(
+                large("https://lh3.googleusercontent.com/abc=w544-h544-l90-rj"),
+                "https://lh3.googleusercontent.com/abc=w1024-h1024-l90-rj"
+            );
+            assert_eq!(
+                fallback("https://i.ytimg.com/vi/x/hq720.jpg").as_deref(),
+                Some("https://i.ytimg.com/vi/x/hqdefault.jpg")
+            );
+            assert_eq!(fallback("https://lh3.googleusercontent.com/abc=w1024-h1024"), None);
         }
     }
 }

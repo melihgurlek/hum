@@ -498,7 +498,8 @@ impl Engine {
                     })
                     .await
                     {
-                        for url in [&t.cover, &t.thumb].into_iter().flatten() {
+                        let large = t.cover.as_deref().map(crate::source::images::large);
+                        for url in [&t.cover, &t.thumb, &large].into_iter().flatten() {
                             crate::source::images::fetch(url).await;
                         }
                     }
