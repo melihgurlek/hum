@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { go, newPlaylistFromSidebar, openHistory, openLiked, openPlaylist, ui, type View } from '../state.svelte'
+  import { go, newPlaylistFromSidebar, openHistory, openLibrary, openLiked, openPlaylist, ui, type View } from '../state.svelte'
   import Icon from './Icon.svelte'
   import Mosaic from './Mosaic.svelte'
 
@@ -18,7 +18,8 @@
     hum
   </div>
   {#each items as it}
-    <button class="link" class:active={ui.view === it.view && !ui.nowPlayingOpen} onclick={() => go(it.view)}>
+    <button class="link" class:active={ui.view === it.view && (it.view !== 'library' || ui.libraryTab === 'playlists') && !ui.nowPlayingOpen}
+      onclick={() => (it.view === 'library' ? openLibrary() : go(it.view))}>
       <Icon name={it.icon} />{it.label}
     </button>
   {/each}

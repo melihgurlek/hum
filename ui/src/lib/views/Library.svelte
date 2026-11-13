@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, type HistoryEntry, type Track } from '../api'
-  import { downloadOf, layout, newPlaylistFromSidebar, openHistory, openLiked, openPlaylist, playList, player, shuffled, ui } from '../state.svelte'
+  import { downloadOf, layout, newPlaylistFromSidebar, openHistory, openLibrary, openLiked, openPlaylist, playList, player, shuffled, ui } from '../state.svelte'
   import BackButton from '../components/BackButton.svelte'
   import DownloadButton from '../components/DownloadButton.svelte'
   import Icon from '../components/Icon.svelte'
@@ -51,6 +51,9 @@
     <h1>Library</h1>
   {/if}
   <div class="tabs desk-only" role="tablist">
+    <button role="tab" aria-selected={ui.libraryTab === 'playlists'} class:sel={ui.libraryTab === 'playlists'} onclick={openLibrary}>
+      <span class="trim">Playlists</span>
+    </button>
     <button role="tab" aria-selected={ui.libraryTab === 'liked'} class:sel={ui.libraryTab === 'liked'} onclick={openLiked}>
       <span class="trim">Liked songs{liked.length ? ` (${liked.length})` : ''}</span>
     </button>
@@ -65,7 +68,8 @@
         <span class="new" aria-hidden="true"><Icon name="plus" size={22} /></span>
         <span class="t">New playlist</span>
       </button>
-      <!-- Liked songs and History first, like pinned playlists. -->
+      <!-- Liked songs and History first, like pinned playlists (on desktop they're tabs). -->
+      {#if layout.phone}
       <button class="pl" onclick={openLiked}>
         <span class="new liked" aria-hidden="true"><Icon name="heart" size={22} /></span>
         <span class="text"><span class="ellipsis t">Liked songs</span><span class="ellipsis muted s">{liked.length} {liked.length === 1 ? 'song' : 'songs'}{downloadOf('liked') ? ', downloaded' : ''}</span></span>
@@ -74,6 +78,7 @@
         <span class="new" aria-hidden="true"><Icon name="clock" size={22} /></span>
         <span class="text"><span class="ellipsis t">History</span><span class="ellipsis muted s">Songs you've played</span></span>
       </button>
+      {/if}
       {#each ui.playlists as p (p.id)}
         <button class="pl" onclick={() => openPlaylist(p.id)}>
           <Mosaic covers={p.covers} size={52} radius={8} />
