@@ -48,13 +48,10 @@ Status 2026-11-12 (Linux): sign-in, account sync and the song cache (#33) work a
 account. Order below comes from [COMPETITORS.md](COMPETITORS.md): every dead client died of
 playback breaking, so reliability comes first.
 
-1. **Cipher configs from the community registries** (`MetrolistGroup/faraday`,
-   `ZemerTeam/zemer-cipher`), refreshed when an unknown player hash appears, so YouTube
-   changes are fixed without a hum release.
-2. **Test on Windows** (WebView2): sign-in, account sync, the song cache, account radio.
-3. **Test the song cache by hand**: seeking or skipping mid-song must discard the recording; a
+1. **Test on Windows** (WebView2): sign-in, account sync, the song cache, account radio.
+2. **Test the song cache by hand**: seeking or skipping mid-song must discard the recording; a
    song played to the end shows up under Settings → Saved songs.
-4. **Android port** ([MOBILE.md](MOBILE.md)): phone layouts, song info on the lock screen,
+3. **Android port** ([MOBILE.md](MOBILE.md)): phone layouts, song info on the lock screen,
    audio offload and a shorter start buffer, song cache and Data used on Android.
 
 ## Later
@@ -73,6 +70,12 @@ playback breaking, so reliability comes first.
 - Code signing for the Windows installer (costs money; worth it once hum is public).
 
 ## Decided against (and why)
+
+- **Cipher configs from the community registries** (`MetrolistGroup/faraday`,
+  `ZemerTeam/zemer-cipher`): hum's first client (VisionOS guest) needs no deciphering, and the
+  fallbacks run YouTube's own player code through yt-dlp's solver in QuickJS, which doesn't
+  break the way pattern configs do. If deciphering ever fails, update the solver script rather
+  than add a registry.
 
 - **Forking ytmusic-rs to drop its URL probe**: measured on 12 songs, the probe is 4–250 ms
   (median ~50 ms) of a ~750 ms cold click; mpv's own connection (~400 ms) and the player request
