@@ -747,7 +747,11 @@ export function reason(n: import('./api').TrackNote | undefined): string {
 
 export async function refreshPlaylists() {
   try {
-    ui.playlists = await api.playlists()
+    // A to Z, in the system's language (Ç after C, not after Z), ignoring case and accents for
+    // the order. The engine's order was most recently changed, which reshuffled the list
+    // whenever a sync or an added song touched a playlist.
+    const az = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true })
+    ui.playlists = (await api.playlists()).sort((a, b) => az.compare(a.name, b.name))
   } catch {
     /* library unavailable */
   }
