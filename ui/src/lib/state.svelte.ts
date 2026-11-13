@@ -67,7 +67,7 @@ class Ui {
   /** Pages visited before this one, for Back (button, Alt+Left, mouse back). */
   history = $state<Place[]>([])
   playlists = $state<PlaylistSummary[]>([])
-  libraryTab = $state<'liked' | 'history' | 'playlists'>('liked')
+  libraryTab = $state<'liked' | 'history' | 'playlists'>('playlists')
   /** The "Add to playlist" menu: which songs, and where to show it. */
   addMenu = $state<{ tracks: Track[]; x: number; y: number } | null>(null)
   /** Set right after creating a playlist from the sidebar, so its page focuses the name. */
@@ -764,9 +764,9 @@ export function openHistory() {
   navigate({ view: 'library', libraryTab: 'history' })
 }
 
-/** The Library tab: on a phone, always its list of collections. */
+/** Library opens on its list of playlists, on desktop as on a phone. */
 export function openLibrary() {
-  navigate({ view: 'library', libraryTab: layout.phone ? 'playlists' : ui.libraryTab === 'playlists' ? 'liked' : ui.libraryTab })
+  navigate({ view: 'library', libraryTab: 'playlists' })
 }
 
 // ---- recent searches ------------------------------------------------------

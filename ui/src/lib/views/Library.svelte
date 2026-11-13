@@ -42,22 +42,11 @@
 </script>
 
 <div class="page scroll">
-  {#if layout.phone}
-    <!-- Phone: the list of collections is the Library; Liked songs and History are pages of
-         their own, with Back, instead of tabs that repeated the list's first two rows. -->
-    {#if ui.libraryTab !== 'playlists'}<BackButton />{/if}
-    <h1 class:sub={ui.libraryTab !== 'playlists'}>{ui.libraryTab === 'liked' ? 'Liked songs' : ui.libraryTab === 'history' ? 'History' : 'Library'}</h1>
-  {:else}
-    <h1>Library</h1>
-  {/if}
-  <div class="tabs desk-only" role="tablist">
-    <button role="tab" aria-selected={ui.libraryTab === 'liked'} class:sel={ui.libraryTab === 'liked'} onclick={openLiked}>
-      <span class="trim">Liked songs{liked.length ? ` (${liked.length})` : ''}</span>
-    </button>
-    <button role="tab" aria-selected={ui.libraryTab === 'history'} class:sel={ui.libraryTab === 'history'} onclick={openHistory}>
-      <span class="trim">History</span>
-    </button>
-  </div>
+  <!-- The list of collections is the Library (the phone's tab; desktop has it in the sidebar).
+       Liked songs and History are pages of their own, with Back on a phone. -->
+  {#if layout.phone && ui.libraryTab !== 'playlists'}<BackButton />{/if}
+  <h1 class:sub={ui.libraryTab !== 'playlists'}>{ui.libraryTab === 'liked' ? 'Liked songs' : ui.libraryTab === 'history' ? 'History' : 'Library'}</h1>
+  {#if ui.libraryTab === 'liked' && liked.length}<p class="muted count">{liked.length} {liked.length === 1 ? 'song' : 'songs'}</p>{/if}
 
   {#if ui.libraryTab === 'playlists'}
     <div class="list">
@@ -123,20 +112,10 @@
   p {
     margin: 0;
   }
-  .tabs {
-    display: flex;
-    gap: 6px;
-  }
-  .tabs button {
-    height: 40px;
-    padding: 0 18px;
-    border-radius: 999px;
-    font-weight: 600;
-    background: var(--raised);
-  }
-  .tabs button.sel {
-    background: var(--text);
-    color: var(--bg);
+  /* Sits under the title, closer than the page's 16px gap. */
+  .count {
+    margin-top: -12px;
+    font-size: 14px;
   }
   .phone-only {
     display: none;
@@ -207,9 +186,6 @@
     font-size: 13px;
   }
   @media (max-width: 640px) {
-    .desk-only {
-      display: none;
-    }
     /* Room for the back button above the title. */
     h1.sub {
       margin-top: 40px;

@@ -28,6 +28,14 @@
       back()
     }
   }
+  // The webview's own menu (Reload, Back, Inspect Element) isn't hum's. Text fields and selected
+  // text keep it for copy and paste; rows and cards open their own menu before this runs.
+  function contextMenu(e: MouseEvent) {
+    const t = e.target as HTMLElement | null
+    if (t?.closest('input, textarea, [contenteditable]')) return
+    if (window.getSelection()?.toString()) return
+    e.preventDefault()
+  }
   // Mouse "back" side button.
   function mouse(e: MouseEvent) {
     if (e.button === 3) {
@@ -37,7 +45,7 @@
   }
 </script>
 
-<svelte:window onkeydown={keys} onmouseup={mouse} />
+<svelte:window onkeydown={keys} onmouseup={mouse} oncontextmenu={contextMenu} />
 
 <div class="app">
   <div class="side"><Sidebar /></div>

@@ -6,7 +6,6 @@
   const items: { view: View; label: string; icon: string }[] = [
     { view: 'home', label: 'Home', icon: 'home' },
     { view: 'search', label: 'Search', icon: 'search' },
-    { view: 'library', label: 'Library', icon: 'library' },
   ]
 </script>
 
@@ -24,7 +23,7 @@
   {/each}
 
   <div class="head">
-    <h2 class="label">Playlists</h2>
+    <h2 class="label">Library</h2>
     <button class="add" aria-label="New playlist" title="New playlist" onclick={newPlaylistFromSidebar}><Icon name="plus" size={18} /></button>
   </div>
   <div class="recent scroll">
