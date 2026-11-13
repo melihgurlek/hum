@@ -22,6 +22,8 @@ pub enum Command {
     Stop,
     /// Report the network (`PlayerEvent::Network`); only Android's player knows it.
     QueryNetwork,
+    /// A song's big cover landed in the cache after it started: show it on the lock screen.
+    Artwork { video_id: String, file: std::path::PathBuf },
 }
 
 #[derive(Debug, Clone)]

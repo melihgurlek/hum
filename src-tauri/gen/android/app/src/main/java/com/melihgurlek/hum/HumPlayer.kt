@@ -170,6 +170,17 @@ object HumPlayer {
                 applyVolume(p)
             }
             "stop" -> p.stop()
+            // Same stream, new cover: Media3 swaps the metadata without touching playback.
+            "artwork" -> {
+                val id = c.getString("id")
+                val art = Uri.fromFile(File(c.getString("file")))
+                for (i in 0 until p.mediaItemCount) {
+                    val it = p.getMediaItemAt(i)
+                    if (it.mediaId != id) continue
+                    val meta = it.mediaMetadata.buildUpon().setArtworkUri(art).build()
+                    p.replaceMediaItem(i, it.buildUpon().setMediaMetadata(meta).build())
+                }
+            }
         }
     }
 
