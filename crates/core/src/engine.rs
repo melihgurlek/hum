@@ -961,7 +961,6 @@ impl Engine {
         Ok(())
     }
 
-    /// Background work once a track is (about to be) playing: radio top-up and prefetch.
     /// A tapped song starts with whatever cover is at hand, not waiting for the big one; once
     /// that is downloaded, the lock screen switches to it. (A song that follows another had its
     /// big cover fetched with its prefetch.)
@@ -981,6 +980,7 @@ impl Engine {
         });
     }
 
+    /// Background work once a track is (about to be) playing: radio top-up and prefetch.
     fn after_track_change(&self) {
         self.maybe_step_up();
         let e = self.clone();
