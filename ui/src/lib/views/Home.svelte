@@ -86,7 +86,7 @@
       {:else}
         <div class="picks">
           {#each shownPicks as t, i (t.id)}
-            <TrackRow track={t} showDuration={!layout.phone} onplay={() => playList(picks, i)} />
+            <TrackRow track={t} showDuration={false} onplay={() => playList(picks, i)} />
           {/each}
         </div>
         {#if !layout.phone && picks.length > 12}
@@ -102,7 +102,7 @@
         </div>
         <div class="picks">
           {#each forgotten as f, i (f.track.id)}
-            <TrackRow track={f.track} showDuration={!layout.phone} suffix={`, last played ${monthYear(f.last_played)}`}
+            <TrackRow track={f.track} showDuration={false} suffix={`, last played ${monthYear(f.last_played)}`}
               onplay={() => playList(forgotten.map((x) => x.track), i)} />
           {/each}
         </div>
@@ -140,7 +140,7 @@
         {#if shelf.songs.length}
           <div class="picks">
             {#each shelf.songs.slice(0, 8) as t, i (t.id)}
-              <TrackRow track={t} showDuration={!layout.phone} onplay={() => playList(shelf.songs, i)} />
+              <TrackRow track={t} showDuration={false} onplay={() => playList(shelf.songs, i)} />
             {/each}
           </div>
         {/if}
