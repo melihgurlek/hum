@@ -4,6 +4,9 @@ import android.app.PendingIntent
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.ForwardingPlayer
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
@@ -14,6 +17,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import org.json.JSONObject
 
 /**
  * Owns ExoPlayer and the media session: a foreground service while playing, with the
@@ -76,7 +80,7 @@ class PlaybackService : MediaSessionService() {
         val open = packageManager.getLaunchIntentForPackage(packageName)!!
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
         val activity = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        session = MediaSession.Builder(this, player).setSessionActivity(activity).build()
+        session = MediaSession.Builder(this, QueuePlayer(player)).setSessionActivity(activity).setCallback(AnyController).build()
         HumPlayer.attach(player)
     }
 
@@ -96,4 +100,60 @@ class PlaybackService : MediaSessionService() {
         session = null
         super.onDestroy()
     }
+}
+
+/**
+ * The player the session (notification, lock screen, watches, headset buttons) controls:
+ * ExoPlayer, except that Next and Previous go to hum's queue. ExoPlayer holds only the current
+ * song and the prefetched next one, so on its own Next was missing until that prefetch landed
+ * and Previous could only restart the song; a Redmi Watch's skip buttons did nothing.
+ */
+private class QueuePlayer(player: ExoPlayer) : ForwardingPlayer(player) {
+    private val skips = intArrayOf(
+        Player.COMMAND_SEEK_TO_NEXT,
+        Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+        Player.COMMAND_SEEK_TO_PREVIOUS,
+        Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
+    )
+    private val listeners = HashMap<Player.Listener, Player.Listener>()
+
+    private fun withSkips(c: Player.Commands) = c.buildUpon().addAll(*skips).build()
+
+    override fun getAvailableCommands() = withSkips(super.getAvailableCommands())
+    override fun isCommandAvailable(command: Int) = command in skips || super.isCommandAvailable(command)
+
+    override fun seekToNext() = skip("next")
+    override fun seekToNextMediaItem() = skip("next")
+    override fun seekToPrevious() = skip("previous")
+    override fun seekToPreviousMediaItem() = skip("previous")
+
+    private fun skip(ev: String) = HumPlayer.event(JSONObject().put("ev", ev))
+
+    // ExoPlayer reports its own commands when they change; the session must keep seeing the skips.
+    override fun addListener(listener: Player.Listener) {
+        val wrapped = object : Player.Listener by listener {
+            override fun onAvailableCommandsChanged(availableCommands: Player.Commands) =
+                listener.onAvailableCommandsChanged(withSkips(availableCommands))
+        }
+        listeners[listener] = wrapped
+        super.addListener(wrapped)
+    }
+
+    override fun removeListener(listener: Player.Listener) {
+        super.removeListener(listeners.remove(listener) ?: listener)
+    }
+}
+
+/**
+ * Every app that asks may control playback. Media3 gives full control only to "trusted" apps
+ * (the system, media-control permission holders) and read-only access to the rest, so Mi
+ * Fitness showed the song on a Redmi Watch while its pause and skip buttons did nothing.
+ */
+private object AnyController : MediaSession.Callback {
+    @androidx.annotation.OptIn(UnstableApi::class)
+    override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo) =
+        MediaSession.ConnectionResult.AcceptedResultBuilder()
+            .setAvailableSessionCommands(MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS)
+            .setAvailablePlayerCommands(MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS)
+            .build()
 }

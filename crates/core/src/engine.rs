@@ -1236,6 +1236,12 @@ impl Engine {
                         self.emit(Update::Network);
                     }
                 }
+                PlayerEvent::Next => {
+                    let _ = self.next().await;
+                }
+                PlayerEvent::Previous => {
+                    let _ = self.previous().await;
+                }
                 PlayerEvent::Error { video_id, message } => {
                     log::warn!("playback error {video_id:?}: {message}");
                     self.on_error(video_id, message).await;
