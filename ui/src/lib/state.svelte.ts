@@ -222,7 +222,7 @@ export const savedPicks = {
   clear: () => save('hum.quickPicks', null),
 }
 /** YouTube Music's home page, once per session. */
-export const homeFeed = $state<{ shelves: HomeShelf[] | null }>({ shelves: null })
+export const homeFeed = $state<{ shelves: HomeShelf[] | null; at: number }>({ shelves: null, at: 0 })
 const artistCache = new Map<string, Promise<ArtistPage>>()
 const albumCache = new Map<string, Promise<AlbumPage>>()
 function cached<T>(cache: Map<string, Promise<T>>, id: string, fetch: (id: string) => Promise<T>): Promise<T> {

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api, artistLine, type HomeCard, type QuickPicks, type Track, img } from '../api'
   import { untrack } from 'svelte'
-  import { capSet, go, homeFeed, layout, savedPicks, playList, playRadio, playYtPlaylist, prefetchOnHover, quickPicksCache as cache, ui } from '../state.svelte'
+  import { capSet, go, homeFeed, layout, openArtist, savedPicks, playList, playRadio, playYtPlaylist, prefetchOnHover, quickPicksCache as cache, ui } from '../state.svelte'
   import AlbumCard from '../components/AlbumCard.svelte'
   import Icon from '../components/Icon.svelte'
   import TrackRow from '../components/TrackRow.svelte'
@@ -56,16 +56,30 @@
   $effect(() => {
     api.forgotten(8).then((f) => (forgotten = f)).catch(() => {})
   })
+  // The artists you play most, each shown with the cover of their best-liked song.
+  let artists = $state<Track[]>([])
+  $effect(() => {
+    api.topArtists(12).then((a) => (artists = a)).catch(() => {})
+  })
   const monthYear = (ts: number) =>
     new Date(ts * 1000).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
 
-  // Until something has been played here, Home shows YouTube Music's own home page (the
-  // account's when signed in), so a first launch isn't empty.
+  // Below hum's own sections, YouTube Music's home page (the account's when signed in): albums
+  // and mixes for you, new releases, moods. On a first launch it is all there is. Once you've
+  // played here, its song shelves (its Quick picks) repeat ours, From your library is the
+  // Library tab, and community playlists are strangers' picks; those are left out.
   const fresh = $derived(ui.recent.length === 0)
+  // YouTube changes it through the day (morning, workout, evening shelves) and the phone app can
+  // live for days, so a visit fetches it again once it's an hour old; the old one shows meanwhile.
   $effect(() => {
-    if (!fresh || homeFeed.shelves) return
-    api.homeFeed().then((s) => (homeFeed.shelves = s)).catch(() => {})
+    if (homeFeed.shelves && Date.now() - homeFeed.at < 3600_000) return
+    api.homeFeed().then((s) => Object.assign(homeFeed, { shelves: s, at: Date.now() })).catch(() => {})
   })
+  const shelves = $derived(
+    (homeFeed.shelves ?? []).filter(
+      (s) => fresh || (!s.songs.length && s.cards.length && !/community|from your library/i.test(s.title)),
+    ),
+  )
   // One row of cards per shelf, as many as fit at 150px or wider with 20px gaps.
   let rowWidth = $state(0)
   const cols = $derived(Math.max(2, Math.floor((rowWidth + 20) / 170)))
@@ -95,20 +109,6 @@
       {/if}
     </section>
 
-    {#if forgotten.length}
-      <section>
-        <div class="head">
-          <h2>Haven't played these in a while</h2>
-        </div>
-        <div class="picks">
-          {#each forgotten as f, i (f.track.id)}
-            <TrackRow track={f.track} showDuration={false} suffix={`, last played ${monthYear(f.last_played)}`}
-              onplay={() => playList(forgotten.map((x) => x.track), i)} />
-          {/each}
-        </div>
-      </section>
-    {/if}
-
     {#if recentShown.length}
       <section>
         <h2>Recently played</h2>
@@ -123,6 +123,35 @@
         </div>
       </section>
     {/if}
+
+    {#if artists.length > 2}
+      <section>
+        <h2>Your artists</h2>
+        <div class="row artists" style:--cols={cols} bind:clientWidth={rowWidth}>
+          {#each artists.slice(0, shown) as t (t.artist_id)}
+            <button class="artist" onclick={() => openArtist(t.artist_id)}>
+              {#if t.cover}<img class="face" src={img(t.cover)} alt="" loading="lazy" />{:else}<div class="face"></div>{/if}
+              <span class="ellipsis tt">{t.artists[0]}</span>
+            </button>
+          {/each}
+        </div>
+      </section>
+    {/if}
+
+    {#if forgotten.length}
+      <section>
+        <div class="head">
+          <h2>Haven't played these in a while</h2>
+        </div>
+        <div class="picks">
+          {#each forgotten as f, i (f.track.id)}
+            <TrackRow track={f.track} showDuration={false} suffix={`, last played ${monthYear(f.last_played)}`}
+              onplay={() => playList(forgotten.map((x) => x.track), i)} />
+          {/each}
+        </div>
+      </section>
+    {/if}
+
   {:else if !loading}
     <section class="empty">
       <h1>Start with a song you like</h1>
@@ -131,8 +160,8 @@
     </section>
   {/if}
 
-  {#if fresh && homeFeed.shelves}
-    {#each homeFeed.shelves as shelf (shelf.title)}
+  {#if shelves.length}
+    {#each shelves as shelf (shelf.title)}
       <section>
         <div class="head">
           <h2>{shelf.title}</h2>
@@ -245,6 +274,24 @@
   .more {
     margin-top: 4px;
   }
+  .artist {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    text-align: center;
+  }
+  .artist .tt {
+    max-width: 100%;
+  }
+  .face {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--surface);
+  }
   /* Phone: song lists swipe sideways in columns of four rows, each column a little narrower
      than the screen so the next one peeks in; long lists no longer bury the sections below. */
   @media (max-width: 640px) {
@@ -291,6 +338,11 @@
     .row {
       padding-inline: 24px;
       scroll-padding-inline: 24px;
+    }
+    /* Circles have no card padding of their own: on the gutter, like Recently played. */
+    .row.artists {
+      padding-inline: 16px;
+      scroll-padding-inline: 16px;
     }
   }
   .empty {

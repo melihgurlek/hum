@@ -211,6 +211,12 @@ async fn forgotten(app: State<'_, App>, limit: usize) -> Res<Vec<Forgotten>> {
     Ok(v.into_iter().map(|(track, last_played)| Forgotten { track, last_played }).collect())
 }
 
+/// The artists you listen to most, each as their best-liked song (Home's artist row).
+#[tauri::command]
+async fn top_artists(app: State<'_, App>, limit: usize) -> Res<Vec<Track>> {
+    lib(&app)?.run(move |l| l.top_artists(limit)).await.map_err(err)
+}
+
 #[derive(serde::Serialize)]
 struct QuickPicks {
     /// The songs the picks start from: your latest plays and favorites, or your likes when
@@ -839,6 +845,7 @@ pub fn run() {
             recent,
             track_notes,
             forgotten,
+            top_artists,
             quick_picks,
             home_feed,
             block_artist,
