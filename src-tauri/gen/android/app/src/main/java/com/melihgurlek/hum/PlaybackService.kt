@@ -5,7 +5,6 @@ import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
-import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
 import androidx.media3.datasource.DataSource
@@ -105,43 +104,17 @@ class PlaybackService : MediaSessionService() {
 /**
  * The player the session (notification, lock screen, watches, headset buttons) controls:
  * ExoPlayer, except that Next and Previous go to hum's queue. ExoPlayer holds only the current
- * song and the prefetched next one, so on its own Next was missing until that prefetch landed
- * and Previous could only restart the song; a Redmi Watch's skip buttons did nothing.
+ * song and the prefetched next one, so on its own Previous could only restart the song.
+ * (Listeners are left alone: wrapping them with Kotlin's `by` drops every Player.Listener
+ * callback, since they are Java default methods, and the session went blind.)
  */
 private class QueuePlayer(player: ExoPlayer) : ForwardingPlayer(player) {
-    private val skips = intArrayOf(
-        Player.COMMAND_SEEK_TO_NEXT,
-        Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
-        Player.COMMAND_SEEK_TO_PREVIOUS,
-        Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
-    )
-    private val listeners = HashMap<Player.Listener, Player.Listener>()
-
-    private fun withSkips(c: Player.Commands) = c.buildUpon().addAll(*skips).build()
-
-    override fun getAvailableCommands() = withSkips(super.getAvailableCommands())
-    override fun isCommandAvailable(command: Int) = command in skips || super.isCommandAvailable(command)
-
     override fun seekToNext() = skip("next")
     override fun seekToNextMediaItem() = skip("next")
     override fun seekToPrevious() = skip("previous")
     override fun seekToPreviousMediaItem() = skip("previous")
 
     private fun skip(ev: String) = HumPlayer.event(JSONObject().put("ev", ev))
-
-    // ExoPlayer reports its own commands when they change; the session must keep seeing the skips.
-    override fun addListener(listener: Player.Listener) {
-        val wrapped = object : Player.Listener by listener {
-            override fun onAvailableCommandsChanged(availableCommands: Player.Commands) =
-                listener.onAvailableCommandsChanged(withSkips(availableCommands))
-        }
-        listeners[listener] = wrapped
-        super.addListener(wrapped)
-    }
-
-    override fun removeListener(listener: Player.Listener) {
-        super.removeListener(listeners.remove(listener) ?: listener)
-    }
 }
 
 /**
