@@ -85,6 +85,23 @@ work:
 Media3 offload with gapless required; `dumpsys media.audio_flinger` shows an OFFLOAD output
 (`COMPRESS_OFFLOAD`, AAC), and a song change stayed on it.
 
+### Offload turned off again (2026-11-16)
+
+Offload made songs from the network slow to sound. ExoPlayer turned PLAYING ~0.45 s after its
+play command, as before, but the position only started moving ~2 s later. That's the moment
+the sound starts: measured as the first position change minus how far it had moved, polled
+every 10 ms. Songs already on the phone weren't affected.
+
+| Audible after the play command | Offload | No offload |
+|---|---|---|
+| Streamed songs | 2428–2584 ms (4 taps) | 347–479 ms (9 taps) |
+| Recently played (cached) | 460–522 ms (3 taps) | |
+
+He felt the same difference: "still same" (~2 s) with offload, "much better" without. So
+the PLAYING-based tap-to-sound numbers below and in the README were right for hum only
+without offload. Screen-off CPU goes back to roughly the "Before" column above; see the
+README for the current number.
+
 ### Tap to sound, after tuning (2026-11-12)
 
 hum's own logs split the wait (stream lookup, then the player from its play command to

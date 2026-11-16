@@ -6,7 +6,6 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -61,19 +60,10 @@ class PlaybackService : MediaSessionService() {
             )
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
-        // Audio offload: the audio chip decodes AAC itself and the CPU sleeps between large
-        // buffers. Screen off, playing, on the S23 FE: hum plus the system's decoder and audio
-        // services went from 63.4 % of a core to 4.4 % (`dumpsys media.audio_flinger` shows an
-        // OFFLOAD output). Only where the device keeps songs gapless offloaded; otherwise
-        // playback stays as it was.
-        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-            .setAudioOffloadPreferences(
-                AudioOffloadPreferences.Builder()
-                    .setAudioOffloadMode(AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
-                    .setIsGaplessSupportRequired(true)
-                    .build(),
-            )
-            .build()
+        // No audio offload. It let the CPU sleep while the audio chip decoded (screen off: 63 % of
+        // a core down to 4.4 %), but a song streamed from the network then took ~2.5 s to sound:
+        // ExoPlayer reported playing after ~0.45 s and the position only moved 2 s later. Without
+        // it sound starts 0.35-0.48 s after the play command (S23 FE, 2026-11-16, 7 vs 9 taps).
         // Tapping the notification (or One UI's status-bar media pill) opens hum. Without a
         // session activity the notification had no contentIntent: taps did nothing.
         val open = packageManager.getLaunchIntentForPackage(packageName)!!
