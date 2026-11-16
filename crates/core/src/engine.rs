@@ -1047,7 +1047,7 @@ impl Engine {
         };
         let Some(seed) = seed else { return };
         let ranked = match (self.0.source.radio(&seed).await, self.0.library.clone()) {
-            (Ok(tracks), Some(lib)) => lib.run(move |l| l.rank_radio(tracks)).await,
+            (Ok(tracks), Some(lib)) => lib.run(move |l| l.filter_radio(tracks)).await,
             (res, _) => res,
         };
         match ranked {

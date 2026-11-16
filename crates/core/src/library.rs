@@ -974,7 +974,32 @@ impl Library {
         Ok(out)
     }
 
-    /// Reorder radio candidates by taste and drop what you clearly don't want right now.
+    /// A song's radio as YouTube orders it, minus what you clearly don't want right now:
+    /// blocked artists, songs skipped early in the last 14 days, songs played in the last 2
+    /// hours. No reordering by taste: pulling your most-played artists up from deep in the list
+    /// took a sad song's radio to dance-pop. YouTube's radio is already personal when signed in.
+    pub fn filter_radio(&self, candidates: Vec<Track>) -> Result<Vec<Track>> {
+        let db = self.db.lock().unwrap();
+        let blocked = Self::blocked_keys(&db)?;
+        let t = now();
+        let mut skipped = db.prepare(
+            "SELECT 1 FROM plays WHERE track_id = ?1 AND outcome = 'skipped_early' AND played_at > ?2",
+        )?;
+        let mut recent = db.prepare("SELECT 1 FROM plays WHERE track_id = ?1 AND played_at > ?2")?;
+        let mut out = Vec::new();
+        for c in candidates {
+            if blocked.contains(&artist_key(&c))
+                || skipped.exists(params![c.id, t - 14 * DAY])?
+                || recent.exists(params![c.id, t - 2 * 3600])?
+            {
+                continue;
+            }
+            out.push(c);
+        }
+        Ok(out)
+    }
+
+    /// Quick picks: candidates reordered by taste, dropping what you clearly don't want now.
     ///
     /// - Skipped within 30 s in the last 14 days: dropped.
     /// - By a blocked artist, or skipped early in the last 14 days: dropped.
@@ -1246,6 +1271,21 @@ mod tests {
         cands.push(track("favnew", "fav"));
         let ids: Vec<_> = lib.rank_radio(cands).unwrap().into_iter().map(|t| t.id).collect();
         assert!(ids.iter().position(|i| i == "favnew") < Some(3), "{ids:?}");
+    }
+
+    #[test]
+    fn played_radio_keeps_youtubes_order_and_only_filters() {
+        let lib = Library::memory().unwrap();
+        for i in 0..5 {
+            lib.record_play(&track(&format!("fav{i}"), "fav"), now() - 10 * DAY, 200.0, 200.0).unwrap();
+        }
+        let (skipped, heard, blocked) = (track("s", "x"), track("h", "y"), track("b", "blocked"));
+        lib.record_play(&skipped, now() - DAY, 5.0, 200.0).unwrap();
+        lib.record_play(&heard, now() - 3600, 200.0, 200.0).unwrap();
+        lib.block_artist(&blocked).unwrap();
+        let cands = vec![track("a", "p"), skipped, track("c", "q"), heard, blocked, track("favnew", "fav")];
+        let ids: Vec<_> = lib.filter_radio(cands).unwrap().into_iter().map(|t| t.id).collect();
+        assert_eq!(ids, ["a", "c", "favnew"], "a favorite artist stays where YouTube put it");
     }
 
     #[test]
