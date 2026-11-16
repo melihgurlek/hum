@@ -99,8 +99,19 @@ every 10 ms. Songs already on the phone weren't affected.
 
 He felt the same difference: "still same" (~2 s) with offload, "much better" without. So
 the PLAYING-based tap-to-sound numbers below and in the README were right for hum only
-without offload. Screen-off CPU goes back to roughly the "Before" column above; see the
-README for the current number.
+without offload. Screen-off CPU without it, measured the same way as the table above (5 minutes,
+same song source):
+
+| | No offload (2026-11-16) |
+|---|---|
+| hum | 15.2 % |
+| media.swcodec (AAC decoder) | 9.8 % |
+| audioserver | 25.7 % |
+| audio HAL service | 3.8 % |
+| Total | 54.6 % |
+
+SimpMusic measured 71 % this way. If battery turns out to matter more than the start delay,
+offload only while the screen is off is the thing to try (switching mid-song may gap).
 
 ### Tap to sound, after tuning (2026-11-12)
 
