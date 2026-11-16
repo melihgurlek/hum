@@ -915,6 +915,24 @@ impl Library {
         Self::load_tracks(&db, ranked.into_iter().take(limit).map(|(id, _)| id))
     }
 
+    /// The artists you listen to most right now, each as their best-liked song (it carries the
+    /// artist's id and name, and a cover to show). Only artists with an id: Home opens their page.
+    pub fn top_artists(&self, limit: usize) -> Result<Vec<Track>> {
+        let db = self.db.lock().unwrap();
+        let (tracks, artists) = Self::scores(&db)?;
+        let mut ranked: Vec<(String, f64)> = tracks.into_iter().filter(|(_, s)| *s > 0.0).collect();
+        ranked.sort_by(|a, b| b.1.total_cmp(&a.1));
+        let mut best: HashMap<String, Track> = HashMap::new();
+        for t in Self::load_tracks(&db, ranked.into_iter().map(|(id, _)| id))? {
+            if let Some(a) = t.artist_id.clone() {
+                best.entry(a).or_insert(t);
+            }
+        }
+        let mut order: Vec<(String, f64)> = artists.into_iter().filter(|(a, s)| *s > 0.5 && best.contains_key(a)).collect();
+        order.sort_by(|a, b| b.1.total_cmp(&a.1));
+        Ok(order.into_iter().take(limit).filter_map(|(a, _)| best.remove(&a)).collect())
+    }
+
     /// Songs you used to play a lot but haven't heard in at least `quiet_days`.
     pub fn forgotten_favorites(&self, quiet_days: i64, limit: usize) -> Result<Vec<(Track, i64)>> {
         let db = self.db.lock().unwrap();
@@ -1291,6 +1309,18 @@ mod tests {
         assert_eq!(lib.top_tracks(5).unwrap()[0].id, "l");
         lib.set_liked(&t, false).unwrap();
         assert!(!lib.is_liked("l").unwrap());
+    }
+
+    #[test]
+    fn top_artists_by_listening_each_as_their_best_song() {
+        let lib = Library::memory().unwrap();
+        for _ in 0..3 {
+            lib.record_play(&track("b1", "b"), now() - DAY, 200.0, 200.0).unwrap();
+        }
+        lib.record_play(&track("b2", "b"), now() - DAY, 200.0, 200.0).unwrap();
+        lib.record_play(&track("a1", "a"), now() - DAY, 200.0, 200.0).unwrap();
+        let top: Vec<String> = lib.top_artists(5).unwrap().into_iter().map(|t| t.id).collect();
+        assert_eq!(top, ["b1", "a1"]);
     }
 
     #[test]

@@ -92,6 +92,7 @@ export const api = {
   history: (limit: number) => invoke<HistoryEntry[]>('history', { limit }),
   recent: (limit: number) => invoke<Track[]>('recent', { limit }),
   trackNotes: (ids: string[]) => invoke<Record<string, TrackNote>>('track_notes', { ids }),
+  topArtists: (limit: number) => invoke<Track[]>('top_artists', { limit }),
   forgotten: (limit: number) => invoke<{ track: Track; last_played: number }[]>('forgotten', { limit }),
   quickPicks: () => invoke<QuickPicks>('quick_picks'),
   homeFeed: () => invoke<HomeShelf[]>('home_feed'),
