@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { img, type ArtistPage } from '../api'
+  import { api, img, type ArtistPage, type Track } from '../api'
   import { loadArtist, playArtistRadio, playList, prefetchOnHover, ui } from '../state.svelte'
   import Icon from '../components/Icon.svelte'
   import TrackRow from '../components/TrackRow.svelte'
@@ -8,6 +8,8 @@
 
   let artist = $state<ArtistPage | null>(null)
   let failed = $state(false)
+  /** All the artist's songs, most played first; the five top songs are only its head. */
+  let songs = $state<Track[] | null>(null)
 
   function load() {
     const id = ui.artistId
@@ -15,13 +17,25 @@
     failed = false
     loadArtist(id)
       .then((a) => {
-        if (ui.artistId === id) artist = a
+        if (ui.artistId !== id) return
+        artist = a
+        if (a.songs) api.ytPlaylist(a.songs).then((t) => {
+          if (ui.artistId === id && t.length) songs = t
+        }, () => {})
       })
       .catch(() => {
         if (ui.artistId === id) failed = true
       })
   }
   load()
+
+  /** Play from the `i`th top song on through all their songs, so Play doesn't run out after five. */
+  function playTop(i: number) {
+    if (!artist) return
+    const j = songs?.findIndex((t) => t.id === artist!.top[i].id) ?? -1
+    if (songs && j >= 0) playList(songs, j)
+    else playList(artist.top, i)
+  }
 </script>
 
 <div class="page scroll">
@@ -37,7 +51,7 @@
     </header>
 
     <div class="actions">
-      <button class="primary" disabled={!artist.top.length} use:prefetchOnHover={artist.top[0]?.id} onclick={() => artist && playList(artist.top, 0)}>
+      <button class="primary" disabled={!artist.top.length} use:prefetchOnHover={artist.top[0]?.id} onclick={() => playTop(0)}>
         <Icon name="play" size={16} /><span class="trim">Play</span>
       </button>
       <button class="secondary" onclick={() => artist && playArtistRadio(artist.id, artist.name)}>
@@ -50,7 +64,7 @@
         <h2>Top songs</h2>
         <div class="list">
           {#each artist.top as t, i (t.id)}
-            <TrackRow track={t} showDuration={false} detail={t.album ?? undefined} onplay={() => artist && playList(artist.top, i)} />
+            <TrackRow track={t} showDuration={false} detail={t.album ?? undefined} onplay={() => playTop(i)} />
           {/each}
         </div>
       </section>

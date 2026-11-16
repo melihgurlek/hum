@@ -24,8 +24,10 @@ use crate::source::{Quality, Source, Stream, Track};
 /// How long a download pass waits after the network fails.
 const DOWNLOAD_RETRY: Duration = Duration::from_secs(60);
 
-/// Fetch more radio when fewer than this many tracks are left after the current one.
-const RADIO_LOOKAHEAD: usize = 10;
+/// Fetch more radio when fewer than this many tracks are left after the current one. Low, so
+/// an album or playlist doesn't show radio in Up next (or get it mixed in by shuffle) while
+/// most of it is still to play; one radio fetch brings ~50 songs.
+const RADIO_LOOKAHEAD: usize = 2;
 
 /// Auto steps down after this many stalls within `STALL_WINDOW`. One stall can be a blip.
 const STALLS_TO_STEP_DOWN: usize = 2;
@@ -86,8 +88,11 @@ struct State {
     /// mpv has the current song queued again after itself (repeat one), so its next start is a
     /// new play rather than the same one.
     repeat_queued: bool,
-    /// When the user asked for the current track, for the timing log.
+    /// The track the user asked for and when, until it starts: for the timing log, and to tell
+    /// a start of an earlier pick (skipping fast) from a gapless advance.
     requested_at: Option<(String, Instant, bool)>,
+    /// Counts plays asked for; a lookup that finishes after a newer one was asked for is dropped.
+    play_seq: u64,
     /// Which video id mpv has queued after the current one.
     next_loaded: Option<String>,
     /// Radio already fetched for this seed.
@@ -320,6 +325,7 @@ impl Engine {
                 unshuffled: None,
                 repeat_queued: false,
                 requested_at: None,
+                play_seq: 0,
                 next_loaded: None,
                 resume_at: None,
                 radio_seed: None,
@@ -925,7 +931,7 @@ impl Engine {
     async fn play_from(&self, index: usize, start: Option<f64>) -> Result<()> {
         let requested = Instant::now();
         self.finish_play();
-        let track = {
+        let (track, seq) = {
             let mut st = self.0.state.lock().unwrap();
             let Some(track) = st.queue.get(index).cloned() else {
                 return Ok(());
@@ -934,13 +940,21 @@ impl Engine {
             st.next_loaded = None;
             st.position = start.unwrap_or(0.0);
             st.resume_at = None;
-            track
+            st.play_seq += 1;
+            st.requested_at = Some((track.id.clone(), requested, false));
+            (track, st.play_seq)
         };
         self.emit(Update::NowPlaying { track: track.clone(), index, position: start.unwrap_or(0.0) });
         let resolving = Instant::now();
-        let (mut stream, cached) = match self.stream(&track.id).await {
+        let res = self.stream(&track.id).await;
+        // Skipped on while this one was looked up: the newer pick plays, not this one.
+        if self.0.state.lock().unwrap().play_seq != seq {
+            return Ok(());
+        }
+        let (mut stream, cached) = match res {
             Ok(s) => s,
             Err(e) => {
+                self.0.state.lock().unwrap().requested_at = None;
                 self.emit(Update::Error {
                     message: explain(&track.title, &e),
                     details: Some(self.report(&track.id, &track.title, &format!("{e:#}"))),
@@ -950,7 +964,13 @@ impl Engine {
         };
         stream.meta = Some((&track).into());
         log::info!("stream for {} in {} ms (url cached: {cached})", track.id, resolving.elapsed().as_millis());
-        self.0.state.lock().unwrap().requested_at = Some((track.id.clone(), requested, cached));
+        {
+            let mut st = self.0.state.lock().unwrap();
+            if st.play_seq != seq {
+                return Ok(());
+            }
+            st.requested_at = Some((track.id.clone(), requested, cached));
+        }
         // A resume a few seconds in starts there; otherwise from the top.
         match start.filter(|s| *s > 2.0) {
             Some(at) => self.0.player.send(Command::Reload(stream, at)),
@@ -1245,6 +1265,13 @@ impl Engine {
     }
 
     fn on_started(&self, video_id: String) {
+        // A song asked for earlier, starting after a newer pick was asked for (skipping fast):
+        // it isn't playing for long, and taking it for a gapless advance would move the queue
+        // back to it.
+        if self.0.state.lock().unwrap().requested_at.as_ref().is_some_and(|(id, ..)| *id != video_id) {
+            log::info!("started {video_id} after a newer pick; ignored");
+            return;
+        }
         // mpv reached the copy of this song queued for repeat one: a new play of it.
         let repeated = {
             let mut st = self.0.state.lock().unwrap();
@@ -1387,6 +1414,13 @@ impl Engine {
         self.0.streams.lock().unwrap().remove(&id);
         let (retry, index, skipped) = {
             let mut st = self.0.state.lock().unwrap();
+            // An earlier pick failing after a newer one was asked for: nothing to retry or skip.
+            if st.queue.get(st.index).is_none_or(|t| t.id != id) {
+                return;
+            }
+            if st.requested_at.as_ref().is_some_and(|(r, ..)| *r == id) {
+                st.requested_at = None;
+            }
             let retry = st.retried.as_deref() != Some(&id);
             st.retried = Some(id.clone());
             if !retry {
@@ -1497,6 +1531,7 @@ mod tests {
             unshuffled: None,
             repeat_queued: false,
             requested_at: None,
+            play_seq: 0,
             next_loaded: None,
             radio_seed: None,
             position: 0.0,
@@ -1545,6 +1580,7 @@ mod tests {
             unshuffled: None,
             repeat_queued: false,
             requested_at: None,
+            play_seq: 0,
             next_loaded: None,
             radio_seed: None,
             position: 0.0,

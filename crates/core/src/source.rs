@@ -127,6 +127,8 @@ pub struct ArtistPage {
     /// Wide header image, when the artist has one.
     pub banner: Option<String>,
     pub top: Vec<Track>,
+    /// The playlist behind the top songs shelf: all their songs, most played first.
+    pub songs: Option<String>,
     pub albums: Vec<AlbumCard>,
     pub singles: Vec<AlbumCard>,
 }
@@ -536,6 +538,7 @@ impl Source {
             subscribers: a.subscribers,
             banner: best_thumb(&a.thumbnails).map(|u| sized_wh(u, 1440, 600)),
             top: a.top_tracks.into_iter().filter_map(Track::from_ytm).collect(),
+            songs: a.songs,
             albums: a.albums.into_iter().map(AlbumCard::from_ytm).collect(),
             singles: a.singles.into_iter().map(AlbumCard::from_ytm).collect(),
         })

@@ -31,7 +31,7 @@ export interface Playlist { id: number; name: string; tracks: Track[]; synced: b
 
 export interface ArtistLink { name: string; id: string | null }
 export interface AlbumCard { id: string; title: string; kind: string; year: number | null; artists: ArtistLink[]; thumb: string | null }
-export interface ArtistPage { id: string; name: string; subscribers: string | null; banner: string | null; top: Track[]; albums: AlbumCard[]; singles: AlbumCard[] }
+export interface ArtistPage { id: string; name: string; subscribers: string | null; banner: string | null; top: Track[]; songs: string | null; albums: AlbumCard[]; singles: AlbumCard[] }
 export type TopResult =
   | { kind: 'artist'; id: string; name: string; detail: string | null; thumb: string | null }
   | { kind: 'album'; id: string; title: string; detail: string | null; thumb: string | null }
