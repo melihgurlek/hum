@@ -22,6 +22,14 @@ class MainActivity : TauriActivity() {
     super.onStop()
   }
 
+  // Swiped out of recents: Tauri ends the process once its window is gone, so stop the music
+  // first. Otherwise audio offload played its buffer on for 10-15 s with no
+  // app behind it, and the notification and lock screen still showed it playing.
+  override fun onDestroy() {
+    if (!isChangingConfigurations) HumPlayer.stopNow()
+    super.onDestroy()
+  }
+
   companion object {
     @JvmStatic external fun nativeVisible(visible: Boolean)
   }

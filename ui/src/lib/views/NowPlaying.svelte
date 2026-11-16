@@ -670,13 +670,34 @@
     }
     /* Spacing like Spotify's player: the cover takes the slack, the bottom group gets a
        steady rhythm (title, 24, seek bar, 12, controls, 24, sheet bar). */
-    h1 {
+    h1,
+    .title-link {
       font-size: 22px;
       line-height: 1.2;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      overflow: hidden;
     }
     .artist {
       font-size: 15px;
+      line-height: 1.4;
       margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* Room for a two-line title whatever this song's is, sitting on the bottom: the cover
+       takes the height left above, so a title that wraps no longer moves or resizes it. */
+    .meta {
+      align-items: flex-end;
+    }
+    .titles {
+      min-height: calc(2 * 22px * 1.2 + 2px + 15px * 1.4);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
     }
     .album {
       display: none;

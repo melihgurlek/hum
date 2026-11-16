@@ -4,6 +4,8 @@ import android.app.PendingIntent
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.ForwardingPlayer
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
@@ -14,11 +16,12 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import org.json.JSONObject
 
 /**
  * Owns ExoPlayer and the media session: a foreground service while playing, with the
  * notification, lock-screen controls and headset buttons Media3 provides. Swiping the app
- * away keeps it playing; it stops itself once nothing is playing.
+ * away closes it, music included (MainActivity.onDestroy); it stops itself once nothing plays.
  */
 class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
@@ -76,7 +79,7 @@ class PlaybackService : MediaSessionService() {
         val open = packageManager.getLaunchIntentForPackage(packageName)!!
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
         val activity = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        session = MediaSession.Builder(this, player).setSessionActivity(activity).build()
+        session = MediaSession.Builder(this, QueuePlayer(player)).setSessionActivity(activity).setCallback(AnyController).build()
         HumPlayer.attach(player)
     }
 
@@ -96,4 +99,34 @@ class PlaybackService : MediaSessionService() {
         session = null
         super.onDestroy()
     }
+}
+
+/**
+ * The player the session (notification, lock screen, watches, headset buttons) controls:
+ * ExoPlayer, except that Next and Previous go to hum's queue. ExoPlayer holds only the current
+ * song and the prefetched next one, so on its own Previous could only restart the song.
+ * (Listeners are left alone: wrapping them with Kotlin's `by` drops every Player.Listener
+ * callback, since they are Java default methods, and the session went blind.)
+ */
+private class QueuePlayer(player: ExoPlayer) : ForwardingPlayer(player) {
+    override fun seekToNext() = skip("next")
+    override fun seekToNextMediaItem() = skip("next")
+    override fun seekToPrevious() = skip("previous")
+    override fun seekToPreviousMediaItem() = skip("previous")
+
+    private fun skip(ev: String) = HumPlayer.event(JSONObject().put("ev", ev))
+}
+
+/**
+ * Every app that asks may control playback. Media3 gives full control only to "trusted" apps
+ * (the system, media-control permission holders) and read-only access to the rest, so Mi
+ * Fitness showed the song on a Redmi Watch while its pause and skip buttons did nothing.
+ */
+private object AnyController : MediaSession.Callback {
+    @androidx.annotation.OptIn(UnstableApi::class)
+    override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo) =
+        MediaSession.ConnectionResult.AcceptedResultBuilder()
+            .setAvailableSessionCommands(MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS)
+            .setAvailablePlayerCommands(MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS)
+            .build()
 }

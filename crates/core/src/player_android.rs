@@ -27,7 +27,7 @@ pub fn set_backend(backend: Backend) {
 
 /// An event from the app's player, as JSON: `{"ev":"started","id":"..."}`, `{"ev":"position",
 /// "secs":1.5}`, `{"ev":"duration","secs":200}`, `{"ev":"paused","paused":true}`,
-/// `{"ev":"stalled"}`, `{"ev":"idle"}`, `{"ev":"error","id":"...","message":"..."}`,
+/// `{"ev":"stalled"}`, `{"ev":"idle"}`, `{"ev":"next"}`, `{"ev":"previous"}`, `{"ev":"error","id":"...","message":"..."}`,
 /// `{"ev":"downloaded","bytes":65536,"rate":120000}`, `{"ev":"recorded","path":"...","expected":3900000}`.
 pub fn event(json: &str) {
     let Ok(v) = serde_json::from_str::<Value>(json) else {
@@ -43,6 +43,8 @@ pub fn event(json: &str) {
         "paused" => PlayerEvent::Paused(v["paused"].as_bool().unwrap_or(false)),
         "stalled" => PlayerEvent::Stalled,
         "idle" => PlayerEvent::Idle,
+        "next" => PlayerEvent::Next,
+        "previous" => PlayerEvent::Previous,
         "downloaded" => PlayerEvent::Downloaded {
             bytes: v["bytes"].as_u64().unwrap_or(0),
             rate: v["rate"].as_f64().unwrap_or(0.0),

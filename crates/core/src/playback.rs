@@ -46,4 +46,7 @@ pub enum PlayerEvent {
     Error { video_id: Option<String>, message: String },
     /// The connection is metered (mobile data) or not (Wi-Fi), on Android.
     Network { metered: bool },
+    /// Next or Previous pressed outside the app (notification, lock screen, a watch), on Android.
+    Next,
+    Previous,
 }

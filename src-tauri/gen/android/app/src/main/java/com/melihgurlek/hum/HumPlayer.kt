@@ -92,6 +92,14 @@ object HumPlayer {
         }
     }
 
+    /** Stop at once, buffered audio included: the app is closing (swiped out of recents). */
+    fun stopNow() {
+        player?.run {
+            playWhenReady = false
+            stop()
+        }
+    }
+
     fun attach(p: ExoPlayer) {
         player = p
         p.addListener(listener)
