@@ -865,16 +865,6 @@ pub fn run() {
             sign_out,
             ui_log
         ])
-        .build(tauri::generate_context!())
-        .expect("error while building hum")
-        .run(|_app, _event| {
-            // Android: swiping hum out of recents destroys its only window, and Tauri then exits
-            // the process, playback service and engine with it (offload's buffer played on for a
-            // few seconds, then a reopen found the last saved spot). Keep the process: the service
-            // stops itself once nothing plays, and a reopened window finds the live engine.
-            #[cfg(target_os = "android")]
-            if let tauri::RunEvent::ExitRequested { api, code: None, .. } = _event {
-                api.prevent_exit();
-            }
-        });
+        .run(tauri::generate_context!())
+        .expect("error while running hum");
 }
