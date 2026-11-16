@@ -2,11 +2,12 @@
   import { api, artistLinks, img, type SearchResults, type Track } from '../api'
   import {
     forgetPick, openAlbum, openArtist, playAlbum, playArtistRadio, playArtistTop, playRadio,
-    capSet, recentKey, rememberPick, searchCache, searches, ui, hoverPrefetch, hoverCancel, prefetchOnHover, type Recent,
+    capSet, recentKey, rememberPick, searchCache, searches, searchFocus, ui, hoverPrefetch, hoverCancel, prefetchOnHover, type Recent,
   } from '../state.svelte'
   import ArtistLinks from '../components/ArtistLinks.svelte'
   import Icon from '../components/Icon.svelte'
   import TrackRow from '../components/TrackRow.svelte'
+  import { untrack } from 'svelte'
 
   let results = $state<SearchResults>({ top: null, songs: [] })
   let searching = $state(false)
@@ -14,6 +15,7 @@
   let lastQuery = ''
   let timer: ReturnType<typeof setTimeout> | undefined
   let input: HTMLInputElement
+  let page: HTMLDivElement
 
 
   async function run(q: string) {
@@ -47,6 +49,27 @@
     if (ui.query) run(ui.query)
   })
 
+  // Recent searches as they were when the list came into view: playing one from it doesn't
+  // move it to the top under your finger (it's first next time). Removing one shows at once.
+  let recents = $state(untrack(() => searches.list))
+  $effect(() => {
+    if (!ui.query) recents = untrack(() => searches.list)
+  })
+  const shownRecents = $derived(recents.filter((r) => searches.list.some((x) => recentKey(x) === recentKey(r))))
+
+  // Search tapped again while open: back to the top with the field focused and its text
+  // selected, so typing replaces the last query.
+  $effect(() => {
+    if (!searchFocus.n) return
+    untrack(() => {
+      page?.scrollTo({ top: 0 })
+      input?.focus()
+      input?.select()
+      recents = searches.list
+    })
+  })
+
+
   function clear() {
     ui.query = ''
     results = { top: null, songs: [] }
@@ -78,7 +101,7 @@
   const recentThumb = (r: Recent) => (r.kind === 'song' ? r.track.thumb : r.thumb)
 </script>
 
-<div class="page scroll">
+<div class="page scroll" bind:this={page}>
   <div class="field">
     <Icon name="search" />
     <label for="q" class="sr">Search songs and artists</label>
@@ -102,14 +125,14 @@
   {#if error}
     <p class="muted">{error}</p>
   {:else if !ui.query}
-    {#if searches.list.length}
+    {#if shownRecents.length}
       <section class="recents">
         <div class="rhead">
           <h2>Recent searches</h2>
           <button class="link" onclick={() => forgetPick(null)}>Clear all</button>
         </div>
         <div class="rlist">
-          {#each searches.list as r (recentKey(r))}
+          {#each shownRecents as r (recentKey(r))}
             <div class="rrow">
               <button class="ropen" use:prefetchOnHover={r.kind === 'song' ? r.track.id : null} onclick={() => openRecent(r)}>
                 {#if recentThumb(r)}

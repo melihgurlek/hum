@@ -193,7 +193,11 @@ export function setNpSheet(open: boolean) {
   else unwind(1)
 }
 
+/** Bumped when Search is asked for while it's already open: back to the top, field focused. */
+export const searchFocus = $state({ n: 0 })
+
 export function go(view: View) {
+  if (view === 'search' && ui.view === 'search' && !ui.nowPlayingOpen) searchFocus.n++
   navigate({ view })
 }
 
