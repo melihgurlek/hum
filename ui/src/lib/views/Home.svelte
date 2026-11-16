@@ -69,9 +69,11 @@
   // played here, its song shelves (its Quick picks) repeat ours, From your library is the
   // Library tab, and community playlists are strangers' picks; those are left out.
   const fresh = $derived(ui.recent.length === 0)
+  // YouTube changes it through the day (morning, workout, evening shelves) and the phone app can
+  // live for days, so a visit fetches it again once it's an hour old; the old one shows meanwhile.
   $effect(() => {
-    if (homeFeed.shelves) return
-    api.homeFeed().then((s) => (homeFeed.shelves = s)).catch(() => {})
+    if (homeFeed.shelves && Date.now() - homeFeed.at < 3600_000) return
+    api.homeFeed().then((s) => Object.assign(homeFeed, { shelves: s, at: Date.now() })).catch(() => {})
   })
   const shelves = $derived(
     (homeFeed.shelves ?? []).filter(
