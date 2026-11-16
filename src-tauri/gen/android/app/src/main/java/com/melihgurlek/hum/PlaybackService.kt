@@ -21,7 +21,7 @@ import org.json.JSONObject
 /**
  * Owns ExoPlayer and the media session: a foreground service while playing, with the
  * notification, lock-screen controls and headset buttons Media3 provides. Swiping the app
- * away keeps it playing; it stops itself once nothing is playing.
+ * away closes it, music included (MainActivity.onDestroy); it stops itself once nothing plays.
  */
 class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
