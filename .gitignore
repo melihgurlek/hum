@@ -9,3 +9,6 @@ rustypipe_reports/
 # Windows CI: mpv dev package and the DLL bundled next to hum.exe
 /mpv/
 src-tauri/libmpv-2.dll
+
+# graphify knowledge graph output
+graphify-out/

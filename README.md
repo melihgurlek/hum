@@ -72,7 +72,7 @@ Wi-Fi, switching between apps in one session. The method and the raw numbers are
 |:--|--:|--:|--:|
 | App size | **16 MB** | 27 MB | 26 MB |
 | Tap to sound | **0.4–0.7 s** | 2.4 s | 2.1 s |
-| CPU while playing, screen off | **2.8 %** | 71 % | – |
+| CPU while playing, screen off | **55 %** | 71 % | – |
 | Memory while playing, screen off | 161 MB | 158 MB | – |
 | Memory with the app open | 208 MB | ~150 MB | – |
 
@@ -80,9 +80,9 @@ Wi-Fi, switching between apps in one session. The method and the raw numbers are
 measured the same way and are left out.</sub>
 
 Where hum loses: its interface is a web page, and with the app open the phone's WebView costs
-about 50 MB more than a native interface. Playback itself is native, ExoPlayer with audio
-offload on Android and libmpv on desktop, so once the screen is off hum is level on memory and
-far ahead on CPU, which is what drains the battery. Desktop numbers are in
+about 50 MB more than a native interface. Playback itself is native, ExoPlayer on Android and
+libmpv on desktop, so once the screen is off hum is level on memory and ahead on CPU, which is
+what drains the battery. Desktop numbers are in
 [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Getting hum
