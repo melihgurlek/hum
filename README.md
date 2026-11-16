@@ -17,8 +17,8 @@
 
 - **It starts playing when you tap.** About half a second from tap to sound on a phone, where
   other open-source YouTube Music apps take over two.
-- **It stays out of your battery's way.** With the screen off, hum and the system's audio use
-  under 3 % of one CPU core; the busiest app we measured used 71 %.
+- **Light on your battery.** With the screen off, hum and the system's audio use 55 % of one
+  CPU core; the busiest app we measured used 71 %.
 - **Radio that learns from you.** Every song keeps going with songs like it, ranked by what you
   play through and what you skip. All of it is worked out on your device.
 - **No account needed.** Search and play straight away. Sign in only if you want your YouTube
